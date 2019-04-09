@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/alecthomas/kingpin"
+	"github.com/davecgh/go-spew/spew"
 	kitlog "github.com/go-kit/kit/log"
 	level "github.com/go-kit/kit/log/level"
 	"github.com/jackc/pgx"
@@ -107,6 +108,8 @@ func main() {
 		)
 	}
 
+	var sub *pg2pubsub.Subscription
+
 	{
 		logger := kitlog.With(logger, "component", "subscription")
 
@@ -115,7 +118,7 @@ func main() {
 			kingpin.Fatalf("failed to connect to Postgres: %v", err)
 		}
 
-		sub := pg2pubsub.NewSubscription(
+		sub = pg2pubsub.NewSubscription(
 			logger,
 			conn,
 			pg2pubsub.SubscriptionOptions{
@@ -131,9 +134,24 @@ func main() {
 
 		g.Add(
 			func() error {
-				return sub.Start(ctx, func(msg pg2pubsub.Message) error {
-					return logger.Log("event", "subscription_message", "msg", msg)
-				})
+				return sub.StartReplication(ctx)
+			},
+			func(error) {
+				cancel()
+			},
+		)
+	}
+
+	{
+		// logger := kitlog.With(logger, "component", "consumer")
+
+		g.Add(
+			func() error {
+				for msg := range sub.Received() {
+					spew.Dump(msg)
+				}
+
+				return nil
 			},
 			func(error) {
 				cancel()

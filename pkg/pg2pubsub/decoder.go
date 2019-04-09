@@ -38,6 +38,17 @@ type Relation struct {
 	Columns         []Column // Repeating message of column definitions.
 }
 
+// Marshal converts a tuple into a dynamic Golang map type by using the relation column
+// type information.
+func (r *Relation) Marshal(tuple []Element) (interface{}, error) {
+	row := map[string]interface{}{}
+	for idx, column := range r.Columns {
+		row[column.Name] = string(tuple[idx].Value)
+	}
+
+	return row, nil
+}
+
 type Column struct {
 	Key      bool   // Interpreted from flags, which are either 0 or 1 which marks the column as part of the key.
 	Name     string // Name of the column.
@@ -52,27 +63,27 @@ type Type struct {
 }
 
 type Insert struct {
-	ID  uint32  // ID of the relation corresponding to the ID in the relation message.
-	Row []Tuple // TupleData message part representing the contents of new tuple.
+	ID  uint32    // ID of the relation corresponding to the ID in the relation message.
+	Row []Element // TupleData message part representing the contents of new tuple.
 }
 
 type Update struct {
-	ID     uint32  // ID of the relation corresponding to the ID in the relation message.
-	Key    bool    // True if the update changed data in any of the column(s) that are part of the REPLICA IDENTITY index.
-	Old    bool    // True if populated the OldRow value.
-	New    bool    // True if populated the Row value.
-	OldRow []Tuple // Old value of this row, only present if Old or Key.
-	Row    []Tuple // New contents of the tuple.
+	ID     uint32    // ID of the relation corresponding to the ID in the relation message.
+	Key    bool      // True if the update changed data in any of the column(s) that are part of the REPLICA IDENTITY index.
+	Old    bool      // True if populated the OldRow value.
+	New    bool      // True if populated the Row value.
+	OldRow []Element // Old value of this row, only present if Old or Key.
+	Row    []Element // New contents of the tuple.
 }
 
 type Delete struct {
-	ID     uint32  // ID of the relation corresponding to the ID in the relation message.
-	Key    bool    // True if the update changed data in any of the column(s) that are part of the REPLICA IDENTITY index.
-	Old    bool    // True if populated the OldRow value.
-	OldRow []Tuple // Old value of this row.
+	ID     uint32    // ID of the relation corresponding to the ID in the relation message.
+	Key    bool      // True if the update changed data in any of the column(s) that are part of the REPLICA IDENTITY index.
+	Old    bool      // True if populated the OldRow value.
+	OldRow []Element // Old value of this row.
 }
 
-type Tuple struct {
+type Element struct {
 	Type  byte   // Either 'n' (NULL), 'u' (unchanged TOASTed value) or 't' (test formatted).
 	Value []byte // Will only be populated if Type is 't'.
 }
@@ -241,18 +252,18 @@ func (d decoder) Time() time.Time {
 	)
 }
 
-func (d decoder) TupleData() []Tuple {
-	row := []Tuple{}
+func (d decoder) TupleData() []Element {
+	tuple := []Element{}
 	for noOfColumns := d.Uint16(); noOfColumns > 0; noOfColumns-- {
-		t := Tuple{}
-		t.Type = d.Uint8()
+		e := Element{}
+		e.Type = d.Uint8()
 
-		if t.Type == 't' {
-			t.Value = d.Next(int(d.Uint32()))
+		if e.Type == 't' {
+			e.Value = d.Next(int(d.Uint32()))
 		}
 
-		row = append(row, t)
+		tuple = append(tuple, e)
 	}
 
-	return row
+	return tuple
 }
