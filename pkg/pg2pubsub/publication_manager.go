@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	kitlog "github.com/go-kit/kit/log"
@@ -17,22 +18,28 @@ type PublicationManagerOptions struct {
 	PollInterval time.Duration
 }
 
-func NewPublicationManager(logger kitlog.Logger, conn *pgx.Conn, opts PublicationManagerOptions) *publicationManager {
-	return &publicationManager{
+func NewPublicationManager(logger kitlog.Logger, conn *pgx.Conn, opts PublicationManagerOptions) *PublicationManager {
+	return &PublicationManager{
 		logger: logger,
 		conn:   conn,
 		opts:   opts,
 	}
 }
 
-type publicationManager struct {
-	logger kitlog.Logger
-	conn   *pgx.Conn
-	opts   PublicationManagerOptions
+type PublicationManager struct {
+	logger   kitlog.Logger
+	conn     *pgx.Conn
+	connLock sync.Mutex
+	opts     PublicationManagerOptions
 }
 
-func (p *publicationManager) Create(ctx context.Context) error {
-	rows, err := p.conn.QueryEx(ctx, `select exists(select * from pg_publication where pubname=$1);`, nil, p.opts.Name)
+// Create will create a new publication with no subscribed tables, or will no-op if a
+// publication already exists with this name.
+func (p *PublicationManager) Create(ctx context.Context) error {
+	conn, unlock := p.checkout()
+	defer unlock()
+
+	rows, err := conn.QueryEx(ctx, `select exists(select * from pg_publication where pubname=$1);`, nil, p.opts.Name)
 	if err != nil {
 		return err
 	}
@@ -53,12 +60,14 @@ func (p *publicationManager) Create(ctx context.Context) error {
 
 	p.logger.Log("event", "creating_publication", "publication", p.opts.Name,
 		"msg", "could not find publication, creating")
-	_, err = p.conn.ExecEx(ctx, fmt.Sprintf(`create publication %s;`, p.opts.Name), nil)
+	_, err = conn.ExecEx(ctx, fmt.Sprintf(`create publication %s;`, p.opts.Name), nil)
 
 	return err
 }
 
-func (p *publicationManager) Sync(ctx context.Context) error {
+// Sync is intended to be run on an on-going basis, watching for new database tables in
+// order to add them to the existing publication.
+func (p *PublicationManager) Sync(ctx context.Context) error {
 	p.logger.Log("event", "sync_start")
 	for {
 		select {
@@ -73,7 +82,7 @@ func (p *publicationManager) Sync(ctx context.Context) error {
 				return err
 			}
 
-			published, err := p.getPublishedTables(ctx)
+			published, err := p.GetPublishedTables(ctx)
 			if err != nil {
 				return err
 			}
@@ -94,16 +103,23 @@ func (p *publicationManager) Sync(ctx context.Context) error {
 	}
 }
 
-func (p *publicationManager) alter(ctx context.Context, tables []string) error {
+func (p *PublicationManager) alter(ctx context.Context, tables []string) error {
+	conn, unlock := p.checkout()
+	defer unlock()
+
 	query := fmt.Sprintf(`alter publication %s set table %s;`, p.opts.Name, strings.Join(tables, ", "))
-	_, err := p.conn.ExecEx(ctx, query, nil)
+	_, err := conn.ExecEx(ctx, query, nil)
+
 	return err
 }
 
-// getPublishedTables collects the tables that are already configured on our publication
-func (p *publicationManager) getPublishedTables(ctx context.Context) ([]string, error) {
+// GetPublishedTables collects the tables that are already configured on our publication
+func (p *PublicationManager) GetPublishedTables(ctx context.Context) ([]string, error) {
+	conn, unlock := p.checkout()
+	defer unlock()
+
 	query := `select schemaname, tablename from pg_publication_tables where pubname = $1;`
-	rows, err := p.conn.QueryEx(ctx, query, nil, p.opts.Name)
+	rows, err := conn.QueryEx(ctx, query, nil, p.opts.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -112,13 +128,16 @@ func (p *publicationManager) getPublishedTables(ctx context.Context) ([]string, 
 }
 
 // getWatchedTables scans the database for tables that match our watched conditions
-func (p *publicationManager) getWatchedTables(ctx context.Context) ([]string, error) {
+func (p *PublicationManager) getWatchedTables(ctx context.Context) ([]string, error) {
+	conn, unlock := p.checkout()
+	defer unlock()
+
 	schemaPattern := strings.Join(p.opts.Schemas, "|")
 	query := `select table_schema, table_name
 	from information_schema.tables
 	where table_schema similar to $1;`
 
-	rows, err := p.conn.QueryEx(ctx, query, nil, schemaPattern)
+	rows, err := conn.QueryEx(ctx, query, nil, schemaPattern)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +147,7 @@ func (p *publicationManager) getWatchedTables(ctx context.Context) ([]string, er
 
 // scanTables collects table names in <schema>.<name> form from sql queries that return
 // tuples of (schema, name)
-func (p *publicationManager) scanTables(rows *pgx.Rows) ([]string, error) {
+func (p *PublicationManager) scanTables(rows *pgx.Rows) ([]string, error) {
 	defer rows.Close()
 
 	var tables = []string{}
@@ -142,6 +161,11 @@ func (p *publicationManager) scanTables(rows *pgx.Rows) ([]string, error) {
 	}
 
 	return tables, nil
+}
+
+func (p *PublicationManager) checkout() (*pgx.Conn, func()) {
+	p.connLock.Lock()
+	return p.conn, func() { p.connLock.Unlock() }
 }
 
 func diff(s1 []string, s2 []string) []string {
