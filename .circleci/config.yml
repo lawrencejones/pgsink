@@ -13,7 +13,7 @@ references:
           POSTGRES_USER: postgres
           POSTGRES_DB: pg2pubsub_test
           POSTGRES_PASSWORD: ""
-    working_directory: /go/src/github.com/lawrencejones/pg2pubsub
+    working_directory: /pg2pubsub
 
 jobs:
   unit-integration:
@@ -35,7 +35,7 @@ jobs:
 
   release:
     <<: *docker_golang
-    working_directory: /go/src/github.com/lawrencejones/pg2pubsub
+    working_directory: /pg2pubsub
     steps:
       - checkout
       - run:
