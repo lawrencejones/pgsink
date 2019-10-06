@@ -25,4 +25,5 @@ require (
 	github.com/prometheus/procfs v0.0.0-20190403104016-ea9eea638872 // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/shopspring/decimal v0.0.0-20190905144223-a36b5d85f337 // indirect
+	golang.org/x/sys v0.0.0-20191005200804-aed5e4c7ecf9 // indirect
 )
