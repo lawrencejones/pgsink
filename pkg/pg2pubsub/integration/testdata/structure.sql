@@ -21,7 +21,7 @@ SET default_tablespace = '';
 SET default_with_oids = false;
 
 --
--- Name: example; Type: TABLE; Schema: public; Owner: lawrence
+-- Name: example; Type: TABLE; Schema: public; Owner: pg2pubsub_test
 --
 
 CREATE TABLE public.example (
@@ -30,10 +30,10 @@ CREATE TABLE public.example (
 );
 
 
-ALTER TABLE public.example OWNER TO lawrence;
+ALTER TABLE public.example OWNER TO pg2pubsub_test;
 
 --
--- Name: example_id_seq; Type: SEQUENCE; Schema: public; Owner: lawrence
+-- Name: example_id_seq; Type: SEQUENCE; Schema: public; Owner: pg2pubsub_test
 --
 
 CREATE SEQUENCE public.example_id_seq
@@ -44,24 +44,24 @@ CREATE SEQUENCE public.example_id_seq
     CACHE 1;
 
 
-ALTER TABLE public.example_id_seq OWNER TO lawrence;
+ALTER TABLE public.example_id_seq OWNER TO pg2pubsub_test;
 
 --
--- Name: example_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: lawrence
+-- Name: example_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: pg2pubsub_test
 --
 
 ALTER SEQUENCE public.example_id_seq OWNED BY public.example.id;
 
 
 --
--- Name: example id; Type: DEFAULT; Schema: public; Owner: lawrence
+-- Name: example id; Type: DEFAULT; Schema: public; Owner: pg2pubsub_test
 --
 
 ALTER TABLE ONLY public.example ALTER COLUMN id SET DEFAULT nextval('public.example_id_seq'::regclass);
 
 
 --
--- Name: example example_pkey; Type: CONSTRAINT; Schema: public; Owner: lawrence
+-- Name: example example_pkey; Type: CONSTRAINT; Schema: public; Owner: pg2pubsub_test
 --
 
 ALTER TABLE ONLY public.example
