@@ -119,6 +119,16 @@ func (s *Subscription) Received() <-chan interface{} {
 	return s.received
 }
 
+// ConfirmReceived updates our WAL position, causing the next server heartbeat to update
+// the replication slot position.
+func (s *Subscription) ConfirmReceived(pos uint64) {
+	if pos < s.walPos {
+		panic("cannot confirm received position in the past")
+	}
+
+	s.walPos = pos
+}
+
 // startReceiving will receive messages until the context expires, or we receive an error
 // from our connection. Received messages are sent down our received channel, which we
 // assume someone is consuming from.

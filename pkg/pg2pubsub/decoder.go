@@ -38,15 +38,16 @@ type Relation struct {
 	Columns         []Column // Repeating message of column definitions.
 }
 
-// Marshal converts a tuple into a dynamic Golang map type by using the relation column
-// type information.
-func (r *Relation) Marshal(tuple []Element) (interface{}, error) {
-	row := map[string]interface{}{}
+// Marshal converts a tuple into a dynamic Golang map type. All values are strings, as we
+// assume anyone who wants schema'd data will parse this alongside the schema details at a
+// later stage.
+func (r *Relation) Marshal(tuple []Element) map[string]string {
+	row := map[string]string{}
 	for idx, column := range r.Columns {
 		row[column.Name] = string(tuple[idx].Value)
 	}
 
-	return row, nil
+	return row
 }
 
 type Column struct {

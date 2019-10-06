@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	stdlog "log"
 	"net/http"
@@ -11,7 +12,6 @@ import (
 	"syscall"
 
 	"github.com/alecthomas/kingpin"
-	"github.com/davecgh/go-spew/spew"
 	kitlog "github.com/go-kit/kit/log"
 	level "github.com/go-kit/kit/log/level"
 	"github.com/jackc/pgx"
@@ -143,13 +143,38 @@ func main() {
 	}
 
 	{
-		// logger := kitlog.With(logger, "component", "consumer")
+		logger := kitlog.With(logger, "component", "consumer")
+
+		outputMessages := make(chan interface{})
+		go func() {
+			for msg := range outputMessages {
+				bytes, err := json.MarshalIndent(msg, "", "  ")
+				if err != nil {
+					panic(err)
+				}
+
+				fmt.Println(string(bytes))
+			}
+		}()
 
 		g.Add(
 			func() error {
-				for msg := range sub.Received() {
-					spew.Dump(msg)
-				}
+				schemas, modifications := pg2pubsub.Serialize(logger, sub)
+
+				go func() {
+					for schema := range schemas {
+						outputMessages <- schema
+					}
+				}()
+
+				go func() {
+					for modification := range modifications {
+						outputMessages <- modification
+						sub.ConfirmReceived(modification.LSN)
+					}
+				}()
+
+				<-ctx.Done()
 
 				return nil
 			},
