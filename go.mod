@@ -5,6 +5,7 @@ go 1.13
 require (
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/cockroachdb/apd v1.1.0 // indirect
+	github.com/davecgh/go-spew v1.1.1
 	github.com/eapache/channels v1.1.0 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
 	github.com/go-kit/kit v0.8.0
@@ -23,7 +24,7 @@ require (
 	github.com/prometheus/client_model v0.0.0-20190129233127-fd36f4220a90 // indirect
 	github.com/prometheus/common v0.2.0 // indirect
 	github.com/prometheus/procfs v0.0.0-20190403104016-ea9eea638872 // indirect
-	github.com/satori/go.uuid v1.2.0 // indirect
+	github.com/satori/go.uuid v1.2.0
 	github.com/shopspring/decimal v0.0.0-20190905144223-a36b5d85f337 // indirect
 	golang.org/x/sys v0.0.0-20191005200804-aed5e4c7ecf9 // indirect
 )
