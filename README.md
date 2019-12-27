@@ -4,6 +4,29 @@ This tool connects to a Postgres database via logical replication, creating the
 plumbing required to subscribe to changes on tables within a specific schema.
 These changes are then pushed into GCP Pub/Sub.
 
+## Developing
+
+This project comes with a docker-compose development environment. Boot the
+environment like so:
+
+```console
+$ docker-compose up -d
+docker-compose up -d
+pg2pubsub_prometheus_1 is up-to-date
+pg2pubsub_postgres_1 is up-to-date
+pg2pubsub_grafana_1 is up-to-date
+```
+
+Then run `make recreatedb` to create a `pg2pubsub_test` database. You can now
+access your database like so:
+
+```console
+$ psql --host localhost --user pg2pubsub_test pg2pubsub_test
+pg2pubsub_test=> \q
+```
+
+pg2pubsub will work with this database: try `pg2pubsub --decode-only`.
+
 ## Getting started
 
 Boot a Postgres database, then create an example table.

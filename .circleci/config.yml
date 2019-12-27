@@ -8,7 +8,7 @@ references:
         environment:
           PGHOST: "127.0.0.1"
           PGUSER: "postgres"
-      - image: postgres:12.0
+      - image: postgres:12.1
         environment:
           POSTGRES_USER: postgres
           POSTGRES_DB: pg2pubsub_test

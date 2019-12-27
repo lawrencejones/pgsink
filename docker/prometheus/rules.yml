@@ -1,0 +1,4 @@
+---
+groups:
+  - name: pg2pubsub.rules
+    rules: []  # TODO

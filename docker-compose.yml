@@ -3,16 +3,53 @@ version: "3.7"
 
 services:
   postgres:
-    image: postgres:11.2
-    environment:
-      - PGDATA: /data
+    hostname: postgres
+    image: postgres:12.1
+    restart: on-failure
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
     volumes:
-      - postgres-data:/data
+      - ./docker/postgres/postgresql.conf:/etc/postgresql/postgresql.conf
+      - postgres-data:/var/lib/postgresql
     ports:
-      - "5432:5432"
+      - 5432:5432
 
+  prometheus:
+    image: prom/prometheus:v2.15.1
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./docker/prometheus/rules.yml:/etc/prometheus/rules.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    restart: always
+    ports:
+      - 9090:9090
+
+  grafana:
+    image: grafana/grafana:6.5.2
+    depends_on:
+      - prometheus
+    volumes:
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./docker/grafana/dashboard-provisioner.yml:/etc/grafana/provisioning/dashboards/provisioner.yml
+      - ./docker/grafana/datasource-provisioner.yml:/etc/grafana/provisioning/datasources/provisioner.yml
+      - grafana-data:/var/lib/grafana
+    user: "472"
+    ports:
+      - 3000:3000
+    restart: always
+
+# Persist data across restarts
 volumes:
   postgres-data:
+  prometheus-data:
+  grafana-data:
 
 networks:
   default:
