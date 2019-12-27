@@ -2,9 +2,10 @@ PROG=bin/pg2pubsub
 PROJECT=github.com/lawrencejones/pg2pubsub
 VERSION=$(shell git rev-parse --short HEAD)-dev
 BUILD_COMMAND=go build -ldflags "-X main.Version=$(VERSION)"
-PGFLAGS=--host localhost --port 5432
+PSQL=docker-compose exec -T postgres psql
+PGDUMP=docker-compose exec -T postgres pg_dump
 
-.PHONY: prog darwin linux createdb test clean pkg/pg2pubsub/integration/testdata/structure.sql
+.PHONY: prog darwin linux createdb test clean pkg/pg2pubsub/integration/testdata/structure.sql structure
 
 prog: $(PROG)
 darwin: $(PROG:=.darwin_amd64)
@@ -20,17 +21,17 @@ bin/%:
 	$(BUILD_COMMAND) -o $@ cmd/$*/main.go
 
 createdb:
-	psql $(PGFLAGS) postgres -U postgres -c "DROP ROLE IF EXISTS pg2pubsub_test; CREATE ROLE pg2pubsub_test WITH LOGIN CREATEDB REPLICATION;"
-	psql $(PGFLAGS) postgres -U pg2pubsub_test -c "CREATE DATABASE pg2pubsub_test;"
+	$(PSQL) postgres -U postgres -c "DROP ROLE IF EXISTS pg2pubsub_test; CREATE ROLE pg2pubsub_test WITH LOGIN CREATEDB REPLICATION;"
+	$(PSQL) postgres -U pg2pubsub_test -c "CREATE DATABASE pg2pubsub_test;"
 
 dropdb:
-	psql $(PGFLAGS) -U postgres postgres -c "DROP DATABASE IF EXISTS pg2pubsub_test;"
+	$(PSQL) -U postgres postgres -c "DROP DATABASE IF EXISTS pg2pubsub_test;"
 
 structure:
-	psql $(PGFLAGS) pg2pubsub_test -U pg2pubsub_test -f pkg/pg2pubsub/integration/testdata/structure.sql
+	cat pkg/pg2pubsub/integration/testdata/structure.sql | $(PSQL) pg2pubsub_test -U pg2pubsub_test -f -
 
 pkg/pg2pubsub/integration/testdata/structure.sql:
-	pg_dump $(PGFLAGS) pg2pubsub_test --schema-only > $@
+	$(PGDUMP) -U postgres pg2pubsub_test --schema-only | sed 's/$$//' > $@
 
 recreatedb: dropdb createdb structure
 
