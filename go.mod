@@ -5,6 +5,7 @@ go 1.13
 require (
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/cockroachdb/apd v1.1.0 // indirect
+	github.com/davecgh/go-spew v1.1.1
 	github.com/go-kit/kit v0.8.0
 	github.com/go-logfmt/logfmt v0.4.0 // indirect
 	github.com/golang/protobuf v1.3.1 // indirect

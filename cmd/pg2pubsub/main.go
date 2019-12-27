@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/alecthomas/kingpin"
+	"github.com/davecgh/go-spew/spew"
 	kitlog "github.com/go-kit/kit/log"
 	level "github.com/go-kit/kit/log/level"
 	"github.com/jackc/pgx"
@@ -40,6 +41,7 @@ var (
 	excludes        = app.Flag("exclude", "Table name to exclude from changes").Strings()
 	pollInterval    = app.Flag("poll-interval", "Interval to poll for new tables").Default("10s").Duration()
 	statusHeartbeat = app.Flag("status-heartbeat", "Interval to heartbeat replication primary").Default("10s").Duration()
+	decodeOnly      = app.Flag("decode-only", "Interval to heartbeat replication primary").Default("false").Bool()
 )
 
 func main() {
@@ -159,6 +161,14 @@ func main() {
 
 		g.Add(
 			func() error {
+				if *decodeOnly {
+					for msg := range sub.Received() {
+						spew.Dump(msg)
+					}
+
+					return nil
+				}
+
 				schemas, modifications := pg2pubsub.Serialize(logger, sub)
 
 				go func() {

@@ -8,9 +8,9 @@ import (
 	"github.com/jackc/pgx/pgtype"
 )
 
-func Serialize(logger kitlog.Logger, sub *Subscription) (<-chan TimestampedSchema, <-chan Modification) {
+func Serialize(logger kitlog.Logger, sub *Subscription) (<-chan Schema, <-chan Modification) {
 	registry := registry{}
-	schemas, modifications := make(chan TimestampedSchema), make(chan Modification)
+	schemas, modifications := make(chan Schema), make(chan Modification)
 
 	go func() {
 		for committed := range DecorateCommits(sub.Received()) {
@@ -19,7 +19,7 @@ func Serialize(logger kitlog.Logger, sub *Subscription) (<-chan TimestampedSchem
 				logger.Log("event", "adding_relation", "id", entry.ID, "name", entry.Name)
 				registry.Register(entry)
 
-				schemas <- marshalTimestampedSchema(committed)
+				schemas <- marshalSchema(committed)
 			case *Insert, *Update, *Delete:
 				modifications <- registry.Serialize(committed)
 			}
@@ -74,21 +74,21 @@ type Modification struct {
 	After     map[string]string `json:"after"`
 }
 
-type TimestampedSchema struct {
-	Timestamp time.Time `json:"timestamp"`
-	Schema    Schema    `json:"schema"`
+type Schema struct {
+	Timestamp time.Time        `json:"timestamp"`
+	Schema    SchemaDefinition `json:"schema"`
 }
 
-type Schema struct {
+type SchemaDefinition struct {
 	Namespace string        `json:"namespace"`
 	Type      string        `json:"type"`
 	Name      string        `json:"name"`
 	Fields    []SchemaField `json:"fields"`
 }
 
-func marshalTimestampedSchema(committed Committed) TimestampedSchema {
+func marshalSchema(committed Committed) Schema {
 	relation := committed.Entry.(*Relation)
-	schema := Schema{
+	definition := SchemaDefinition{
 		Namespace: fmt.Sprintf("%s.%s", relation.Namespace, relation.Name),
 		Name:      "value",
 		Type:      "record",
@@ -96,12 +96,12 @@ func marshalTimestampedSchema(committed Committed) TimestampedSchema {
 	}
 
 	for _, column := range relation.Columns {
-		schema.Fields = append(schema.Fields, marshalSchemaField(column))
+		definition.Fields = append(definition.Fields, marshalSchemaField(column))
 	}
 
-	return TimestampedSchema{
+	return Schema{
 		Timestamp: committed.Timestamp,
-		Schema:    schema,
+		Schema:    definition,
 	}
 }
 
@@ -115,16 +115,16 @@ type SchemaField struct {
 // SchemaField can perform this mapping, defaulting to string if not possible. All types
 // should be nullable in order to allow deletions, given Avro's back/forward compatibility
 // promise.
-/*
-null: no value
-boolean: a binary value
-int: 32-bit signed integer
-long: 64-bit signed integer
-float: single precision (32-bit) IEEE 754 floating-point number
-double: double precision (64-bit) IEEE 754 floating-point number
-bytes: sequence of 8-bit unsigned bytes
-string: unicode character sequence
-*/
+//
+//   null: no value
+//   boolean: a binary value
+//   int: 32-bit signed integer
+//   long: 64-bit signed integer
+//   float: single precision (32-bit) IEEE 754 floating-point number
+//   double: double precision (64-bit) IEEE 754 floating-point number
+//   bytes: sequence of 8-bit unsigned bytes
+//   string: unicode character sequence
+//
 func marshalSchemaField(c Column) SchemaField {
 	var avroType string
 	switch c.Type {
