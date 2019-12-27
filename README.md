@@ -1,4 +1,4 @@
-# pg2pubsub
+# pg2pubsub [![CircleCI](https://circleci.com/gh/lawrencejones/pg2pubsub.svg?style=svg)](https://circleci.com/gh/lawrencejones/pg2pubsub)
 
 This tool connects to a Postgres database via logical replication, creating the
 plumbing required to subscribe to changes on tables within a specific schema.
