@@ -1,7 +1,7 @@
 PROG=bin/pg2pubsub
 PROJECT=github.com/lawrencejones/pg2pubsub
 VERSION=$(shell git rev-parse --short HEAD)-dev
-BUILD_COMMAND=go build -ldflags "-X main.Version=$(VERSION)"
+BUILD_COMMAND=go build -ldflags "-s -w -X main.Version=$(VERSION)"
 PSQL=docker-compose exec -T postgres psql
 PGDUMP=docker-compose exec -T postgres pg_dump
 

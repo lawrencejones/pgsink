@@ -15,6 +15,7 @@ type PublicationManagerOptions struct {
 	Name         string
 	Schemas      []string
 	Excludes     []string
+	Includes     []string
 	PollInterval time.Duration
 }
 
@@ -135,7 +136,8 @@ func (p *PublicationManager) getWatchedTables(ctx context.Context) ([]string, er
 	schemaPattern := strings.Join(p.opts.Schemas, "|")
 	query := `select table_schema, table_name
 	from information_schema.tables
-	where table_schema similar to $1;`
+	where table_schema similar to $1
+	and table_type = 'BASE TABLE';`
 
 	rows, err := conn.QueryEx(ctx, query, nil, schemaPattern)
 	if err != nil {
@@ -151,13 +153,32 @@ func (p *PublicationManager) scanTables(rows *pgx.Rows) ([]string, error) {
 	defer rows.Close()
 
 	var tables = []string{}
+forEachRow:
 	for rows.Next() {
 		var schema, name string
 		if err := rows.Scan(&schema, &name); err != nil {
 			return nil, err
 		}
 
-		tables = append(tables, fmt.Sprintf("%s.%s", schema, name))
+		// Filter the table if we intend to exclude it
+		for _, excluded := range p.opts.Excludes {
+			if excluded == name {
+				continue forEachRow
+			}
+		}
+
+		// If we have an includes list, we should only include our table if it appears in that
+		// list
+		isIncluded := len(p.opts.Includes) == 0
+		for _, included := range p.opts.Includes {
+			if included == name {
+				isIncluded = true
+			}
+		}
+
+		if isIncluded {
+			tables = append(tables, fmt.Sprintf("%s.%s", schema, name))
+		}
 	}
 
 	return tables, nil

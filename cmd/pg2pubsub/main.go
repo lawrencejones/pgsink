@@ -39,6 +39,7 @@ var (
 	slotName        = app.Flag("slot-name", "Replication slot name").Default("pg2pubsub").String()
 	schemas         = app.Flag("schema", "Postgres schema to watch for changes").Default("public").Strings()
 	excludes        = app.Flag("exclude", "Table name to exclude from changes").Strings()
+	includes        = app.Flag("include", "Table name to include from changes (activates whitelist)").Strings()
 	pollInterval    = app.Flag("poll-interval", "Interval to poll for new tables").Default("10s").Duration()
 	statusHeartbeat = app.Flag("status-heartbeat", "Interval to heartbeat replication primary").Default("10s").Duration()
 	decodeOnly      = app.Flag("decode-only", "Interval to heartbeat replication primary").Default("false").Bool()
@@ -92,6 +93,7 @@ func main() {
 				Name:         *name,
 				Schemas:      *schemas,
 				Excludes:     *excludes,
+				Includes:     *includes,
 				PollInterval: *pollInterval,
 			},
 		)
