@@ -1,0 +1,30 @@
+# View goreleaser docs for configuration settings
+# https://goreleaser.com
+
+---
+project_name: pg2pubsub
+
+builds:
+  - binary: pg2pubsub
+    main: cmd/pg2pubsub/main.go
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+    ldflags: >
+      -X main.Version={{.Version}}
+      -X main.Commit={{.Commit}}
+      -X main.Date={{.Date}}
+      -a
+      -installsuffix cgo
+    env:
+      - CGO_ENABLED=0
+
+nfpm:
+  vendor: lawrencejones.dev
+  homepage: https://github.com/lawrencejones/pg2pubsub
+  maintainer: Lawrence Jones me@lawrencejones.dev
+  description: Publish Postgres changes into Google Pub/Sub
+  formats:
+    - deb
