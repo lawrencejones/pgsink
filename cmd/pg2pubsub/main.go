@@ -99,7 +99,7 @@ func main() {
 			},
 		)
 
-		if err := pubmgr.Create(ctx); err != nil {
+		if _, err := pubmgr.Create(ctx); err != nil {
 			kingpin.Fatalf("failed to create publication: %v", err)
 		}
 

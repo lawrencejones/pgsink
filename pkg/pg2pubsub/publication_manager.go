@@ -9,14 +9,15 @@ import (
 
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgx"
+	uuid "github.com/satori/go.uuid"
 )
 
 type PublicationManagerOptions struct {
-	Name         string
-	Schemas      []string
-	Excludes     []string
-	Includes     []string
-	PollInterval time.Duration
+	Name         string        // name of the publication in Postgres
+	Schemas      []string      // list of schemas to watch
+	Excludes     []string      // optional blacklist
+	Includes     []string      // optional whitelist, combined with blacklist
+	PollInterval time.Duration // interval to scan Postgres for new matching tables
 }
 
 func NewPublicationManager(logger kitlog.Logger, conn *pgx.Conn, opts PublicationManagerOptions) *PublicationManager {
@@ -28,47 +29,109 @@ func NewPublicationManager(logger kitlog.Logger, conn *pgx.Conn, opts Publicatio
 }
 
 type PublicationManager struct {
-	logger   kitlog.Logger
-	conn     *pgx.Conn
-	connLock sync.Mutex
-	opts     PublicationManagerOptions
+	logger     kitlog.Logger
+	conn       *pgx.Conn
+	connLock   sync.Mutex
+	identifier string // publication identifier, set by create
+	opts       PublicationManagerOptions
 }
 
 // Create will create a new publication with no subscribed tables, or will no-op if a
-// publication already exists with this name.
-func (p *PublicationManager) Create(ctx context.Context) error {
+// publication already exists with this name. The returned string is the publication
+// identifer, which is set to a uuid as a comment on the publication. Whenever a
+// publication expires, it should be recreated with a different identifier.
+func (p *PublicationManager) Create(ctx context.Context) (identifier string, err error) {
+	logger := kitlog.With(p.logger, "publication", p.opts.Name)
+
+	defer func() {
+		// We've successfully created the publication, so initialise our manager
+		if err == nil {
+			logger.Log("event", "publication.initialise", "identifier", identifier)
+			p.identifier = identifier
+		}
+	}()
+
+	identifier, found, err := p.getExistingIdentifier(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	if found {
+		return identifier, nil
+	}
+
+	// No publication exists, we need a new identifier
+	identifier = uuid.NewV4().String()
+	logger.Log("event", "publication.create", "identifier", identifier, "msg", "could not find publication, creating")
+	if err := p.createPublication(ctx, identifier); err != nil {
+		return "", err
+	}
+
+	return identifier, nil
+}
+
+// createPublication transactionally creates and comments on a new publication. The
+// comment identifier should be provided as a new UUID.
+func (p *PublicationManager) createPublication(ctx context.Context, identifier string) error {
 	conn, unlock := p.checkout()
 	defer unlock()
 
-	rows, err := conn.QueryEx(ctx, `select exists(select * from pg_publication where pubname=$1);`, nil, p.opts.Name)
+	createAndCommentQuery := fmt.Sprintf(`create publication %s;`, p.opts.Name) +
+		fmt.Sprintf(`comment on publication %s is '%s';`, p.opts.Name, identifier)
+
+	txn, err := conn.Begin()
 	if err != nil {
 		return err
 	}
 
+	if _, err := conn.ExecEx(ctx, createAndCommentQuery, nil); err != nil {
+		return err
+	}
+
+	if err := txn.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// getExistingIdentifier fetches the identifier commented on the target publication, if it
+// exists. Otherwise we return an empty string, which means a matching publication does
+// not exist.
+func (p *PublicationManager) getExistingIdentifier(ctx context.Context) (identifier string, found bool, err error) {
+	conn, unlock := p.checkout()
+	defer unlock()
+
+	matchingIdentifierQuery := `
+	select obj_description(oid, 'pg_publication') as identifier
+	from pg_publication
+	where pubname=$1
+	`
+
+	rows, err := conn.QueryEx(ctx, matchingIdentifierQuery, nil, p.opts.Name)
+	if err != nil {
+		return "", false, err
+	}
+
 	defer rows.Close()
 
-	var exists bool
 	for rows.Next() {
-		if err := rows.Scan(&exists); err != nil {
-			return err
+		found = true // any matching publication means we've found it
+		if err := rows.Scan(&identifier); err != nil {
+			return "", found, err
 		}
 	}
 
-	if exists {
-		p.logger.Log("event", "publication_exists", "publication", p.opts.Name)
-		return nil
-	}
-
-	p.logger.Log("event", "creating_publication", "publication", p.opts.Name,
-		"msg", "could not find publication, creating")
-	_, err = conn.ExecEx(ctx, fmt.Sprintf(`create publication %s;`, p.opts.Name), nil)
-
-	return err
+	return identifier, found, nil
 }
 
 // Sync is intended to be run on an on-going basis, watching for new database tables in
 // order to add them to the existing publication.
 func (p *PublicationManager) Sync(ctx context.Context) error {
+	if p.identifier == "" {
+		panic("called Sync() before Create()")
+	}
+
 	p.logger.Log("event", "sync_start")
 	for {
 		select {

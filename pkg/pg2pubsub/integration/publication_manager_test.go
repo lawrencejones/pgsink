@@ -72,15 +72,17 @@ var _ = Describe("PublicationManager", func() {
 
 	Describe("Create()", func() {
 		var (
-			err error
+			identifier string
+			err        error
 		)
 
 		JustBeforeEach(func() {
-			err = pubmgr.Create(context.Background())
+			identifier, err = pubmgr.Create(context.Background())
 		})
 
 		It("creates a publication of the given name", func() {
 			Expect(err).To(BeNil(), "failed to create publication")
+			Expect(identifier).NotTo(Equal(""), "identifier should be a uuid")
 
 			var foundName string
 			err := conn.QueryRowEx(ctx, `select pubname from pg_publication where pubname = $1;`, nil, name).
@@ -92,6 +94,7 @@ var _ = Describe("PublicationManager", func() {
 		Context("when publication already exists", func() {
 			BeforeEach(func() {
 				mustExec(`create publication %s`, []interface{}{name}, "failed to create publication")
+				mustExec(`comment on publication %s is 'la-la-la'`, []interface{}{name}, "failed to comment publication")
 			})
 
 			It("no-ops", func() {
@@ -106,6 +109,12 @@ var _ = Describe("PublicationManager", func() {
 		)
 
 		JustBeforeEach(func() {
+			// Call Create() as we need to initialise the manager with an identifier. It's a bit
+			// sad we need Create() to work in order to test Sync(), but there is a crucial
+			// dependency there.
+			_, err := pubmgr.Create(ctx)
+			Expect(err).To(Succeed())
+
 			go func() {
 				errChan <- pubmgr.Sync(ctx)
 				close(errChan)
@@ -115,9 +124,6 @@ var _ = Describe("PublicationManager", func() {
 		BeforeEach(func() {
 			// Provide a channel that can receive the sync error once it's concluded
 			errChan = make(chan error)
-
-			// We need a publication, as that is what Sync() will be managing
-			mustExec(`create publication %s;`, []interface{}{name}, "failed to create publication")
 		})
 
 		AfterEach(func() {
