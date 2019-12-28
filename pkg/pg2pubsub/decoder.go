@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"strconv"
 	"time"
+
+	"github.com/jackc/pgx/pgtype"
 )
 
 // Message is a parsed pgoutput message received from the replication stream
@@ -38,13 +41,24 @@ type Relation struct {
 	Columns         []Column // Repeating message of column definitions.
 }
 
-// Marshal converts a tuple into a dynamic Golang map type. All values are strings, as we
-// assume anyone who wants schema'd data will parse this alongside the schema details at a
-// later stage.
-func (r *Relation) Marshal(tuple []Element) map[string]string {
-	row := map[string]string{}
+// Marshal converts a tuple into a dynamic Golang map type. Values are represented in Go
+// native types.
+func (r *Relation) Marshal(tuple []Element) map[string]interface{} {
+	// This tuple doesn't match our relation, if the sizes aren't the same
+	if len(tuple) != len(r.Columns) {
+		return nil
+	}
+
+	row := map[string]interface{}{}
 	for idx, column := range r.Columns {
-		row[column.Name] = string(tuple[idx].Value)
+		decoded, err := column.Decode(tuple[idx].Value)
+
+		// TODO: Consider if panic is appropriate here
+		if err != nil {
+			panic(err)
+		}
+
+		row[column.Name] = decoded
 	}
 
 	return row
@@ -55,6 +69,25 @@ type Column struct {
 	Name     string // Name of the column.
 	Type     uint32 // ID of the column's data type.
 	Modifier uint32 // Type modifier of the column (atttypmod).
+}
+
+// Decode generates a native Go type from the textual pgoutput representation. This can be
+// extended to support more types if necessary.
+func (c Column) Decode(src []byte) (interface{}, error) {
+	switch c.Type {
+	case pgtype.BoolOID:
+		return string(src) == "t", nil
+	case pgtype.Int2OID, pgtype.Int4OID:
+		return strconv.Atoi(string(src))
+	case pgtype.Int8OID:
+		return strconv.ParseInt(string(src), 10, 64)
+	case pgtype.Float4OID:
+		return strconv.ParseFloat(string(src), 32)
+	case pgtype.Float8OID:
+		return strconv.ParseFloat(string(src), 64)
+	default:
+		return string(src), nil
+	}
 }
 
 type Type struct {

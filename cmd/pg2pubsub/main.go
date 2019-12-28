@@ -31,18 +31,19 @@ var (
 	metricsAddress = app.Flag("metrics-address", "Address to bind HTTP metrics listener").Default("127.0.0.1").String()
 	metricsPort    = app.Flag("metrics-port", "Port to bind HTTP metrics listener").Default("9525").Uint16()
 
-	host            = app.Flag("host", "Postgres host").Envar("PGHOST").Default("127.0.0.1").String()
-	port            = app.Flag("port", "Postgres port").Envar("PGPORT").Default("5432").Uint16()
-	database        = app.Flag("database", "Postgres database name").Envar("PGDATABASE").Default("postgres").String()
-	user            = app.Flag("user", "Postgres user").Envar("PGUSER").Default("postgres").String()
-	name            = app.Flag("name", "Publication name").Default("pg2pubsub").String()
-	slotName        = app.Flag("slot-name", "Replication slot name").Default("pg2pubsub").String()
-	schemas         = app.Flag("schema", "Postgres schema to watch for changes").Default("public").Strings()
-	excludes        = app.Flag("exclude", "Table name to exclude from changes").Strings()
-	includes        = app.Flag("include", "Table name to include from changes (activates whitelist)").Strings()
-	pollInterval    = app.Flag("poll-interval", "Interval to poll for new tables").Default("10s").Duration()
-	statusHeartbeat = app.Flag("status-heartbeat", "Interval to heartbeat replication primary").Default("10s").Duration()
-	decodeOnly      = app.Flag("decode-only", "Interval to heartbeat replication primary").Default("false").Bool()
+	host                    = app.Flag("host", "Postgres host").Envar("PGHOST").Default("127.0.0.1").String()
+	port                    = app.Flag("port", "Postgres port").Envar("PGPORT").Default("5432").Uint16()
+	database                = app.Flag("database", "Postgres database name").Envar("PGDATABASE").Default("postgres").String()
+	user                    = app.Flag("user", "Postgres user").Envar("PGUSER").Default("postgres").String()
+	name                    = app.Flag("name", "Publication name").Default("pg2pubsub").String()
+	slotName                = app.Flag("slot-name", "Replication slot name").Default("pg2pubsub").String()
+	schemas                 = app.Flag("schema", "Postgres schema to watch for changes").Default("public").Strings()
+	excludes                = app.Flag("exclude", "Table name to exclude from changes").Strings()
+	includes                = app.Flag("include", "Table name to include from changes (activates whitelist)").Strings()
+	pollInterval            = app.Flag("poll-interval", "Interval to poll for new tables").Default("10s").Duration()
+	statusHeartbeat         = app.Flag("status-heartbeat", "Interval to heartbeat replication primary").Default("10s").Duration()
+	decodeOnly              = app.Flag("decode-only", "Interval to heartbeat replication primary").Default("false").Bool()
+	modificationWorkerCount = app.Flag("modification-worker-count", "Workers for building modifications").Default("1").Int()
 )
 
 func main() {
@@ -171,7 +172,9 @@ func main() {
 					return nil
 				}
 
-				schemas, modifications := pg2pubsub.Serialize(logger, sub)
+				commits := pg2pubsub.DecorateCommits(sub.Received())
+				registry, schemas, commits := pg2pubsub.BuildRegistry(logger, commits)
+				modifications := pg2pubsub.BuildModifications(logger, registry, commits, *modificationWorkerCount)
 
 				go func() {
 					for schema := range schemas {
