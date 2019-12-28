@@ -47,9 +47,9 @@ func (r *Registry) Register(relation *Relation) {
 
 func (r *Registry) Get(oid uint32) *Relation {
 	r.RLock()
-	defer r.RUnlock()
-
-	return r.relations[oid]
+	relation := r.relations[oid]
+	r.RUnlock() // don't defer, as defer costs more than direct invocation
+	return relation
 }
 
 // Marshal uses the schema information in the registry to.

@@ -28,7 +28,6 @@ func BuildModifications(logger kitlog.Logger, registry *Registry, commits <-chan
 			for committed := range commits {
 				modifications <- registry.Marshal(committed)
 			}
-
 		}()
 	}
 
