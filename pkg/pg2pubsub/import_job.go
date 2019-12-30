@@ -81,7 +81,7 @@ func (i ImportJobStore) GetOutstandingJobs(ctx context.Context, publicationID st
 	from pg2pubsub.import_jobs
 	where publication_id = $1
 	and completed_at is null
-	and id not in $2
+	and not id = any($2)
 	;`
 
 	jobs := []*ImportJob{}
