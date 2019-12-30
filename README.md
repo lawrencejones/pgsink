@@ -4,6 +4,16 @@ This tool connects to a Postgres database via logical replication, creating the
 plumbing required to subscribe to changes on tables within a specific schema.
 These changes are then pushed into GCP Pub/Sub.
 
+```
+pkg/changelog     // Schema & Modification types, the public output types
+pkg/importer      // triggers imports for tables in the publication
+pkg/logical       // all logical decoding helpers
+pkg/migration     // database migrations for internal pg2pubsub tables
+pkg/publication   // creates and manages table membership for a Postgres publication
+pkg/pubsub        // Pub/Sub relay publisher, batched and acknowledgement hooks
+pkg/subscription  // subscribes to publication, streaming Schema/Modification
+```
+
 ## Developing
 
 This project comes with a docker-compose development environment. Boot the
