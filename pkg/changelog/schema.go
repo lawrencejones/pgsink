@@ -1,32 +1,44 @@
-package pg2pubsub
+package changelog
 
 import (
 	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/pgtype"
+	"github.com/lawrencejones/pg2pubsub/pkg/logical"
 )
 
 // Schema is a timestamped Avro schema object. We use the timestamp field to order schema
 // updates, using the greatest timestamp value to represent the most recent schema update.
 // The schema specification is a valid Avro schema.
 type Schema struct {
-	Timestamp time.Time           `json:"timestamp"`
-	Spec      SchemaSpecification `json:"spec"`
+	Timestamp time.Time           `json:"timestamp"` // commit timestamp
+	Spec      SchemaSpecification `json:"spec"`      // Avro schema format
 }
 
+// Be consistent when structuring Avro schemas. The table schema & namespace denotes the
+// Avro namespace, while the type of the schema is always record and the name always
+// value.
+const (
+	schemaType = "record"
+	schemaName = "value"
+)
+
+// SchemaSpecification is an Avro compliant schema format. We store all schemas for a
+// Postgres table under the same namespace, and a row inside this table has a schema of
+// type 'record' named 'value'.
 type SchemaSpecification struct {
-	Namespace string        `json:"namespace"`
-	Type      string        `json:"type"`
-	Name      string        `json:"name"`
-	Fields    []SchemaField `json:"fields"`
+	Namespace string        `json:"namespace"` // <schema>.<table>
+	Type      string        `json:"type"`      // always record
+	Name      string        `json:"name"`      // always value
+	Fields    []SchemaField `json:"fields"`    // schema fields
 }
 
-func buildSchemaSpecification(relation *Relation) SchemaSpecification {
+func buildSchemaSpecification(relation *logical.Relation) SchemaSpecification {
 	spec := SchemaSpecification{
 		Namespace: fmt.Sprintf("%s.%s", relation.Namespace, relation.Name),
-		Name:      "value",
-		Type:      "record",
+		Type:      schemaType,
+		Name:      schemaName,
 		Fields:    []SchemaField{},
 	}
 
@@ -57,7 +69,7 @@ type SchemaField struct {
 //   bytes: sequence of 8-bit unsigned bytes
 //   string: unicode character sequence
 //
-func marshalSchemaField(c Column) SchemaField {
+func marshalSchemaField(c logical.Column) SchemaField {
 	var avroType string
 	switch c.Type {
 	case pgtype.BoolOID:

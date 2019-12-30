@@ -12,6 +12,7 @@ pkg/migration     // database migrations for internal pg2pubsub tables
 pkg/publication   // creates and manages table membership for a Postgres publication
 pkg/pubsub        // Pub/Sub relay publisher, batched and acknowledgement hooks
 pkg/subscription  // subscribes to publication, streaming Schema/Modification
+pkg/util          // utilities that should be in Go's stdlib
 ```
 
 ## Developing
