@@ -11,16 +11,14 @@ import (
 	"runtime"
 	"syscall"
 
-	// Import goose migrations, init functions will load them
-	_ "github.com/lawrencejones/pg2pubsub/pkg/migration"
-
 	"github.com/alecthomas/kingpin"
 	"github.com/davecgh/go-spew/spew"
 	kitlog "github.com/go-kit/kit/log"
 	level "github.com/go-kit/kit/log/level"
 	"github.com/jackc/pgx"
 	"github.com/lawrencejones/pg2pubsub/pkg/migration"
-	"github.com/lawrencejones/pg2pubsub/pkg/pg2pubsub"
+	"github.com/lawrencejones/pg2pubsub/pkg/publication"
+	"github.com/lawrencejones/pg2pubsub/pkg/subscription"
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -103,15 +101,16 @@ func main() {
 	}
 
 	var g run.Group
-	var publicationID string
+	// var publicationID string
 
 	{
 		logger := kitlog.With(logger, "component", "publication")
 
-		pubmgr := pg2pubsub.NewPublicationManager(
+		pubmgr, err := publication.CreatePublicationManager(
+			ctx,
 			logger,
 			mustConnectionPool(2),
-			pg2pubsub.PublicationManagerOptions{
+			publication.PublicationManagerOptions{
 				Name:         *name,
 				Schemas:      *schemas,
 				Excludes:     *excludes,
@@ -120,10 +119,11 @@ func main() {
 			},
 		)
 
-		var err error
-		if publicationID, err = pubmgr.Create(ctx); err != nil {
+		if err != nil {
 			kingpin.Fatalf("failed to create publication: %v", err)
 		}
+
+		// publicationID = pubmgr.GetPublicationID()
 
 		g.Add(
 			func() error {
@@ -135,47 +135,49 @@ func main() {
 		)
 	}
 
-	{
-		logger := kitlog.With(logger, "component", "importer")
+	/*
+		{
+			logger := kitlog.With(logger, "component", "importer")
 
-		pool, err := pgx.NewConnPool(
-			pgx.ConnPoolConfig{
-				ConnConfig:     cfg,
-				MaxConnections: *importWorkerCount + 1,
-			},
-		)
+			pool, err := pgx.NewConnPool(
+				pgx.ConnPoolConfig{
+					ConnConfig:     cfg,
+					MaxConnections: *importWorkerCount + 1,
+				},
+			)
 
-		if err != nil {
-			kingpin.Fatalf("failed to connect to Postgres: %v", err)
+			if err != nil {
+				kingpin.Fatalf("failed to connect to Postgres: %v", err)
+			}
+
+			importer := pg2pubsub.NewImporter(
+				logger,
+				pool,
+				pg2pubsub.ImporterOptions{
+					WorkerCount:   *importWorkerCount,
+					PublicationID: publicationID,
+					PollInterval:  *importPollInterval,
+				},
+			)
+
+			commits := importer.Work(ctx)
+
+			g.Add(
+				func() error {
+					for commit := range commits {
+						spew.Dump(commit)
+					}
+
+					return nil
+				},
+				func(error) {
+					cancel()
+				},
+			)
 		}
+	*/
 
-		importer := pg2pubsub.NewImporter(
-			logger,
-			pool,
-			pg2pubsub.ImporterOptions{
-				WorkerCount:   *importWorkerCount,
-				PublicationID: publicationID,
-				PollInterval:  *importPollInterval,
-			},
-		)
-
-		commits := importer.Work(ctx)
-
-		g.Add(
-			func() error {
-				for commit := range commits {
-					spew.Dump(commit)
-				}
-
-				return nil
-			},
-			func(error) {
-				cancel()
-			},
-		)
-	}
-
-	var sub *pg2pubsub.Subscription
+	var sub *subscription.Subscription
 
 	{
 		logger := kitlog.With(logger, "component", "subscription")
@@ -185,10 +187,10 @@ func main() {
 			kingpin.Fatalf("failed to connect to Postgres: %v", err)
 		}
 
-		sub = pg2pubsub.NewSubscription(
+		sub = subscription.NewSubscription(
 			logger,
 			conn,
-			pg2pubsub.SubscriptionOptions{
+			subscription.SubscriptionOptions{
 				Name:            *slotName,
 				Publication:     *name,
 				StatusHeartbeat: *statusHeartbeat,
@@ -227,31 +229,20 @@ func main() {
 		g.Add(
 			func() error {
 				if *decodeOnly {
-					for msg := range sub.Received() {
+					for msg := range sub.Receive() {
 						spew.Dump(msg)
 					}
 
 					return nil
 				}
 
-				commits := pg2pubsub.DecorateCommits(sub.Received())
-				registry, schemas, commits := pg2pubsub.BuildRegistry(logger, commits)
-				modifications := pg2pubsub.BuildModifications(logger, registry, commits, *modificationWorkerCount)
+				for entry := range subscription.BuildChangelog(logger, sub.Receive()) {
+					outputMessages <- entry.Unwrap()
 
-				go func() {
-					for schema := range schemas {
-						outputMessages <- schema
+					if entry.Modification != nil {
+						sub.ConfirmReceived(*entry.Modification.LSN)
 					}
-				}()
-
-				go func() {
-					for modification := range modifications {
-						outputMessages <- modification
-						sub.ConfirmReceived(modification.LSN)
-					}
-				}()
-
-				<-ctx.Done()
+				}
 
 				return nil
 			},

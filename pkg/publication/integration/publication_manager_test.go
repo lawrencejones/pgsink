@@ -107,10 +107,6 @@ var _ = Describe("PublicationManager", func() {
 	})
 
 	Describe("Sync()", func() {
-		var (
-			errChan chan error
-		)
-
 		JustBeforeEach(func() {
 			// Call Create() as we need to initialise the manager with an identifier. It's a bit
 			// sad we need Create() to work in order to test Sync(), but there is a crucial
@@ -118,16 +114,14 @@ var _ = Describe("PublicationManager", func() {
 			pubmgr, err = publication.CreatePublicationManager(ctx, logger, pool, *opts)
 			Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 
-			errChan = make(chan error)
 			go func() {
-				errChan <- pubmgr.Sync(ctx)
-				close(errChan)
+				defer GinkgoRecover()
+				Expect(pubmgr.Sync(ctx)).To(Succeed(), "Sync() returned an error")
 			}()
 		})
 
 		AfterEach(func() {
 			cancel()
-			Eventually(errChan).Should(Receive(Succeed()))
 		})
 
 		It("adds tables to an existing publication", func() {

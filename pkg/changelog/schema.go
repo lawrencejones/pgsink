@@ -13,7 +13,28 @@ import (
 // The schema specification is a valid Avro schema.
 type Schema struct {
 	Timestamp time.Time           `json:"timestamp"` // commit timestamp
+	LSN       *uint64             `json:"lsn"`       // log sequence number, where appropriate
 	Spec      SchemaSpecification `json:"spec"`      // Avro schema format
+}
+
+// SchemaFromRelation generates a schema from a logical relation message
+func SchemaFromRelation(timestamp time.Time, lsn *uint64, relation *logical.Relation) Schema {
+	spec := SchemaSpecification{
+		Namespace: fmt.Sprintf("%s.%s", relation.Namespace, relation.Name),
+		Type:      schemaType,
+		Name:      schemaName,
+		Fields:    []SchemaField{},
+	}
+
+	for _, column := range relation.Columns {
+		spec.Fields = append(spec.Fields, schemaFieldFromColumn(column))
+	}
+
+	return Schema{
+		Timestamp: timestamp,
+		LSN:       lsn,
+		Spec:      spec,
+	}
 }
 
 // Be consistent when structuring Avro schemas. The table schema & namespace denotes the
@@ -32,21 +53,6 @@ type SchemaSpecification struct {
 	Type      string        `json:"type"`      // always record
 	Name      string        `json:"name"`      // always value
 	Fields    []SchemaField `json:"fields"`    // schema fields
-}
-
-func buildSchemaSpecification(relation *logical.Relation) SchemaSpecification {
-	spec := SchemaSpecification{
-		Namespace: fmt.Sprintf("%s.%s", relation.Namespace, relation.Name),
-		Type:      schemaType,
-		Name:      schemaName,
-		Fields:    []SchemaField{},
-	}
-
-	for _, column := range relation.Columns {
-		spec.Fields = append(spec.Fields, marshalSchemaField(column))
-	}
-
-	return spec
 }
 
 type SchemaField struct {
@@ -69,7 +75,7 @@ type SchemaField struct {
 //   bytes: sequence of 8-bit unsigned bytes
 //   string: unicode character sequence
 //
-func marshalSchemaField(c logical.Column) SchemaField {
+func schemaFieldFromColumn(c logical.Column) SchemaField {
 	var avroType string
 	switch c.Type {
 	case pgtype.BoolOID:

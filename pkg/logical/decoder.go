@@ -10,6 +10,9 @@ import (
 	"github.com/jackc/pgx/pgtype"
 )
 
+// PGOutput is the Postgres recognised name of our desired encoding
+const PGOutput = "pgoutput"
+
 // DecodePGOutput parses a pgoutput logical replication message, as per the format
 // specification at:
 //
