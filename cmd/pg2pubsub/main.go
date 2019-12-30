@@ -11,11 +11,15 @@ import (
 	"runtime"
 	"syscall"
 
+	// Import goose migrations, init functions will load them
+	_ "github.com/lawrencejones/pg2pubsub/pkg/migration"
+
 	"github.com/alecthomas/kingpin"
 	"github.com/davecgh/go-spew/spew"
 	kitlog "github.com/go-kit/kit/log"
 	level "github.com/go-kit/kit/log/level"
 	"github.com/jackc/pgx"
+	"github.com/lawrencejones/pg2pubsub/pkg/migration"
 	"github.com/lawrencejones/pg2pubsub/pkg/pg2pubsub"
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -44,6 +48,8 @@ var (
 	statusHeartbeat         = app.Flag("status-heartbeat", "Interval to heartbeat replication primary").Default("10s").Duration()
 	decodeOnly              = app.Flag("decode-only", "Interval to heartbeat replication primary").Default("false").Bool()
 	modificationWorkerCount = app.Flag("modification-worker-count", "Workers for building modifications").Default("1").Int()
+	importWorkerCount       = app.Flag("import-worker-count", "Workers for running imports").Default("1").Int()
+	importPollInterval      = app.Flag("import-poll-interval", "Interval to poll for new import jobs").Default("10s").Duration()
 )
 
 func main() {
@@ -77,19 +83,34 @@ func main() {
 		User:     *user,
 	}
 
+	mustConnectionPool := func(size int) *pgx.ConnPool {
+		pool, err := pgx.NewConnPool(
+			pgx.ConnPoolConfig{
+				ConnConfig:     cfg,
+				MaxConnections: size,
+			},
+		)
+
+		if err != nil {
+			kingpin.Fatalf("failed to create connection pool: %v", err)
+		}
+
+		return pool
+	}
+
+	if err := migration.Migrate(ctx, logger, cfg); err != nil {
+		kingpin.Fatalf("failed to migrate database: %v", err)
+	}
+
 	var g run.Group
+	var publicationID string
 
 	{
 		logger := kitlog.With(logger, "component", "publication")
 
-		conn, err := pgx.Connect(cfg)
-		if err != nil {
-			kingpin.Fatalf("failed to connect to Postgres: %v", err)
-		}
-
 		pubmgr := pg2pubsub.NewPublicationManager(
 			logger,
-			conn,
+			mustConnectionPool(2),
 			pg2pubsub.PublicationManagerOptions{
 				Name:         *name,
 				Schemas:      *schemas,
@@ -99,13 +120,54 @@ func main() {
 			},
 		)
 
-		if _, err := pubmgr.Create(ctx); err != nil {
+		var err error
+		if publicationID, err = pubmgr.Create(ctx); err != nil {
 			kingpin.Fatalf("failed to create publication: %v", err)
 		}
 
 		g.Add(
 			func() error {
 				return pubmgr.Sync(ctx)
+			},
+			func(error) {
+				cancel()
+			},
+		)
+	}
+
+	{
+		logger := kitlog.With(logger, "component", "importer")
+
+		pool, err := pgx.NewConnPool(
+			pgx.ConnPoolConfig{
+				ConnConfig:     cfg,
+				MaxConnections: *importWorkerCount + 1,
+			},
+		)
+
+		if err != nil {
+			kingpin.Fatalf("failed to connect to Postgres: %v", err)
+		}
+
+		importer := pg2pubsub.NewImporter(
+			logger,
+			pool,
+			pg2pubsub.ImporterOptions{
+				WorkerCount:   *importWorkerCount,
+				PublicationID: publicationID,
+				PollInterval:  *importPollInterval,
+			},
+		)
+
+		commits := importer.Work(ctx)
+
+		g.Add(
+			func() error {
+				for commit := range commits {
+					spew.Dump(commit)
+				}
+
+				return nil
 			},
 			func(error) {
 				cancel()

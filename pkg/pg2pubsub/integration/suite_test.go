@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgx"
+	"github.com/lawrencejones/pg2pubsub/pkg/migration"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	uuid "github.com/satori/go.uuid"
@@ -27,11 +29,11 @@ var (
 	}
 )
 
-func mustConnect() *pgx.Conn {
-	conn, err := pgx.Connect(cfg)
+func mustConnect() *pgx.ConnPool {
+	pool, err := pgx.NewConnPool(pgx.ConnPoolConfig{ConnConfig: cfg})
 	Expect(err).NotTo(HaveOccurred(), "failed to connect to postgres")
 
-	return conn
+	return pool
 }
 
 func tryEnviron(key, otherwise string) string {
@@ -56,6 +58,10 @@ func mustAtoi(numstr string) int {
 func randomSuffix() string {
 	return strings.SplitN(uuid.NewV4().String(), "-", 2)[0]
 }
+
+var _ = BeforeSuite(func() {
+	Expect(migration.Migrate(context.Background(), logger, cfg)).To(Succeed())
+})
 
 func TestSuite(t *testing.T) {
 	RegisterFailHandler(Fail)

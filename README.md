@@ -27,6 +27,16 @@ pg2pubsub_test=> \q
 
 pg2pubsub will work with this database: try `pg2pubsub --decode-only`.
 
+### Database migrations
+
+We use [goose](github.com/pressly/goose) to run database migrations. Create new
+migrations like so:
+
+```console
+$ goose -dir pkg/migration create create_import_jobs_table go
+2019/12/29 14:59:51 Created new file: pkg/migration/20191229145951_create_import_jobs_table.go
+```
+
 ## Getting started
 
 Boot a Postgres database, then create an example table.

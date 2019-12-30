@@ -18,7 +18,7 @@ var _ = Describe("PublicationManager", func() {
 	var (
 		ctx    context.Context
 		cancel func()
-		conn   *pgx.Conn
+		pool   *pgx.ConnPool
 		pubmgr *pg2pubsub.PublicationManager
 		opts   *pg2pubsub.PublicationManagerOptions
 
@@ -33,8 +33,13 @@ var _ = Describe("PublicationManager", func() {
 		return tables
 	}
 
+	getImportedTables := func() []string {
+		tables, _ := pg2pubsub.ImportJobStore{pool}.GetImportedTables(ctx, pubmgr.GetIdentifier())
+		return tables
+	}
+
 	mustExec := func(sql string, args []interface{}, message string) {
-		_, err := conn.ExecEx(ctx, fmt.Sprintf(sql, args...), nil)
+		_, err := pool.ExecEx(ctx, fmt.Sprintf(sql, args...), nil)
 		Expect(err).To(BeNil(), message)
 	}
 
@@ -44,10 +49,11 @@ var _ = Describe("PublicationManager", func() {
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
-		conn = mustConnect()
+		pool = mustConnect()
 
 		// If a publication exists from previous test runs, we should tear it down
-		conn.ExecEx(ctx, fmt.Sprintf(`drop publication if exists %s`, name), nil)
+		pool.ExecEx(ctx, fmt.Sprintf(`drop publication if exists %s`, name), nil)
+		pool.ExecEx(ctx, `truncate pg2pubsub.import_jobs;`, nil)
 
 		// Remove all tables from previous test runs
 		for _, table := range []string{existingTable, ignoredTable, newTable} {
@@ -85,7 +91,7 @@ var _ = Describe("PublicationManager", func() {
 			Expect(identifier).NotTo(Equal(""), "identifier should be a uuid")
 
 			var foundName string
-			err := conn.QueryRowEx(ctx, `select pubname from pg_publication where pubname = $1;`, nil, name).
+			err := pool.QueryRowEx(ctx, `select pubname from pg_publication where pubname = $1;`, nil, name).
 				Scan(&foundName)
 			Expect(err).To(BeNil(), "failed to find publication")
 			Expect(foundName).To(Equal(name))
@@ -133,6 +139,10 @@ var _ = Describe("PublicationManager", func() {
 
 		It("adds tables to an existing publication", func() {
 			Eventually(getPublishedTables, 5*time.Second).Should(ContainElement(existingTable))
+		})
+
+		It("enqueues a new import job for this table", func() {
+			Eventually(getImportedTables, 5*time.Second).Should(ContainElement(existingTable))
 		})
 
 		Context("when tables should no longer be watched", func() {

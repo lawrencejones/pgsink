@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgx"
+	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -20,18 +20,17 @@ type PublicationManagerOptions struct {
 	PollInterval time.Duration // interval to scan Postgres for new matching tables
 }
 
-func NewPublicationManager(logger kitlog.Logger, conn *pgx.Conn, opts PublicationManagerOptions) *PublicationManager {
+func NewPublicationManager(logger kitlog.Logger, pool *pgx.ConnPool, opts PublicationManagerOptions) *PublicationManager {
 	return &PublicationManager{
 		logger: logger,
-		conn:   conn,
+		pool:   pool,
 		opts:   opts,
 	}
 }
 
 type PublicationManager struct {
 	logger     kitlog.Logger
-	conn       *pgx.Conn
-	connLock   sync.Mutex
+	pool       *pgx.ConnPool
 	identifier string // publication identifier, set by create
 	opts       PublicationManagerOptions
 }
@@ -73,18 +72,15 @@ func (p *PublicationManager) Create(ctx context.Context) (identifier string, err
 // createPublication transactionally creates and comments on a new publication. The
 // comment identifier should be provided as a new UUID.
 func (p *PublicationManager) createPublication(ctx context.Context, identifier string) error {
-	conn, unlock := p.checkout()
-	defer unlock()
-
 	createAndCommentQuery := fmt.Sprintf(`create publication %s;`, p.opts.Name) +
 		fmt.Sprintf(`comment on publication %s is '%s';`, p.opts.Name, identifier)
 
-	txn, err := conn.Begin()
+	txn, err := p.pool.Begin()
 	if err != nil {
 		return err
 	}
 
-	if _, err := conn.ExecEx(ctx, createAndCommentQuery, nil); err != nil {
+	if _, err := txn.ExecEx(ctx, createAndCommentQuery, nil); err != nil {
 		return err
 	}
 
@@ -99,16 +95,13 @@ func (p *PublicationManager) createPublication(ctx context.Context, identifier s
 // exists. Otherwise we return an empty string, which means a matching publication does
 // not exist.
 func (p *PublicationManager) getExistingIdentifier(ctx context.Context) (identifier string, found bool, err error) {
-	conn, unlock := p.checkout()
-	defer unlock()
-
 	matchingIdentifierQuery := `
 	select obj_description(oid, 'pg_publication') as identifier
 	from pg_publication
 	where pubname=$1
 	`
 
-	rows, err := conn.QueryEx(ctx, matchingIdentifierQuery, nil, p.opts.Name)
+	rows, err := p.pool.QueryEx(ctx, matchingIdentifierQuery, nil, p.opts.Name)
 	if err != nil {
 		return "", false, err
 	}
@@ -151,8 +144,22 @@ func (p *PublicationManager) Sync(ctx context.Context) error {
 				return err
 			}
 
+			importedTables, err := ImportJobStore{p.pool}.GetImportedTables(ctx, p.identifier)
+			if err != nil {
+				return err
+			}
+
 			watchedNotPublished := diff(watched, published)
 			publishedNotWatched := diff(published, watched)
+			publishedNotImported := diff(published, importedTables)
+
+			for _, tableName := range publishedNotImported {
+				p.logger.Log("event", "import.enqueue", "publication_id", p.identifier, "table", tableName)
+				_, err := ImportJobStore{p.pool}.Create(ctx, p.identifier, tableName)
+				if err != nil {
+					return errors.Wrap(err, "failed to enqueue import job")
+				}
+			}
 
 			if (len(watchedNotPublished) > 0) || (len(publishedNotWatched) > 0) {
 				p.logger.Log("event", "alter_publication", "publication", p.opts.Name,
@@ -167,23 +174,23 @@ func (p *PublicationManager) Sync(ctx context.Context) error {
 	}
 }
 
-func (p *PublicationManager) alter(ctx context.Context, tables []string) error {
-	conn, unlock := p.checkout()
-	defer unlock()
+// GetIdentifier returns the publication ID. If empty, we haven't yet created our
+// publication.
+func (p *PublicationManager) GetIdentifier() string {
+	return p.identifier
+}
 
+func (p *PublicationManager) alter(ctx context.Context, tables []string) error {
 	query := fmt.Sprintf(`alter publication %s set table %s;`, p.opts.Name, strings.Join(tables, ", "))
-	_, err := conn.ExecEx(ctx, query, nil)
+	_, err := p.pool.ExecEx(ctx, query, nil)
 
 	return err
 }
 
 // GetPublishedTables collects the tables that are already configured on our publication
 func (p *PublicationManager) GetPublishedTables(ctx context.Context) ([]string, error) {
-	conn, unlock := p.checkout()
-	defer unlock()
-
 	query := `select schemaname, tablename from pg_publication_tables where pubname = $1;`
-	rows, err := conn.QueryEx(ctx, query, nil, p.opts.Name)
+	rows, err := p.pool.QueryEx(ctx, query, nil, p.opts.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -193,21 +200,24 @@ func (p *PublicationManager) GetPublishedTables(ctx context.Context) ([]string, 
 
 // getWatchedTables scans the database for tables that match our watched conditions
 func (p *PublicationManager) getWatchedTables(ctx context.Context) ([]string, error) {
-	conn, unlock := p.checkout()
-	defer unlock()
-
 	schemaPattern := strings.Join(p.opts.Schemas, "|")
 	query := `select table_schema, table_name
 	from information_schema.tables
 	where table_schema similar to $1
 	and table_type = 'BASE TABLE';`
 
-	rows, err := conn.QueryEx(ctx, query, nil, schemaPattern)
+	rows, err := p.pool.QueryEx(ctx, query, nil, schemaPattern)
 	if err != nil {
 		return nil, err
 	}
 
 	return p.scanTables(rows)
+}
+
+// enqueueImport adds a new job to the import_jobs table. This will be picked up by the
+// importer, and will backfill what was missed from this subscription.
+func (p *PublicationManager) enqueueImport(ctx context.Context, table string) (*ImportJob, error) {
+	return ImportJobStore{p.pool}.Create(ctx, p.identifier, table)
 }
 
 // scanTables collects table names in <schema>.<name> form from sql queries that return
@@ -245,11 +255,6 @@ forEachRow:
 	}
 
 	return tables, nil
-}
-
-func (p *PublicationManager) checkout() (*pgx.Conn, func()) {
-	p.connLock.Lock()
-	return p.conn, func() { p.connLock.Unlock() }
 }
 
 func diff(s1 []string, s2 []string) []string {
