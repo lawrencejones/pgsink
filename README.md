@@ -6,7 +6,7 @@ These changes are then pushed into GCP Pub/Sub.
 
 ```
 pkg/changelog     // Schema & Modification types, the public output types
-pkg/importer      // triggers imports for tables in the publication
+pkg/imports       // manages imports for tables in the publication
 pkg/logical       // all logical decoding helpers
 pkg/migration     // database migrations for internal pg2pubsub tables
 pkg/publication   // creates and manages table membership for a Postgres publication

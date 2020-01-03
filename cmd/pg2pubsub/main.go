@@ -16,6 +16,7 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	level "github.com/go-kit/kit/log/level"
 	"github.com/jackc/pgx"
+	"github.com/lawrencejones/pg2pubsub/pkg/imports"
 	"github.com/lawrencejones/pg2pubsub/pkg/migration"
 	"github.com/lawrencejones/pg2pubsub/pkg/publication"
 	"github.com/lawrencejones/pg2pubsub/pkg/subscription"
@@ -33,21 +34,20 @@ var (
 	metricsAddress = app.Flag("metrics-address", "Address to bind HTTP metrics listener").Default("127.0.0.1").String()
 	metricsPort    = app.Flag("metrics-port", "Port to bind HTTP metrics listener").Default("9525").Uint16()
 
-	host                    = app.Flag("host", "Postgres host").Envar("PGHOST").Default("127.0.0.1").String()
-	port                    = app.Flag("port", "Postgres port").Envar("PGPORT").Default("5432").Uint16()
-	database                = app.Flag("database", "Postgres database name").Envar("PGDATABASE").Default("postgres").String()
-	user                    = app.Flag("user", "Postgres user").Envar("PGUSER").Default("postgres").String()
-	name                    = app.Flag("name", "Publication name").Default("pg2pubsub").String()
-	slotName                = app.Flag("slot-name", "Replication slot name").Default("pg2pubsub").String()
-	schemas                 = app.Flag("schema", "Postgres schema to watch for changes").Default("public").Strings()
-	excludes                = app.Flag("exclude", "Table name to exclude from changes").Strings()
-	includes                = app.Flag("include", "Table name to include from changes (activates whitelist)").Strings()
-	pollInterval            = app.Flag("poll-interval", "Interval to poll for new tables").Default("10s").Duration()
-	statusHeartbeat         = app.Flag("status-heartbeat", "Interval to heartbeat replication primary").Default("10s").Duration()
-	decodeOnly              = app.Flag("decode-only", "Interval to heartbeat replication primary").Default("false").Bool()
-	modificationWorkerCount = app.Flag("modification-worker-count", "Workers for building modifications").Default("1").Int()
-	importWorkerCount       = app.Flag("import-worker-count", "Workers for running imports").Default("1").Int()
-	importPollInterval      = app.Flag("import-poll-interval", "Interval to poll for new import jobs").Default("10s").Duration()
+	host                      = app.Flag("host", "Postgres host").Envar("PGHOST").Default("127.0.0.1").String()
+	port                      = app.Flag("port", "Postgres port").Envar("PGPORT").Default("5432").Uint16()
+	database                  = app.Flag("database", "Postgres database name").Envar("PGDATABASE").Default("postgres").String()
+	user                      = app.Flag("user", "Postgres user").Envar("PGUSER").Default("postgres").String()
+	name                      = app.Flag("name", "Publication name").Default("pg2pubsub").String()
+	slotName                  = app.Flag("slot-name", "Replication slot name").Default("pg2pubsub").String()
+	schemas                   = app.Flag("schema", "Postgres schema to watch for changes").Default("public").Strings()
+	excludes                  = app.Flag("exclude", "Table name to exclude from changes").Strings()
+	includes                  = app.Flag("include", "Table name to include from changes (activates whitelist)").Strings()
+	pollInterval              = app.Flag("poll-interval", "Interval to poll for new tables").Default("10s").Duration()
+	statusHeartbeat           = app.Flag("status-heartbeat", "Interval to heartbeat replication primary").Default("10s").Duration()
+	decodeOnly                = app.Flag("decode-only", "Interval to heartbeat replication primary").Default("false").Bool()
+	modificationWorkerCount   = app.Flag("modification-worker-count", "Workers for building modifications").Default("1").Int()
+	importManagerPollInterval = app.Flag("import-manager-poll-interval", "Interval to poll for newly published tables").Default("10s").Duration()
 )
 
 func main() {
@@ -96,17 +96,27 @@ func main() {
 		return pool
 	}
 
+	handleError := func(logger kitlog.Logger) func(error) {
+		return func(err error) {
+			if err != nil {
+				logger.Log("error", err.Error(), "msg", "received error, cancelling context")
+			}
+			cancel()
+		}
+	}
+
 	if err := migration.Migrate(ctx, logger, cfg); err != nil {
 		kingpin.Fatalf("failed to migrate database: %v", err)
 	}
 
 	var g run.Group
-	// var publicationID string
+	var pubmgr *publication.PublicationManager
 
 	{
 		logger := kitlog.With(logger, "component", "publication")
 
-		pubmgr, err := publication.CreatePublicationManager(
+		var err error
+		pubmgr, err = publication.CreatePublicationManager(
 			ctx,
 			logger,
 			mustConnectionPool(2),
@@ -123,59 +133,60 @@ func main() {
 			kingpin.Fatalf("failed to create publication: %v", err)
 		}
 
-		// publicationID = pubmgr.GetPublicationID()
-
 		g.Add(
 			func() error {
 				return pubmgr.Sync(ctx)
 			},
-			func(error) {
-				cancel()
-			},
+			handleError(logger),
 		)
 	}
 
-	/*
-		{
-			logger := kitlog.With(logger, "component", "importer")
+	{
+		logger := kitlog.With(logger, "component", "import_manager")
 
-			pool, err := pgx.NewConnPool(
-				pgx.ConnPoolConfig{
-					ConnConfig:     cfg,
-					MaxConnections: *importWorkerCount + 1,
-				},
-			)
+		manager := imports.NewManager(
+			logger,
+			mustConnectionPool(1),
+			imports.ManagerOptions{
+				PublicationID: pubmgr.GetPublicationID(),
+				PollInterval:  *importManagerPollInterval,
+			},
+		)
 
-			if err != nil {
-				kingpin.Fatalf("failed to connect to Postgres: %v", err)
-			}
+		g.Add(
+			func() error {
+				return manager.Sync(ctx)
+			},
+			handleError(logger),
+		)
+	}
 
-			importer := pg2pubsub.NewImporter(
-				logger,
-				pool,
-				pg2pubsub.ImporterOptions{
-					WorkerCount:   *importWorkerCount,
-					PublicationID: publicationID,
-					PollInterval:  *importPollInterval,
-				},
-			)
+	// {
+	// 	importer := pg2pubsub.NewImporter(
+	// 		logger,
+	// 		pool,
+	// 		pg2pubsub.ImporterOptions{
+	// 			WorkerCount:   *importWorkerCount,
+	// 			PublicationID: publicationID,
+	// 			PollInterval:  *importPollInterval,
+	// 		},
+	// 	)
 
-			commits := importer.Work(ctx)
+	// 	commits := importer.Work(ctx)
 
-			g.Add(
-				func() error {
-					for commit := range commits {
-						spew.Dump(commit)
-					}
+	// 	g.Add(
+	// 		func() error {
+	// 			for commit := range commits {
+	// 				spew.Dump(commit)
+	// 			}
 
-					return nil
-				},
-				func(error) {
-					cancel()
-				},
-			)
-		}
-	*/
+	// 			return nil
+	// 		},
+	// 		func(error) {
+	// 			cancel()
+	// 		},
+	// 	)
+	// }
 
 	var sub *subscription.Subscription
 
@@ -205,9 +216,7 @@ func main() {
 			func() error {
 				return sub.StartReplication(ctx)
 			},
-			func(error) {
-				cancel()
-			},
+			handleError(logger),
 		)
 	}
 
@@ -246,9 +255,7 @@ func main() {
 
 				return nil
 			},
-			func(error) {
-				cancel()
-			},
+			handleError(logger),
 		)
 	}
 

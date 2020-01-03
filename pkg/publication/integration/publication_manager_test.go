@@ -38,7 +38,7 @@ var _ = Describe("PublicationManager", func() {
 	)
 
 	getPublishedTables := func() []string {
-		tables, _ := publication.GetPublishedTables(ctx, pool, name)
+		tables, _ := publication.GetPublishedTables(ctx, pool, pubmgr.GetPublicationID())
 		return tables
 	}
 
@@ -124,7 +124,7 @@ var _ = Describe("PublicationManager", func() {
 			cancel()
 		})
 
-		It("adds tables to an existing publication", func() {
+		FIt("adds tables to an existing publication", func() {
 			Eventually(getPublishedTables, 5*time.Second).Should(ContainElement(existingTable))
 		})
 
