@@ -2,9 +2,9 @@ package logical
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/binary"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/pgtype"
@@ -12,6 +12,33 @@ import (
 
 // PGOutput is the Postgres recognised name of our desired encoding
 const PGOutput = "pgoutput"
+
+type ValueScanner interface {
+	pgtype.Value
+	sql.Scanner
+}
+
+// TypeForOID returns the pgtype for the given Postgres oid. This function defines the
+// scope of type support for this project: if it doesn't appear here, your type will be
+// exported in text.
+//
+// Any schema representation must support all these types.
+func TypeForOID(oid uint32) ValueScanner {
+	switch oid {
+	case pgtype.BoolOID:
+		return &pgtype.Bool{}
+	case pgtype.Int2OID, pgtype.Int4OID:
+		return &pgtype.Int4{}
+	case pgtype.Int8OID:
+		return &pgtype.Int8{}
+	case pgtype.Float4OID:
+		return &pgtype.Float4{}
+	case pgtype.Float8OID:
+		return &pgtype.Float8{}
+	default:
+		return &pgtype.Text{}
+	}
+}
 
 // DecodePGOutput parses a pgoutput logical replication message, as per the format
 // specification at:
@@ -59,6 +86,11 @@ func DecodePGOutput(src []byte) (interface{}, error) {
 			c.Name = dec.String()
 			c.Type = dec.Uint32()
 			c.Modifier = dec.Uint32()
+
+			// This is the only 'virtual' field, in that it's not directly parsed from the
+			// underlying logical structure. Parsing this here allows the Column struct to
+			// provide the driver.Scan interface, which is very useful when marshalling.
+			c.ValueScanner = TypeForOID(c.Type)
 
 			m.Columns = append(m.Columns, c)
 		}
@@ -182,29 +214,21 @@ func (r *Relation) Marshal(tuple []Element) map[string]interface{} {
 }
 
 type Column struct {
-	Key      bool   // Interpreted from flags, which are either 0 or 1 which marks the column as part of the key.
-	Name     string // Name of the column.
-	Type     uint32 // ID of the column's data type.
-	Modifier uint32 // Type modifier of the column (atttypmod).
+	Key          bool   // Interpreted from flags, which are either 0 or 1 which marks the column as part of the key.
+	Name         string // Name of the column.
+	Type         uint32 // ID of the column's data type.
+	Modifier     uint32 // Type modifier of the column (atttypmod).
+	ValueScanner        // Provides pgtype scanning of the column type
 }
 
 // Decode generates a native Go type from the textual pgoutput representation. This can be
 // extended to support more types if necessary.
 func (c Column) Decode(src []byte) (interface{}, error) {
-	switch c.Type {
-	case pgtype.BoolOID:
-		return string(src) == "t", nil
-	case pgtype.Int2OID, pgtype.Int4OID:
-		return strconv.Atoi(string(src))
-	case pgtype.Int8OID:
-		return strconv.ParseInt(string(src), 10, 64)
-	case pgtype.Float4OID:
-		return strconv.ParseFloat(string(src), 32)
-	case pgtype.Float8OID:
-		return strconv.ParseFloat(string(src), 64)
-	default:
-		return string(src), nil
+	if err := c.Scan(src); err != nil {
+		return nil, err
 	}
+
+	return c.Get(), nil
 }
 
 type Type struct {
