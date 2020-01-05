@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/pgtype"
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 	"github.com/lawrencejones/pg2sink/pkg/logical"
+	"github.com/lawrencejones/pg2sink/pkg/util"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
@@ -39,6 +40,7 @@ type Importer struct {
 func (i Importer) Work(ctx context.Context) changelog.Changelog {
 	output := make(changelog.Changelog)
 	queue := make(chan *Job)
+	inProgress := new(util.SyncSet)
 
 	var wg sync.WaitGroup
 
@@ -46,12 +48,15 @@ func (i Importer) Work(ctx context.Context) changelog.Changelog {
 	go func() {
 		for {
 			i.logger.Log("event", "poll")
-			outstandingJobs, err := JobStore{i.pool}.GetOutstandingJobs(ctx, i.opts.PublicationID, []int64{})
+			outstandingJobs, err := JobStore{i.pool}.GetOutstandingJobs(
+				ctx, i.opts.PublicationID, inProgress.All([]int64{}).([]int64),
+			)
 			if err != nil {
 				i.logger.Log("error", err.Error(), "msg", "failed to fetch outstanding jobs")
 			}
 
 			for _, job := range outstandingJobs {
+				inProgress.Add(job.ID)
 				queue <- job
 			}
 
@@ -79,6 +84,8 @@ func (i Importer) Work(ctx context.Context) changelog.Changelog {
 				if err := (Import{job}).Work(ctx, logger, i.pool, output, time.After(time.Minute)); err != nil {
 					logger.Log("error", err)
 				}
+
+				inProgress.Remove(job.ID)
 			}
 		}()
 	}
