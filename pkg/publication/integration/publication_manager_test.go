@@ -124,7 +124,7 @@ var _ = Describe("PublicationManager", func() {
 			cancel()
 		})
 
-		FIt("adds tables to an existing publication", func() {
+		It("adds tables to an existing publication", func() {
 			Eventually(getPublishedTables, 5*time.Second).Should(ContainElement(existingTable))
 		})
 
