@@ -6,8 +6,8 @@ import (
 
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgx"
-	"github.com/lawrencejones/pg2pubsub/pkg/publication"
-	"github.com/lawrencejones/pg2pubsub/pkg/util"
+	"github.com/lawrencejones/pg2sink/pkg/publication"
+	"github.com/lawrencejones/pg2sink/pkg/util"
 	"github.com/pkg/errors"
 )
 

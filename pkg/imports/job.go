@@ -24,7 +24,7 @@ type JobStore struct {
 func (i JobStore) Get(ctx context.Context, id int64) (*Job, error) {
 	query := `
 	select id, publication_id, table_name, cursor, completed_at, created_at
-	from pg2pubsub.import_jobs
+	from pg2sink.import_jobs
 	where id = $1;
 	`
 
@@ -36,7 +36,7 @@ func (i JobStore) Get(ctx context.Context, id int64) (*Job, error) {
 
 func (i JobStore) Create(ctx context.Context, publicationID, tableName string) (*Job, error) {
 	query := `
-	insert into pg2pubsub.import_jobs (publication_id, table_name) values (
+	insert into pg2sink.import_jobs (publication_id, table_name) values (
 		$1, $2
 	)
 	returning id, publication_id, table_name, cursor, completed_at, created_at
@@ -50,7 +50,7 @@ func (i JobStore) Create(ctx context.Context, publicationID, tableName string) (
 
 func (i JobStore) MarkAsComplete(ctx context.Context, job *Job) error {
 	query := `
-	update pg2pubsub.import_jobs
+	update pg2sink.import_jobs
 	   set completed_at = now()
 	 where id = $1
 	returning completed_at
@@ -61,7 +61,7 @@ func (i JobStore) MarkAsComplete(ctx context.Context, job *Job) error {
 
 func (i JobStore) UpdateCursor(ctx context.Context, id int64, cursor interface{}) error {
 	query := `
-	update pg2pubsub.import_jobs
+	update pg2sink.import_jobs
 	   set cursor = $2
 	 where id = $1
 	;`
@@ -74,7 +74,7 @@ func (i JobStore) UpdateCursor(ctx context.Context, id int64, cursor interface{}
 // publication
 func (i JobStore) GetImportedTables(ctx context.Context, publicationID string) ([]string, error) {
 	query := `
-	select table_name from pg2pubsub.import_jobs where publication_id = $1;
+	select table_name from pg2sink.import_jobs where publication_id = $1;
 	`
 
 	tableNames := []string{}
@@ -103,7 +103,7 @@ func (i JobStore) GetImportedTables(ctx context.Context, publicationID string) (
 func (i JobStore) GetOutstandingJobs(ctx context.Context, publicationID string, inProgress []int64) ([]*Job, error) {
 	query := `
 	select id, publication_id, table_name, cursor, completed_at, created_at
-	from pg2pubsub.import_jobs
+	from pg2sink.import_jobs
 	where publication_id = $1
 	and completed_at is null
 	and not id = any($2)

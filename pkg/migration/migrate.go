@@ -39,13 +39,13 @@ func Migrate(ctx context.Context, logger kitlog.Logger, cfg pgx.ConnConfig) erro
 		return errors.Wrap(err, "failed to create database connection")
 	}
 
-	logger.Log("event", "schema.create", "schema", "pg2pubsub")
-	_, err = db.ExecContext(ctx, `create schema if not exists pg2pubsub;`)
+	logger.Log("event", "schema.create", "schema", "pg2sink")
+	_, err = db.ExecContext(ctx, `create schema if not exists pg2sink;`)
 	if err != nil {
 		return errors.Wrap(err, "failed to create internal schema")
 	}
 
-	goose.SetTableName("pg2pubsub.schema_migrations")
+	goose.SetTableName("pg2sink.schema_migrations")
 	if err := goose.Up(db, "."); err != nil {
 		return errors.Wrap(err, "failed to migrate database")
 	}

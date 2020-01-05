@@ -7,7 +7,7 @@ import (
 
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgx"
-	"github.com/lawrencejones/pg2pubsub/pkg/logical"
+	"github.com/lawrencejones/pg2sink/pkg/logical"
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
 )

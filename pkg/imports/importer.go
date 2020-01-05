@@ -10,8 +10,8 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/pgtype"
-	"github.com/lawrencejones/pg2pubsub/pkg/changelog"
-	"github.com/lawrencejones/pg2pubsub/pkg/logical"
+	"github.com/lawrencejones/pg2sink/pkg/changelog"
+	"github.com/lawrencejones/pg2sink/pkg/logical"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )

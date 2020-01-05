@@ -1,14 +1,15 @@
-# pg2pubsub [![CircleCI](https://circleci.com/gh/lawrencejones/pg2pubsub.svg?style=svg)](https://circleci.com/gh/lawrencejones/pg2pubsub)
+# pg2sink [![CircleCI](https://circleci.com/gh/lawrencejones/pg2sink.svg?style=svg)](https://circleci.com/gh/lawrencejones/pg2sink)
 
 This tool connects to a Postgres database via logical replication, creating the
 plumbing required to subscribe to changes on tables within a specific schema.
-These changes are then pushed into GCP Pub/Sub.
+These changes are then pushed into a sink destination, which at time of writing
+is GCP Pub/Sub.
 
 ```
 pkg/changelog     // Schema & Modification types, the public output types
 pkg/imports       // manages imports for tables in the publication
 pkg/logical       // all logical decoding helpers
-pkg/migration     // database migrations for internal pg2pubsub tables
+pkg/migration     // database migrations for internal pg2sink tables
 pkg/publication   // creates and manages table membership for a Postgres publication
 pkg/pubsub        // Pub/Sub relay publisher, batched and acknowledgement hooks
 pkg/subscription  // subscribes to publication, streaming Schema/Modification
@@ -23,20 +24,20 @@ environment like so:
 ```console
 $ docker-compose up -d
 docker-compose up -d
-pg2pubsub_prometheus_1 is up-to-date
-pg2pubsub_postgres_1 is up-to-date
-pg2pubsub_grafana_1 is up-to-date
+pg2sink_prometheus_1 is up-to-date
+pg2sink_postgres_1 is up-to-date
+pg2sink_grafana_1 is up-to-date
 ```
 
-Then run `make recreatedb` to create a `pg2pubsub_test` database. You can now
+Then run `make recreatedb` to create a `pg2sink_test` database. You can now
 access your database like so:
 
 ```console
-$ psql --host localhost --user pg2pubsub_test pg2pubsub_test
-pg2pubsub_test=> \q
+$ psql --host localhost --user pg2sink_test pg2sink_test
+pg2sink_test=> \q
 ```
 
-pg2pubsub will work with this database: try `pg2pubsub --decode-only`.
+pg2sink will work with this database: try `pg2sink --decode-only`.
 
 ### Database migrations
 
@@ -53,19 +54,19 @@ $ goose -dir pkg/migration create create_import_jobs_table go
 Boot a Postgres database, then create an example table.
 
 ```console
-$ createdb pg2pubsub
-$ psql pg2pubsub
+$ createdb pg2sink
+$ psql pg2sink
 psql (11.5)
 Type "help" for help.
 
-pg2pubsub=# create table example (id bigserial primary key, msg text);
+pg2sink=# create table example (id bigserial primary key, msg text);
 CREATE TABLE
 
-pg2pubsub=# insert into example (msg) values ('hello world');
+pg2sink=# insert into example (msg) values ('hello world');
 INSERT 1
 ```
 
-pg2pubsub will stream these changes from the database and send it to Google's
+pg2sink will stream these changes from the database and send it to Google's
 Pub/Sub service. Two types of message are sent, data and schema. Data messages
 contain the inserted/updated/deleted row content in JSON form, with each column
 value stored as a string.

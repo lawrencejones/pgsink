@@ -1,4 +1,4 @@
-module github.com/lawrencejones/pg2pubsub
+module github.com/lawrencejones/pg2sink
 
 go 1.13
 

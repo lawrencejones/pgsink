@@ -1,4 +1,4 @@
 ---
 groups:
-  - name: pg2pubsub.rules
+  - name: pg2sink.rules
     rules: []  # TODO

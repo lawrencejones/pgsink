@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx"
-	"github.com/lawrencejones/pg2pubsub/pkg/publication"
+	"github.com/lawrencejones/pg2sink/pkg/publication"
 	uuid "github.com/satori/go.uuid"
 
 	. "github.com/onsi/ginkgo"

@@ -7,4 +7,4 @@ ENV DATA_DIR=/data
 ENV HOST_PORT=0.0.0.0:8080
 EXPOSE 8080
 
-CMD ["sh", "-c", "exec gcloud beta emulators pubsub start --project=pg2pubsub --host-port=${HOST_PORT} --data-dir=${DATA_DIR}"]
+CMD ["sh", "-c", "exec gcloud beta emulators pubsub start --project=pg2sink --host-port=${HOST_PORT} --data-dir=${DATA_DIR}"]

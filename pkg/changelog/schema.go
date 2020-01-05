@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/pgtype"
-	"github.com/lawrencejones/pg2pubsub/pkg/logical"
+	"github.com/lawrencejones/pg2sink/pkg/logical"
 )
 
 // Schema is a timestamped Avro schema object. We use the timestamp field to order schema

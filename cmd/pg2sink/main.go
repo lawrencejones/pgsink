@@ -16,10 +16,10 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	level "github.com/go-kit/kit/log/level"
 	"github.com/jackc/pgx"
-	"github.com/lawrencejones/pg2pubsub/pkg/imports"
-	"github.com/lawrencejones/pg2pubsub/pkg/migration"
-	"github.com/lawrencejones/pg2pubsub/pkg/publication"
-	"github.com/lawrencejones/pg2pubsub/pkg/subscription"
+	"github.com/lawrencejones/pg2sink/pkg/imports"
+	"github.com/lawrencejones/pg2sink/pkg/migration"
+	"github.com/lawrencejones/pg2sink/pkg/publication"
+	"github.com/lawrencejones/pg2sink/pkg/subscription"
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -27,7 +27,7 @@ import (
 var logger kitlog.Logger
 
 var (
-	app = kingpin.New("pg2pubsub", "Publish Postgres changes to pubsub").Version(versionStanza())
+	app = kingpin.New("pg2sink", "Publish Postgres changes to pubsub").Version(versionStanza())
 
 	// Global flags applying to every command
 	debug          = app.Flag("debug", "Enable debug logging").Default("false").Bool()
@@ -38,8 +38,8 @@ var (
 	port                      = app.Flag("port", "Postgres port").Envar("PGPORT").Default("5432").Uint16()
 	database                  = app.Flag("database", "Postgres database name").Envar("PGDATABASE").Default("postgres").String()
 	user                      = app.Flag("user", "Postgres user").Envar("PGUSER").Default("postgres").String()
-	name                      = app.Flag("name", "Publication name").Default("pg2pubsub").String()
-	slotName                  = app.Flag("slot-name", "Replication slot name").Default("pg2pubsub").String()
+	name                      = app.Flag("name", "Publication name").Default("pg2sink").String()
+	slotName                  = app.Flag("slot-name", "Replication slot name").Default("pg2sink").String()
 	schemas                   = app.Flag("schema", "Postgres schema to watch for changes").Default("public").Strings()
 	excludes                  = app.Flag("exclude", "Table name to exclude from changes").Strings()
 	includes                  = app.Flag("include", "Table name to include from changes (activates whitelist)").Strings()
@@ -278,7 +278,7 @@ var (
 
 func versionStanza() string {
 	return fmt.Sprintf(
-		"pg2pubsub Version: %v\nGit SHA: %v\nGo Version: %v\nGo OS/Arch: %v/%v\nBuilt at: %v",
+		"pg2sink Version: %v\nGit SHA: %v\nGo Version: %v\nGo OS/Arch: %v/%v\nBuilt at: %v",
 		Version, Commit, GoVersion, runtime.GOOS, runtime.GOARCH, Date,
 	)
 }

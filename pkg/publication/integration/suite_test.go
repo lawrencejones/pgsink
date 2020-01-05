@@ -6,7 +6,7 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 
 	// Ensure we migrate the database before running any tests
-	_ "github.com/lawrencejones/pg2pubsub/pkg/migration"
+	_ "github.com/lawrencejones/pg2sink/pkg/migration"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

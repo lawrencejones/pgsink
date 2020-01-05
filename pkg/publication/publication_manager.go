@@ -9,7 +9,7 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/pgtype"
-	"github.com/lawrencejones/pg2pubsub/pkg/util"
+	"github.com/lawrencejones/pg2sink/pkg/util"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
