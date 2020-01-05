@@ -48,6 +48,28 @@ func (i JobStore) Create(ctx context.Context, publicationID, tableName string) (
 	)
 }
 
+func (i JobStore) MarkAsComplete(ctx context.Context, job *Job) error {
+	query := `
+	update pg2pubsub.import_jobs
+	   set completed_at = now()
+	 where id = $1
+	returning completed_at
+	;`
+
+	return i.QueryRowEx(ctx, query, nil, job.ID).Scan(&job.CompletedAt)
+}
+
+func (i JobStore) UpdateCursor(ctx context.Context, id int64, cursor interface{}) error {
+	query := `
+	update pg2pubsub.import_jobs
+	   set cursor = $2
+	 where id = $1
+	;`
+
+	_, err := i.ExecEx(ctx, query, nil, id, cursor)
+	return err
+}
+
 // GetImportedTables finds all tables that have a corresponding import job for this
 // publication
 func (i JobStore) GetImportedTables(ctx context.Context, publicationID string) ([]string, error) {

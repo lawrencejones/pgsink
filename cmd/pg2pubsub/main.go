@@ -48,6 +48,8 @@ var (
 	decodeOnly                = app.Flag("decode-only", "Interval to heartbeat replication primary").Default("false").Bool()
 	modificationWorkerCount   = app.Flag("modification-worker-count", "Workers for building modifications").Default("1").Int()
 	importManagerPollInterval = app.Flag("import-manager-poll-interval", "Interval to poll for newly published tables").Default("10s").Duration()
+	importerPollInterval      = app.Flag("importer-poll-interval", "Interval to poll for new import jobs").Default("10s").Duration()
+	importerWorkerCount       = app.Flag("importer-worker-count", "Workers for processing imports").Default("1").Int()
 )
 
 func main() {
@@ -109,7 +111,23 @@ func main() {
 		kingpin.Fatalf("failed to migrate database: %v", err)
 	}
 
+	// TODO: This is useful only while developing
+	outputMessages := make(chan interface{})
+	defer close(outputMessages)
+
+	go func() {
+		for msg := range outputMessages {
+			bytes, err := json.MarshalIndent(msg, "", "  ")
+			if err != nil {
+				panic(err)
+			}
+
+			fmt.Println(string(bytes))
+		}
+	}()
+
 	var g run.Group
+	var sub *subscription.Subscription
 	var pubmgr *publication.PublicationManager
 
 	{
@@ -161,34 +179,32 @@ func main() {
 		)
 	}
 
-	// {
-	// 	importer := pg2pubsub.NewImporter(
-	// 		logger,
-	// 		pool,
-	// 		pg2pubsub.ImporterOptions{
-	// 			WorkerCount:   *importWorkerCount,
-	// 			PublicationID: publicationID,
-	// 			PollInterval:  *importPollInterval,
-	// 		},
-	// 	)
+	{
+		logger := kitlog.With(logger, "component", "importer")
 
-	// 	commits := importer.Work(ctx)
+		importer := imports.NewImporter(
+			logger,
+			mustConnectionPool(*importerWorkerCount),
+			imports.ImporterOptions{
+				WorkerCount:   *importerWorkerCount,
+				PollInterval:  *importerPollInterval,
+				PublicationID: pubmgr.GetPublicationID(),
+			},
+		)
 
-	// 	g.Add(
-	// 		func() error {
-	// 			for commit := range commits {
-	// 				spew.Dump(commit)
-	// 			}
+		entries := importer.Work(ctx)
 
-	// 			return nil
-	// 		},
-	// 		func(error) {
-	// 			cancel()
-	// 		},
-	// 	)
-	// }
+		g.Add(
+			func() error {
+				for entry := range entries {
+					outputMessages <- entry.Unwrap()
+				}
 
-	var sub *subscription.Subscription
+				return nil
+			},
+			handleError(logger),
+		)
+	}
 
 	{
 		logger := kitlog.With(logger, "component", "subscription")
@@ -222,18 +238,6 @@ func main() {
 
 	{
 		logger := kitlog.With(logger, "component", "consumer")
-
-		outputMessages := make(chan interface{})
-		go func() {
-			for msg := range outputMessages {
-				bytes, err := json.MarshalIndent(msg, "", "  ")
-				if err != nil {
-					panic(err)
-				}
-
-				fmt.Println(string(bytes))
-			}
-		}()
 
 		g.Add(
 			func() error {

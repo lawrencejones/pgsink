@@ -87,11 +87,6 @@ func DecodePGOutput(src []byte) (interface{}, error) {
 			c.Type = dec.Uint32()
 			c.Modifier = dec.Uint32()
 
-			// This is the only 'virtual' field, in that it's not directly parsed from the
-			// underlying logical structure. Parsing this here allows the Column struct to
-			// provide the driver.Scan interface, which is very useful when marshalling.
-			c.ValueScanner = TypeForOID(c.Type)
-
 			m.Columns = append(m.Columns, c)
 		}
 
@@ -190,6 +185,10 @@ type Relation struct {
 	Columns         []Column // Repeating message of column definitions.
 }
 
+func (r Relation) String() string {
+	return fmt.Sprintf("%s.%s", r.Namespace, r.Name)
+}
+
 // Marshal converts a tuple into a dynamic Golang map type. Values are represented in Go
 // native types.
 func (r *Relation) Marshal(tuple []Element) map[string]interface{} {
@@ -214,21 +213,21 @@ func (r *Relation) Marshal(tuple []Element) map[string]interface{} {
 }
 
 type Column struct {
-	Key          bool   // Interpreted from flags, which are either 0 or 1 which marks the column as part of the key.
-	Name         string // Name of the column.
-	Type         uint32 // ID of the column's data type.
-	Modifier     uint32 // Type modifier of the column (atttypmod).
-	ValueScanner        // Provides pgtype scanning of the column type
+	Key      bool   // Interpreted from flags, which are either 0 or 1 which marks the column as part of the key.
+	Name     string // Name of the column.
+	Type     uint32 // ID of the column's data type.
+	Modifier uint32 // Type modifier of the column (atttypmod).
 }
 
 // Decode generates a native Go type from the textual pgoutput representation. This can be
 // extended to support more types if necessary.
 func (c Column) Decode(src []byte) (interface{}, error) {
-	if err := c.Scan(src); err != nil {
+	scanner := TypeForOID(c.Type)
+	if err := scanner.Scan(src); err != nil {
 		return nil, err
 	}
 
-	return c.Get(), nil
+	return scanner.Get(), nil
 }
 
 type Type struct {
