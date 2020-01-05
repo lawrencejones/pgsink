@@ -39,7 +39,6 @@ type Importer struct {
 func (i Importer) Work(ctx context.Context) changelog.Changelog {
 	output := make(changelog.Changelog)
 	queue := make(chan *Job)
-	// inProgress := []int64{} // TODO: maybe not required?
 
 	var wg sync.WaitGroup
 
@@ -161,7 +160,7 @@ forEachRow:
 
 	if len(modifications) == 0 {
 		logger.Log("event", "import.complete")
-		return JobStore{pool}.MarkAsComplete(ctx, i.Job)
+		return JobStore{pool}.MarkAsComplete(ctx, i.Job.ID)
 	}
 
 	logger.Log("event", "changelog.push_modifications", "count", len(modifications))
