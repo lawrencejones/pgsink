@@ -28,10 +28,10 @@ jobs:
           command: apt-get update && apt-get install -y postgresql-client libpq-dev
       - run:
           name: Create test database
-          command: make recreatedb PSQL=$(which psql)
+          command: make recreatedb PSQL=$(which psql) DATABASE=pg2sink_test
       - run:
           name: Run tests
-          command: ginkgo -race -r
+          command: make test
 
   release:
     <<: *docker_golang

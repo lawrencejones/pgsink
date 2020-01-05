@@ -160,7 +160,8 @@ forEachRow:
 
 	if len(modifications) == 0 {
 		logger.Log("event", "import.complete")
-		return JobStore{pool}.MarkAsComplete(ctx, i.Job.ID)
+		_, err := JobStore{pool}.MarkAsComplete(ctx, i.Job.ID)
+		return err
 	}
 
 	logger.Log("event", "changelog.push_modifications", "count", len(modifications))

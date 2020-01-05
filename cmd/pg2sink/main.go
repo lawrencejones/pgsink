@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	stdlog "log"
 	"net/http"
@@ -19,6 +18,7 @@ import (
 	"github.com/lawrencejones/pg2sink/pkg/imports"
 	"github.com/lawrencejones/pg2sink/pkg/migration"
 	"github.com/lawrencejones/pg2sink/pkg/publication"
+	"github.com/lawrencejones/pg2sink/pkg/sinks"
 	"github.com/lawrencejones/pg2sink/pkg/subscription"
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -50,6 +50,14 @@ var (
 	importManagerPollInterval = app.Flag("import-manager-poll-interval", "Interval to poll for newly published tables").Default("10s").Duration()
 	importerPollInterval      = app.Flag("importer-poll-interval", "Interval to poll for new import jobs").Default("10s").Duration()
 	importerWorkerCount       = app.Flag("importer-worker-count", "Workers for processing imports").Default("1").Int()
+
+	sinkType        = app.Flag("sink", "Type of sink target").Default("file").String()
+	sinkFileOptions = sinks.FileOptions{}
+	_               = func() (err error) {
+		app.Flag("sink-file.schemas-path", "File path for schemas").Default("/dev/stdout").StringVar(&sinkFileOptions.SchemasPath)
+		app.Flag("sink-file.modifications-path", "File path for modifications").Default("/dev/stdout").StringVar(&sinkFileOptions.ModificationsPath)
+		return
+	}()
 )
 
 func main() {
@@ -111,24 +119,28 @@ func main() {
 		kingpin.Fatalf("failed to migrate database: %v", err)
 	}
 
-	// TODO: This is useful only while developing
-	outputMessages := make(chan interface{})
-	defer close(outputMessages)
+	var (
+		sink   sinks.Sink
+		sub    *subscription.Subscription
+		pubmgr *publication.PublicationManager
+	)
 
-	go func() {
-		for msg := range outputMessages {
-			bytes, err := json.MarshalIndent(msg, "", "  ")
-			if err != nil {
-				panic(err)
-			}
-
-			fmt.Println(string(bytes))
+	mustSink := func(sink sinks.Sink, err error) sinks.Sink {
+		if err != nil {
+			kingpin.Fatalf("failed to create file sink: %v", err)
 		}
-	}()
+
+		return sink
+	}
+
+	switch *sinkType {
+	case "file":
+		sink = mustSink(sinks.NewFile(sinkFileOptions))
+	default:
+		kingpin.Fatalf("unsupported sink type: %s", *sinkType)
+	}
 
 	var g run.Group
-	var sub *subscription.Subscription
-	var pubmgr *publication.PublicationManager
 
 	{
 		logger := kitlog.With(logger, "component", "publication")
@@ -192,15 +204,9 @@ func main() {
 			},
 		)
 
-		entries := importer.Work(ctx)
-
 		g.Add(
 			func() error {
-				for entry := range entries {
-					outputMessages <- entry.Unwrap()
-				}
-
-				return nil
+				return sink.Consume(ctx, importer.Work(ctx), nil) // acknowledgement needs solving here
 			},
 			handleError(logger),
 		)
@@ -249,15 +255,8 @@ func main() {
 					return nil
 				}
 
-				for entry := range subscription.BuildChangelog(logger, sub.Receive()) {
-					outputMessages <- entry.Unwrap()
-
-					if entry.Modification != nil {
-						sub.ConfirmReceived(*entry.Modification.LSN)
-					}
-				}
-
-				return nil
+				entries := subscription.BuildChangelog(logger, sub.Receive())
+				return sink.Consume(ctx, entries, sub.ConfirmReceived)
 			},
 			handleError(logger),
 		)

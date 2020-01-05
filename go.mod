@@ -5,15 +5,14 @@ go 1.13
 require (
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d // indirect
-	github.com/cockroachdb/apd v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-kit/kit v0.9.0
 	github.com/go-sql-driver/mysql v1.4.1 // indirect
 	github.com/gofrs/uuid v3.2.0+incompatible // indirect
 	github.com/golang/snappy v0.0.1 // indirect
-	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
 	github.com/jackc/pgx v3.6.0+incompatible
 	github.com/kr/pretty v0.1.0 // indirect
+	github.com/lawrencejones/pg2pubsub v0.1.0
 	github.com/lib/pq v1.3.0 // indirect
 	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/mattn/go-sqlite3 v2.0.2+incompatible // indirect
