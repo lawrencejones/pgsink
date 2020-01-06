@@ -18,8 +18,19 @@ type Job struct {
 
 // JobStore provides storage methods for import job records.
 type JobStore struct {
-	*pgx.ConnPool
+	Connection
 }
+
+type Connection interface {
+	QueryRowEx(ctx context.Context, sql string, options *pgx.QueryExOptions, args ...interface{}) *pgx.Row
+	QueryEx(ctx context.Context, sql string, options *pgx.QueryExOptions, args ...interface{}) (*pgx.Rows, error)
+	ExecEx(ctx context.Context, sql string, options *pgx.QueryExOptions, args ...interface{}) (pgx.CommandTag, error)
+}
+
+// We want all these connection constructs to satisfy Connection
+var _ Connection = &pgx.ConnPool{}
+var _ Connection = &pgx.Conn{}
+var _ Connection = &pgx.Tx{}
 
 func (i JobStore) Get(ctx context.Context, id int64) (*Job, error) {
 	query := `
@@ -98,35 +109,31 @@ func (i JobStore) GetImportedTables(ctx context.Context, publicationID string) (
 	return tableNames, nil
 }
 
-// GetOutstandingJobs finds any incomplete jobs that match the given publication, that
-// aren't currently in progress. Until all these import jobs have been processed, we won't
-// have completely synced all data.
-func (i JobStore) GetOutstandingJobs(ctx context.Context, publicationID string, inProgress []int64) ([]*Job, error) {
+// Acquire will return a job that is locked for the duration of the transaction. If no
+// jobs are available, we return nil.
+func (i JobStore) Acquire(ctx context.Context, tx *pgx.Tx, publicationID string) (*Job, error) {
 	query := `
 	select id, publication_id, table_name, cursor, completed_at, created_at
 	from pg2sink.import_jobs
 	where publication_id = $1
 	and completed_at is null
-	and not id = any($2)
+	for update skip locked
+	limit 1
 	;`
 
-	jobs := []*Job{}
-	rows, err := i.QueryEx(ctx, query, nil, publicationID, inProgress)
+	rows, err := tx.QueryEx(ctx, query, nil, publicationID)
 	if err != nil {
 		return nil, err
 	}
 
 	defer rows.Close()
 
-	for rows.Next() {
+	for rows.Next() { // there will be at most one
 		job := &Job{}
-		err := rows.Scan(&job.ID, &job.PublicationID, &job.TableName, &job.Cursor, &job.CompletedAt, &job.CreatedAt)
-		if err != nil {
-			return nil, err
-		}
-
-		jobs = append(jobs, job)
+		return job, rows.Scan(
+			&job.ID, &job.PublicationID, &job.TableName, &job.Cursor, &job.CompletedAt, &job.CreatedAt,
+		)
 	}
 
-	return jobs, nil
+	return nil, nil
 }
