@@ -15,6 +15,7 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	level "github.com/go-kit/kit/log/level"
 	"github.com/jackc/pgx"
+	"github.com/lawrencejones/pg2sink/pkg/changelog"
 	"github.com/lawrencejones/pg2sink/pkg/imports"
 	"github.com/lawrencejones/pg2sink/pkg/migration"
 	"github.com/lawrencejones/pg2sink/pkg/publication"
@@ -199,6 +200,7 @@ func main() {
 		importer := imports.NewImporter(
 			logger,
 			mustConnectionPool(*importerWorkerCount),
+			sink,
 			imports.ImporterOptions{
 				WorkerCount:     *importerWorkerCount,
 				PublicationID:   pubmgr.GetPublicationID(),
@@ -210,7 +212,8 @@ func main() {
 
 		g.Add(
 			func() error {
-				return sink.Consume(ctx, importer.Work(ctx), nil) // acknowledgement needs solving here
+				importer.Run(ctx)
+				return nil
 			},
 			handleError(logger),
 		)
@@ -260,7 +263,11 @@ func main() {
 				}
 
 				entries := subscription.BuildChangelog(logger, sub.Receive())
-				return sink.Consume(ctx, entries, sub.ConfirmReceived)
+				return sink.Consume(ctx, entries, func(entry changelog.Entry) {
+					if entry.Modification != nil && entry.Modification.LSN != nil {
+						sub.ConfirmReceived(*entry.Modification.LSN)
+					}
+				})
 			},
 			handleError(logger),
 		)

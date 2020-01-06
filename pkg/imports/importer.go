@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/pgtype"
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 	"github.com/lawrencejones/pg2sink/pkg/logical"
+	"github.com/lawrencejones/pg2sink/pkg/sinks"
 	"github.com/lawrencejones/pg2sink/pkg/util"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
@@ -25,10 +26,11 @@ type ImporterOptions struct {
 	BatchLimit      int           // max rows to pull from the database per import job
 }
 
-func NewImporter(logger kitlog.Logger, pool *pgx.ConnPool, opts ImporterOptions) *Importer {
+func NewImporter(logger kitlog.Logger, pool *pgx.ConnPool, sink sinks.Sink, opts ImporterOptions) *Importer {
 	return &Importer{
 		logger: logger,
 		pool:   pool,
+		sink:   sink,
 		opts:   opts,
 	}
 }
@@ -36,36 +38,29 @@ func NewImporter(logger kitlog.Logger, pool *pgx.ConnPool, opts ImporterOptions)
 type Importer struct {
 	logger kitlog.Logger
 	pool   *pgx.ConnPool
+	sink   sinks.Sink
 	opts   ImporterOptions
 }
 
-func (i Importer) Work(ctx context.Context) changelog.Changelog {
-	output := make(changelog.Changelog)
-
+func (i Importer) Run(ctx context.Context) {
 	var wg sync.WaitGroup
 
 	for worker := 0; worker < i.opts.WorkerCount; worker++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			i.runWorker(ctx, output)
+			i.runWorker(ctx)
 		}()
 	}
 
-	// Close the output channel when all workers have finished working
-	go func() {
-		wg.Wait()
-		close(output)
-	}()
-
-	return output
+	wg.Wait()
 }
 
-func (i Importer) runWorker(ctx context.Context, output changelog.Changelog) {
+func (i Importer) runWorker(ctx context.Context) {
 	logger := kitlog.With(i.logger, "worker_id", uuid.NewV4().String())
 
 	for {
-		job, err := i.acquireAndWork(ctx, logger, output)
+		job, err := i.acquireAndWork(ctx, logger)
 		if err != nil {
 			logger.Log("error", err)
 		}
@@ -89,7 +84,7 @@ func (i Importer) runWorker(ctx context.Context, output changelog.Changelog) {
 	}
 }
 
-func (i Importer) acquireAndWork(ctx context.Context, logger kitlog.Logger, output changelog.Changelog) (*Job, error) {
+func (i Importer) acquireAndWork(ctx context.Context, logger kitlog.Logger) (*Job, error) {
 	tx, err := i.pool.Begin()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open job acquire transaction")
@@ -111,37 +106,43 @@ func (i Importer) acquireAndWork(ctx context.Context, logger kitlog.Logger, outp
 	}
 
 	logger = kitlog.With(logger, "job_id", job.ID, "table_name", job.TableName)
-	if err = (Import{job}).Work(ctx, logger, tx, output, i.opts.BatchLimit, time.After(i.opts.SnapshotTimeout)); err != nil {
+	if err := i.work(ctx, logger, tx, job); err != nil {
 		return nil, errors.Wrap(err, "failed to work job")
 	}
 
 	return job, nil
 }
 
-type Import struct {
-	*Job
-}
+func (i Importer) work(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, job *Job) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-func (i Import) Work(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, output changelog.Changelog, limit int, until <-chan time.Time) error {
+	entries := make(changelog.Changelog, i.opts.BatchLimit)
+	sinkConsumeChan := make(chan error)
+	defer close(sinkConsumeChan)
+	go func() {
+		sinkConsumeChan <- i.sink.Consume(ctx, entries, nil)
+	}()
+
 	// We should query for the primary key as the first thing we do, as this may fail if the
 	// table is misconfigured. It's better to fail here, before we've pushed anything into
 	// the changelog, than after pushing the schema when we discover the table is
 	// incompatible.
 	logger.Log("event", "primary_key.lookup", "msg", "querying Postgres for relations primary key column")
-	primaryKey, err := getPrimaryKeyColumn(ctx, tx, i.TableName)
+	primaryKey, err := getPrimaryKeyColumn(ctx, tx, job.TableName)
 	if err != nil {
 		return err
 	}
 
 	logger.Log("event", "relation.build", "msg", "querying Postgres for relation type information")
-	relation, err := i.buildRelation(ctx, tx)
+	relation, err := buildRelation(ctx, tx, job.TableName)
 	if err != nil {
 		return errors.Wrap(err, "failed to build relation for table")
 	}
 
 	logger.Log("event", "changelog.push_schema", "msg", "pushing relation schema")
 	schema := changelog.SchemaFromRelation(time.Now(), nil, relation)
-	output <- changelog.Entry{Schema: &schema}
+	entries <- changelog.Entry{Schema: &schema}
 
 	var primaryKeyScanner logical.ValueScanner
 
@@ -163,8 +164,8 @@ func (i Import) Work(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, outp
 	// will be supported for querying into the table. We can use the primaryKeyScanner for
 	// this, which ensures we reliably encode/decode Postgres types.
 	var cursor interface{}
-	if i.Job.Cursor != nil {
-		if err := primaryKeyScanner.Scan(*i.Job.Cursor); err != nil {
+	if job.Cursor != nil {
+		if err := primaryKeyScanner.Scan(*job.Cursor); err != nil {
 			return errors.Wrap(err, "incompatible cursor in import_jobs table")
 		}
 
@@ -172,17 +173,18 @@ func (i Import) Work(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, outp
 	}
 
 	logger.Log("event", "import.query", "msg", "executing an import query", "cursor", cursor)
-	query := buildQuery(relation, primaryKey, limit, cursor)
+	query := buildQuery(relation, primaryKey, i.opts.BatchLimit, cursor)
 	rows, err := tx.QueryEx(ctx, query, nil, util.Compact([]interface{}{cursor})...)
 	if err != nil {
 		return errors.Wrap(err, "failed to query table")
 	}
 
-	defer rows.Close()
+	defer rows.Close() // in case we panic, or forget to call it
 
 	var (
-		timestamp     pgtype.Timestamp
-		modifications = []*changelog.Modification{}
+		timestamp         pgtype.Timestamp
+		lastModification  *changelog.Modification
+		holdSnapshotUntil = time.After(i.opts.SnapshotTimeout)
 	)
 
 forEachRow:
@@ -196,47 +198,55 @@ forEachRow:
 			row[column.Name] = scanners[idx].(logical.ValueScanner).Get()
 		}
 
-		modifications = append(modifications, &changelog.Modification{
+		lastModification = &changelog.Modification{
 			Timestamp: timestamp.Get().(time.Time),
 			Namespace: relation.String(),
 			After:     row,
-		})
+		}
+
+		entries <- changelog.Entry{Modification: lastModification}
 
 		select {
-		case <-until:
+		case <-holdSnapshotUntil:
 			break forEachRow
 		default: // continue
 		}
 	}
 
-	// Release our snapshot, which was held for the benefit of our cursor
+	// Release our snapshot, which was held for the benefit of our cursor. Also close our
+	// entries channel, as we have nothing left to push.
 	rows.Close()
+	close(entries)
 
-	if len(modifications) == 0 {
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("timed out before sink could flush")
+	case err := <-sinkConsumeChan:
+		if err != nil {
+			return errors.Wrap(err, "failed to flush sink")
+		}
+	}
+
+	if lastModification == nil {
 		logger.Log("event", "import.complete")
-		_, err := JobStore{tx}.Complete(ctx, i.Job.ID)
+		_, err := JobStore{tx}.Complete(ctx, job.ID)
 		return err
 	}
 
-	logger.Log("event", "changelog.push_modifications", "count", len(modifications))
-	for _, modification := range modifications {
-		output <- changelog.Entry{Modification: modification}
-	}
-
-	lastCursor := modifications[len(modifications)-1].After.(map[string]interface{})[primaryKey]
+	lastCursor := lastModification.After.(map[string]interface{})[primaryKey]
 	lastCursorText, err := primaryKeyScanner.EncodeText(nil, []byte{})
 	if err != nil {
 		return errors.Wrap(err, "failed to encode last processed cursor")
 	}
 
 	logger.Log("event", "import.update_cursor", "cursor", lastCursor)
-	return JobStore{tx}.UpdateCursor(ctx, i.Job.ID, string(lastCursorText))
+	return JobStore{tx}.UpdateCursor(ctx, job.ID, string(lastCursorText))
 }
 
 // buildRelation generates the logical.Relation structure by querying Postgres catalog
 // tables. Importantly, this populates the relation.Columns slice, providing type
 // information that can later be used to marshal Golang types.
-func (i Import) buildRelation(ctx context.Context, conn Connection) (*logical.Relation, error) {
+func buildRelation(ctx context.Context, conn Connection, tableName string) (*logical.Relation, error) {
 	// Eg. oid = 16411, namespace = public, relname = example
 	query := `
 	select pg_class.oid as oid
@@ -247,7 +257,7 @@ func (i Import) buildRelation(ctx context.Context, conn Connection) (*logical.Re
 	`
 
 	relation := &logical.Relation{Columns: []logical.Column{}}
-	err := conn.QueryRowEx(ctx, query, nil, i.TableName).Scan(&relation.ID, &relation.Namespace, &relation.Name)
+	err := conn.QueryRowEx(ctx, query, nil, tableName).Scan(&relation.ID, &relation.Namespace, &relation.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to identify table namespace and name")
 	}
