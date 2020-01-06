@@ -16,6 +16,10 @@ const PGOutput = "pgoutput"
 type ValueScanner interface {
 	pgtype.Value
 	sql.Scanner
+
+	// Not strictly part of the Value and Scanner interfaces, but included in all our
+	// supported types
+	EncodeText(*pgtype.ConnInfo, []byte) ([]byte, error)
 }
 
 // TypeForOID returns the pgtype for the given Postgres oid. This function defines the

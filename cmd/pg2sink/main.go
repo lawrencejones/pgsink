@@ -50,6 +50,8 @@ var (
 	importManagerPollInterval = app.Flag("import-manager-poll-interval", "Interval to poll for newly published tables").Default("10s").Duration()
 	importerPollInterval      = app.Flag("importer-poll-interval", "Interval to poll for new import jobs").Default("10s").Duration()
 	importerWorkerCount       = app.Flag("importer-worker-count", "Workers for processing imports").Default("1").Int()
+	importerSnapshotTimeout   = app.Flag("importer-snapshot-timeout", "Maximum time to hold Postgres snapshots").Default("1m").Duration()
+	importerBatchLimit        = app.Flag("importer-batch-limit", "Maximum rows to pull per import job pagination").Default("5000").Int()
 
 	sinkType        = app.Flag("sink", "Type of sink target").Default("file").String()
 	sinkFileOptions = sinks.FileOptions{}
@@ -198,9 +200,11 @@ func main() {
 			logger,
 			mustConnectionPool(*importerWorkerCount),
 			imports.ImporterOptions{
-				WorkerCount:   *importerWorkerCount,
-				PollInterval:  *importerPollInterval,
-				PublicationID: pubmgr.GetPublicationID(),
+				WorkerCount:     *importerWorkerCount,
+				PublicationID:   pubmgr.GetPublicationID(),
+				PollInterval:    *importerPollInterval,
+				SnapshotTimeout: *importerSnapshotTimeout,
+				BatchLimit:      *importerBatchLimit,
 			},
 		)
 

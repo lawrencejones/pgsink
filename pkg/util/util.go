@@ -90,3 +90,14 @@ func (s *SyncSet) indexOf(candidate interface{}) int {
 
 	return -1
 }
+
+func Compact(elements []interface{}) []interface{} {
+	output := []interface{}{}
+	for _, element := range elements {
+		if element != nil {
+			output = append(output, element)
+		}
+	}
+
+	return output
+}

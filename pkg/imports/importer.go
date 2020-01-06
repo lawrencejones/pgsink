@@ -12,14 +12,17 @@ import (
 	"github.com/jackc/pgx/pgtype"
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 	"github.com/lawrencejones/pg2sink/pkg/logical"
+	"github.com/lawrencejones/pg2sink/pkg/util"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
 
 type ImporterOptions struct {
-	WorkerCount   int           // maximum parallel import workers
-	PublicationID string        // identifier for Postgres publication
-	PollInterval  time.Duration // interval to check for new import jobs
+	WorkerCount     int           // maximum parallel import workers
+	PublicationID   string        // identifier for Postgres publication
+	PollInterval    time.Duration // interval to check for new import jobs
+	SnapshotTimeout time.Duration // max duration to hold open a Postgres snapshot
+	BatchLimit      int           // max rows to pull from the database per import job
 }
 
 func NewImporter(logger kitlog.Logger, pool *pgx.ConnPool, opts ImporterOptions) *Importer {
@@ -108,7 +111,7 @@ func (i Importer) acquireAndWork(ctx context.Context, logger kitlog.Logger, outp
 	}
 
 	logger = kitlog.With(logger, "job_id", job.ID, "table_name", job.TableName)
-	if err = (Import{job}).Work(ctx, logger, tx, output, time.After(time.Minute)); err != nil {
+	if err = (Import{job}).Work(ctx, logger, tx, output, i.opts.BatchLimit, time.After(i.opts.SnapshotTimeout)); err != nil {
 		return nil, errors.Wrap(err, "failed to work job")
 	}
 
@@ -119,7 +122,7 @@ type Import struct {
 	*Job
 }
 
-func (i Import) Work(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, output changelog.Changelog, until <-chan time.Time) error {
+func (i Import) Work(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, output changelog.Changelog, limit int, until <-chan time.Time) error {
 	// We should query for the primary key as the first thing we do, as this may fail if the
 	// table is misconfigured. It's better to fail here, before we've pushed anything into
 	// the changelog, than after pushing the schema when we discover the table is
@@ -140,16 +143,37 @@ func (i Import) Work(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, outp
 	schema := changelog.SchemaFromRelation(time.Now(), nil, relation)
 	output <- changelog.Entry{Schema: &schema}
 
+	var primaryKeyScanner logical.ValueScanner
+
 	// Go can't handle splatting non-empty-interface types into a parameter list of
 	// empty-interfaces, so we have to construct an interface{} slice of scanners.
 	scanners := make([]interface{}, len(relation.Columns))
 	for idx, column := range relation.Columns {
-		scanners[idx] = logical.TypeForOID(column.Type)
+		scanner := logical.TypeForOID(column.Type)
+		scanners[idx] = scanner
+
+		// We'll need this scanner to convert the cursor value between what the table accepts
+		// and what we'll store in import_jobs
+		if column.Name == primaryKey {
+			primaryKeyScanner = scanner
+		}
 	}
 
-	logger.Log("event", "import.query", "msg", "executing an import query", "cursor", i.Cursor)
-	query := buildQuery(relation, primaryKey, 1000, i.Cursor)
-	rows, err := tx.QueryEx(ctx, query, nil)
+	// We need to translate the import_jobs.cursor value, which is text, into a type that
+	// will be supported for querying into the table. We can use the primaryKeyScanner for
+	// this, which ensures we reliably encode/decode Postgres types.
+	var cursor interface{}
+	if i.Job.Cursor != nil {
+		if err := primaryKeyScanner.Scan(*i.Job.Cursor); err != nil {
+			return errors.Wrap(err, "incompatible cursor in import_jobs table")
+		}
+
+		cursor = primaryKeyScanner.Get()
+	}
+
+	logger.Log("event", "import.query", "msg", "executing an import query", "cursor", cursor)
+	query := buildQuery(relation, primaryKey, limit, cursor)
+	rows, err := tx.QueryEx(ctx, query, nil, util.Compact([]interface{}{cursor})...)
 	if err != nil {
 		return errors.Wrap(err, "failed to query table")
 	}
@@ -185,11 +209,12 @@ forEachRow:
 		}
 	}
 
+	// Release our snapshot, which was held for the benefit of our cursor
 	rows.Close()
 
 	if len(modifications) == 0 {
 		logger.Log("event", "import.complete")
-		_, err := JobStore{tx}.MarkAsComplete(ctx, i.Job.ID)
+		_, err := JobStore{tx}.Complete(ctx, i.Job.ID)
 		return err
 	}
 
@@ -199,8 +224,13 @@ forEachRow:
 	}
 
 	lastCursor := modifications[len(modifications)-1].After.(map[string]interface{})[primaryKey]
+	lastCursorText, err := primaryKeyScanner.EncodeText(nil, []byte{})
+	if err != nil {
+		return errors.Wrap(err, "failed to encode last processed cursor")
+	}
+
 	logger.Log("event", "import.update_cursor", "cursor", lastCursor)
-	return JobStore{tx}.UpdateCursor(ctx, i.Job.ID, lastCursor)
+	return JobStore{tx}.UpdateCursor(ctx, i.Job.ID, string(lastCursorText))
 }
 
 // buildRelation generates the logical.Relation structure by querying Postgres catalog
@@ -253,7 +283,7 @@ func (i Import) buildRelation(ctx context.Context, conn Connection) (*logical.Re
 // buildQuery creates a query string for the given relation, with an optional cursor.
 // Prepended to the columns is now(), which enables us to timestamp our imported rows to
 // the database time.
-func buildQuery(relation *logical.Relation, primaryKey string, limit int, cursor *string) string {
+func buildQuery(relation *logical.Relation, primaryKey string, limit int, cursor interface{}) string {
 	columnNames := make([]string, len(relation.Columns))
 	for idx, column := range relation.Columns {
 		columnNames[idx] = column.Name
