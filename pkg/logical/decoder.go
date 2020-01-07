@@ -203,11 +203,13 @@ func (r *Relation) Marshal(tuple []Element) map[string]interface{} {
 
 	row := map[string]interface{}{}
 	for idx, column := range r.Columns {
-		decoded, err := column.Decode(tuple[idx].Value)
-
-		// TODO: Consider if panic is appropriate here
-		if err != nil {
-			panic(err)
+		var decoded interface{}
+		if tuple[idx].Value != nil {
+			var err error
+			decoded, err = column.Decode(tuple[idx].Value)
+			if err != nil {
+				panic(err)
+			}
 		}
 
 		row[column.Name] = decoded
