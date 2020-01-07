@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/jackc/pgx/pgtype"
 )
 
@@ -31,7 +32,9 @@ func TypeForOID(oid uint32) ValueScanner {
 	switch oid {
 	case pgtype.BoolOID:
 		return &pgtype.Bool{}
-	case pgtype.Int2OID, pgtype.Int4OID:
+	case pgtype.Int2OID:
+		return &pgtype.Int2{}
+	case pgtype.Int4OID:
 		return &pgtype.Int4{}
 	case pgtype.Int8OID:
 		return &pgtype.Int8{}
@@ -48,7 +51,7 @@ func TypeForOID(oid uint32) ValueScanner {
 // specification at:
 //
 // https://www.postgresql.org/docs/current/static/protocol-logicalrep-message-formats.html
-func DecodePGOutput(src []byte) (interface{}, error) {
+func DecodePGOutput(src []byte) (Message, string, error) {
 	dec := decoder{bytes.NewBuffer(src[1:])}
 
 	switch src[0] {
@@ -58,7 +61,7 @@ func DecodePGOutput(src []byte) (interface{}, error) {
 		m.Timestamp = dec.Time()
 		m.XID = dec.Uint32()
 
-		return m, nil
+		return m, "Begin", nil
 
 	case 'C':
 		m := &Commit{}
@@ -67,14 +70,14 @@ func DecodePGOutput(src []byte) (interface{}, error) {
 		m.TransactionLSN = dec.Uint64()
 		m.Timestamp = dec.Time()
 
-		return m, nil
+		return m, "Commit", nil
 
 	case 'O':
 		m := &Origin{}
 		m.LSN = dec.Uint64()
 		m.Name = dec.String()
 
-		return m, nil
+		return m, "Origin", nil
 
 	case 'R':
 		m := &Relation{}
@@ -94,7 +97,7 @@ func DecodePGOutput(src []byte) (interface{}, error) {
 			m.Columns = append(m.Columns, c)
 		}
 
-		return m, nil
+		return m, "Relation", nil
 
 	case 'Y':
 		m := &Type{}
@@ -102,19 +105,19 @@ func DecodePGOutput(src []byte) (interface{}, error) {
 		m.Namespace = dec.String()
 		m.Name = dec.String()
 
-		return m, nil
+		return m, "Relation", nil
 
 	case 'I':
 		m := &Insert{}
 		m.ID = dec.Uint32()
 
 		if dec.Uint8() != 'N' {
-			return nil, fmt.Errorf("malformed insert message")
+			return nil, "", fmt.Errorf("malformed insert message")
 		}
 
 		m.Row = dec.TupleData()
 
-		return m, nil
+		return m, "Insert", nil
 
 	case 'U':
 		m := &Update{}
@@ -130,15 +133,15 @@ func DecodePGOutput(src []byte) (interface{}, error) {
 
 		// Expecting the new tuple value to be provided here
 		if dec.Uint8() != 'N' {
-			return nil, fmt.Errorf("malformed update message")
+			return nil, "", fmt.Errorf("malformed update message")
 		}
 
 		m.Row = dec.TupleData()
 
-		return m, nil
+		return m, "Update", nil
 
 	case 'D':
-		m := Delete{}
+		m := &Delete{}
 		m.ID = dec.Uint32()
 
 		switch dec.Uint8() {
@@ -147,19 +150,19 @@ func DecodePGOutput(src []byte) (interface{}, error) {
 		case 'O':
 			m.Old = true
 		default:
-			return nil, fmt.Errorf("malformed delete message")
+			return nil, "", fmt.Errorf("malformed delete message")
 		}
 
 		m.OldRow = dec.TupleData()
 
-		return m, nil
+		return m, "Delete", nil
 	}
 
-	return Message{}, fmt.Errorf("decoding not implemented: %c", src[0])
+	return new(Message), "Unknown", fmt.Errorf("decoding not implemented: %c", src[0])
 }
 
 // Message is a parsed pgoutput message received from the replication stream
-type Message struct{}
+type Message interface{}
 
 type Begin struct {
 	LSN       uint64    // The final LSN of the transaction.
@@ -208,7 +211,7 @@ func (r *Relation) Marshal(tuple []Element) map[string]interface{} {
 			var err error
 			decoded, err = column.Decode(tuple[idx].Value)
 			if err != nil {
-				panic(err)
+				panic(fmt.Sprintf("failed to decode tuple value: %v\n\n%s", err, spew.Sdump(err)))
 			}
 		}
 

@@ -20,10 +20,11 @@ func BuildChangelog(logger kitlog.Logger, raw <-chan interface{}) changelog.Chan
 		registry, raw := logical.BuildRegistry(logger, raw)
 		for msg := range Sequence(raw) {
 			timestamp, lsn := msg.Begin.Timestamp, msg.Begin.LSN
-			if relation, ok := msg.Entry.(*logical.Relation); ok {
-				schema := changelog.SchemaFromRelation(timestamp, &lsn, relation)
+			switch entry := msg.Entry.(type) {
+			case *logical.Relation:
+				schema := changelog.SchemaFromRelation(timestamp, &lsn, entry)
 				output <- changelog.Entry{Schema: &schema}
-			} else {
+			case *logical.Insert, *logical.Update, *logical.Delete:
 				modification := &changelog.Modification{
 					Timestamp: timestamp,
 					LSN:       &lsn,
@@ -34,6 +35,8 @@ func BuildChangelog(logger kitlog.Logger, raw <-chan interface{}) changelog.Chan
 				modification.Namespace = fmt.Sprintf("%s.%s", relation.Namespace, relation.Name)
 
 				output <- changelog.Entry{Modification: modification}
+			default:
+				// ignore this message type
 			}
 		}
 

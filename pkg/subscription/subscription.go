@@ -10,6 +10,8 @@ import (
 	"github.com/lawrencejones/pg2sink/pkg/logical"
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 type SubscriptionOptions struct {
@@ -128,6 +130,16 @@ func (s *Subscription) ConfirmReceived(pos uint64) {
 	s.walPos = pos
 }
 
+var (
+	receiveMessageTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "pg2sink_subscription_receive_message_total",
+			Help: "Total number of logical messages received",
+		},
+		[]string{"type"},
+	)
+)
+
 // startReceiving will receive messages until the context expires, or we receive an error
 // from our connection. Received messages are sent down our received channel, which we
 // assume someone is consuming from.
@@ -153,11 +165,12 @@ func (s *Subscription) startReceiving(ctx context.Context) error {
 		}
 
 		if msg.WalMessage != nil {
-			decoded, err := logical.DecodePGOutput(msg.WalMessage.WalData)
+			decoded, msgType, err := logical.DecodePGOutput(msg.WalMessage.WalData)
 			if err != nil {
 				return errors.Wrap(err, "failed to deocde wal")
 			}
 
+			receiveMessageTotal.WithLabelValues(msgType).Inc()
 			s.messages <- decoded // send message down our received channel
 		}
 	}

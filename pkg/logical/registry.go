@@ -1,8 +1,10 @@
 package logical
 
 import (
+	"fmt"
 	"sync"
 
+	"github.com/davecgh/go-spew/spew"
 	kitlog "github.com/go-kit/kit/log"
 )
 
@@ -63,7 +65,7 @@ func (r *Registry) Marshal(msg interface{}) (relation *Relation, before interfac
 		relation = r.Get(cast.ID)
 		before = relation.Marshal(cast.OldRow)
 	default:
-		panic("invalid message type")
+		panic(fmt.Sprintf("invalid message type (not insert/update/delete): %s", spew.Sdump(msg)))
 	}
 
 	return
