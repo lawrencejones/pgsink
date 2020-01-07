@@ -301,7 +301,7 @@ func buildRelation(ctx context.Context, conn Connection, tableName string) (*log
 	select attname as name
 			 , atttypid as type
 	  from pg_attribute
-	 where attrelid = $1 and attnum > 0
+	 where attrelid = $1 and attnum > 0 and not attisdropped
 	 order by attnum;
 	`
 
