@@ -18,7 +18,7 @@ func GetPublishedTables(ctx context.Context, pool *pgx.ConnPool, identifier stri
 	query := `
 	select array_remove(array_agg(schemaname || '.' || tablename), NULL)
 	from pg_publication left join pg_publication_tables on pg_publication.pubname=pg_publication_tables.pubname
-	where obj_description(oid, 'pg_publication') = $1
+	where obj_description(pg_publication.oid, 'pg_publication') = $1
 	group by pg_publication.pubname;
 	`
 
