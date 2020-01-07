@@ -57,8 +57,8 @@ var (
 	sinkType        = app.Flag("sink", "Type of sink target").Default("file").String()
 	sinkFileOptions = sinks.FileOptions{}
 	_               = func() (err error) {
-		app.Flag("sink-file.schemas-path", "File path for schemas").Default("/dev/stdout").StringVar(&sinkFileOptions.SchemasPath)
-		app.Flag("sink-file.modifications-path", "File path for modifications").Default("/dev/stdout").StringVar(&sinkFileOptions.ModificationsPath)
+		app.Flag("sink.file.schemas-path", "File path for schemas").Default("/dev/stdout").StringVar(&sinkFileOptions.SchemasPath)
+		app.Flag("sink.file.modifications-path", "File path for modifications").Default("/dev/stdout").StringVar(&sinkFileOptions.ModificationsPath)
 		return
 	}()
 )

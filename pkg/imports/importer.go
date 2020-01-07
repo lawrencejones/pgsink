@@ -15,6 +15,8 @@ import (
 	"github.com/lawrencejones/pg2sink/pkg/sinks"
 	"github.com/lawrencejones/pg2sink/pkg/util"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -113,6 +115,24 @@ func (i Importer) acquireAndWork(ctx context.Context, logger kitlog.Logger) (*Jo
 	return job, nil
 }
 
+var (
+	workPostgresRowsReadTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "pg2sink_importer_work_postgres_rows_read_total",
+			Help: "Total number of rows read from postgres, labelled per-table",
+		},
+		[]string{"table"},
+	)
+	workSinkFlushDurationSeconds = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "pg2sink_importer_work_sink_flush_duration_seconds",
+			Help:    "Distribution of time taken to flush the sink",
+			Buckets: prometheus.ExponentialBuckets(0.125, 2, 9), // 0.125 -> 64s
+		},
+		[]string{"table"},
+	)
+)
+
 func (i Importer) work(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, job *Job) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -172,7 +192,8 @@ func (i Importer) work(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, jo
 		cursor = primaryKeyScanner.Get()
 	}
 
-	logger.Log("event", "import.query", "msg", "executing an import query", "cursor", cursor)
+	logger.Log("event", "import.query_exec", "msg", "executing an import query", "cursor", cursor)
+	queryStart := time.Now()
 	query := buildQuery(relation, primaryKey, i.opts.BatchLimit, cursor)
 	rows, err := tx.QueryEx(ctx, query, nil, util.Compact([]interface{}{cursor})...)
 	if err != nil {
@@ -183,8 +204,12 @@ func (i Importer) work(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, jo
 
 	var (
 		timestamp         pgtype.Timestamp
-		lastModification  *changelog.Modification
+		modificationCount int
+		modification      *changelog.Modification
 		holdSnapshotUntil = time.After(i.opts.SnapshotTimeout)
+		tableRowsRead     = workPostgresRowsReadTotal.With(
+			prometheus.Labels{"table": job.TableName},
+		)
 	)
 
 forEachRow:
@@ -198,13 +223,15 @@ forEachRow:
 			row[column.Name] = scanners[idx].(logical.ValueScanner).Get()
 		}
 
-		lastModification = &changelog.Modification{
+		tableRowsRead.Inc()
+		modificationCount++
+		modification = &changelog.Modification{
 			Timestamp: timestamp.Get().(time.Time),
 			Namespace: relation.String(),
 			After:     row,
 		}
 
-		entries <- changelog.Entry{Modification: lastModification}
+		entries <- changelog.Entry{Modification: modification}
 
 		select {
 		case <-holdSnapshotUntil:
@@ -213,27 +240,34 @@ forEachRow:
 		}
 	}
 
+	logger = kitlog.With(logger, "modification_count", modificationCount)
+
 	// Release our snapshot, which was held for the benefit of our cursor. Also close our
 	// entries channel, as we have nothing left to push.
+	logger.Log("event", "import.query_close", "duration", time.Since(queryStart).Seconds())
 	rows.Close()
 	close(entries)
 
+	flushStart := time.Now()
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("timed out before sink could flush")
 	case err := <-sinkConsumeChan:
+		flushDuration := time.Since(flushStart)
+		workSinkFlushDurationSeconds.WithLabelValues(job.TableName).Observe(flushDuration.Seconds())
+		logger.Log("event", "sink_consume.flush", "duration", flushDuration.Seconds())
 		if err != nil {
 			return errors.Wrap(err, "failed to flush sink")
 		}
 	}
 
-	if lastModification == nil {
+	if modification == nil {
 		logger.Log("event", "import.complete")
 		_, err := JobStore{tx}.Complete(ctx, job.ID)
 		return err
 	}
 
-	lastCursor := lastModification.After.(map[string]interface{})[primaryKey]
+	lastCursor := modification.After.(map[string]interface{})[primaryKey]
 	lastCursorText, err := primaryKeyScanner.EncodeText(nil, []byte{})
 	if err != nil {
 		return errors.Wrap(err, "failed to encode last processed cursor")
