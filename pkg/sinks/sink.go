@@ -25,17 +25,28 @@ func NewFile(opts FileOptions) (*File, error) {
 	sink := &File{serializer: changelog.DefaultSerializer}
 
 	var err error
-	sink.schemas, err = os.OpenFile(opts.SchemasPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	sink.schemas, err = openFile(opts.SchemasPath)
 	if err != nil {
 		return nil, err
 	}
 
-	sink.modifications, err = os.OpenFile(opts.ModificationsPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	sink.modifications, err = openFile(opts.ModificationsPath)
 	if err != nil {
 		return nil, err
 	}
 
 	return sink, nil
+}
+
+func openFile(path string) (*os.File, error) {
+	switch path {
+	case "/dev/stdout":
+		return os.Stdout, nil
+	case "/dev/stderr":
+		return os.Stderr, nil
+	}
+
+	return os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 }
 
 type FileOptions struct {
