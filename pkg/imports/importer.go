@@ -110,6 +110,10 @@ func (i Importer) acquireAndWork(ctx context.Context, logger kitlog.Logger) (*Jo
 
 	logger = kitlog.With(logger, "job_id", job.ID, "table_name", job.TableName)
 	if err := i.work(ctx, logger, tx, job); err != nil {
+		if err := (JobStore{tx}).SetError(ctx, job.ID, err); err != nil {
+			logger.Log("error", err, "msg", "failed to set the error on our job")
+		}
+
 		return nil, errors.Wrap(err, "failed to work job")
 	}
 
@@ -349,6 +353,12 @@ func (m multiplePrimaryKeysError) Error() string {
 	return fmt.Sprintf("unsupported multiple primary keys: %s", strings.Join(m, ","))
 }
 
+type noPrimaryKeyError struct{}
+
+func (n noPrimaryKeyError) Error() string {
+	return "no primary key found"
+}
+
 // getPrimaryKeyColumn identifies the primary key column of the given table. It only
 // supports tables with primary keys, and of those, only single column primary keys.
 func getPrimaryKeyColumn(ctx context.Context, conn Connection, tableName string) (string, error) {
@@ -371,7 +381,9 @@ func getPrimaryKeyColumn(ctx context.Context, conn Connection, tableName string)
 		return "", err
 	}
 
-	if len(primaryKeys) != 1 {
+	if len(primaryKeys) == 0 {
+		return "", new(noPrimaryKeyError)
+	} else if len(primaryKeys) > 1 {
 		return "", multiplePrimaryKeysError(primaryKeys)
 	}
 

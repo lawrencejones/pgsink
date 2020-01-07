@@ -87,13 +87,15 @@ func (i JobStore) GetImportedTables(ctx context.Context, publicationID string) (
 }
 
 // Acquire will return a job that is locked for the duration of the transaction. If no
-// jobs are available, we return nil.
+// jobs are available, we return nil. We prioritise import jobs that have not yet failed,
+// to ensure we don't get blocked by any failing import job.
 func (i JobStore) Acquire(ctx context.Context, tx *pgx.Tx, publicationID string) (*Job, error) {
 	query := `
 	select id, publication_id, table_name, cursor, completed_at, created_at
 	from pg2sink.import_jobs
 	where publication_id = $1
 	and completed_at is null
+	order by error is null desc
 	for update skip locked
 	limit 1
 	;`
@@ -136,4 +138,15 @@ func (i JobStore) Complete(ctx context.Context, id int64) (time.Time, error) {
 
 	var completedAt time.Time
 	return completedAt, i.QueryRowEx(ctx, query, nil, id).Scan(&completedAt)
+}
+
+func (i JobStore) SetError(ctx context.Context, id int64, jobErr error) error {
+	query := `
+	update pg2sink.import_jobs
+	   set error = $2
+	 where id = $1
+	;`
+
+	_, err := i.ExecEx(ctx, query, nil, id, jobErr.Error())
+	return err
 }
