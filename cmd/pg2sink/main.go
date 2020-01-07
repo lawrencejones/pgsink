@@ -212,13 +212,15 @@ func main() {
 			},
 		)
 
-		g.Add(
-			func() error {
-				importer.Run(ctx)
-				return nil
-			},
-			handleError(logger),
-		)
+		if *importerWorkerCount > 0 {
+			g.Add(
+				func() error {
+					importer.Run(ctx)
+					return nil
+				},
+				handleError(logger),
+			)
+		}
 	}
 
 	{
