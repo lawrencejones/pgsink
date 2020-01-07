@@ -26,6 +26,7 @@ type ImporterOptions struct {
 	PollInterval    time.Duration // interval to check for new import jobs
 	SnapshotTimeout time.Duration // max duration to hold open a Postgres snapshot
 	BatchLimit      int           // max rows to pull from the database per import job
+	BufferSize      int           // channel buffer between Postgres and sink
 }
 
 func NewImporter(logger kitlog.Logger, pool *pgx.ConnPool, sink sinks.Sink, opts ImporterOptions) *Importer {
@@ -137,11 +138,11 @@ func (i Importer) work(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, jo
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	entries := make(changelog.Changelog, i.opts.BatchLimit)
+	entries := make(changelog.Changelog, i.opts.BufferSize)
 	sinkConsumeChan := make(chan error)
-	defer close(sinkConsumeChan)
 	go func() {
 		sinkConsumeChan <- i.sink.Consume(ctx, entries, nil)
+		close(sinkConsumeChan)
 	}()
 
 	// We should query for the primary key as the first thing we do, as this may fail if the
