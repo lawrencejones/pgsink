@@ -14,7 +14,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-type PublicationManagerOptions struct {
+type ManagerOptions struct {
 	Name         string        // name of the publication in Postgres
 	Schemas      []string      // list of schemas to watch
 	Excludes     []string      // optional blacklist
@@ -22,12 +22,12 @@ type PublicationManagerOptions struct {
 	PollInterval time.Duration // interval to scan Postgres for new matching tables
 }
 
-// CreatePublicationManager will create a new publication with no subscribed tables, or
-// will no-op if a publication already exists with this name.
+// CreateManager will create a new publication with no subscribed tables, or will no-op if
+// a publication already exists with this name.
 //
 // The returned manager is configured to continually monitor the publication, adding or
 // removing tables as appropriate.
-func CreatePublicationManager(ctx context.Context, logger kitlog.Logger, pool *pgx.ConnPool, opts PublicationManagerOptions) (*PublicationManager, error) {
+func CreateManager(ctx context.Context, logger kitlog.Logger, pool *pgx.ConnPool, opts ManagerOptions) (*Manager, error) {
 	logger = kitlog.With(logger, "publication", opts.Name)
 
 	publicationID, err := getExistingPublicationID(ctx, pool, opts.Name)
@@ -48,7 +48,7 @@ func CreatePublicationManager(ctx context.Context, logger kitlog.Logger, pool *p
 	logger = kitlog.With(logger, "publication_id", publicationID)
 	logger.Log("event", "publication.init")
 
-	pubmgr := &PublicationManager{
+	pubmgr := &Manager{
 		logger:        logger,
 		pool:          pool,
 		publicationID: publicationID,
@@ -105,24 +105,24 @@ func createPublication(ctx context.Context, pool *pgx.ConnPool, name, publicatio
 	return nil
 }
 
-// PublicationManager supervises a Postgres publication, adding and removing tables according to the
+// Manager supervises a Postgres publication, adding and removing tables according to the
 // white/blacklist.
-type PublicationManager struct {
+type Manager struct {
 	logger        kitlog.Logger
 	pool          *pgx.ConnPool
 	publicationID string
-	opts          PublicationManagerOptions
+	opts          ManagerOptions
 }
 
 // GetPublicationID returns the publication ID. If empty, we haven't yet created our
 // publication.
-func (p *PublicationManager) GetPublicationID() string {
+func (p *Manager) GetPublicationID() string {
 	return p.publicationID
 }
 
 // Sync is intended to be run on an on-going basis, watching for new database tables in
 // order to add them to the existing publication.
-func (p *PublicationManager) Sync(ctx context.Context) (err error) {
+func (p *Manager) Sync(ctx context.Context) (err error) {
 	p.logger.Log("event", "sync.start")
 	for {
 		select {
@@ -158,7 +158,7 @@ func (p *PublicationManager) Sync(ctx context.Context) (err error) {
 	}
 }
 
-func (p *PublicationManager) alter(ctx context.Context, tables []string) error {
+func (p *Manager) alter(ctx context.Context, tables []string) error {
 	query := fmt.Sprintf(`alter publication %s set table %s;`, p.opts.Name, strings.Join(tables, ", "))
 	_, err := p.pool.ExecEx(ctx, query, nil)
 
@@ -166,7 +166,7 @@ func (p *PublicationManager) alter(ctx context.Context, tables []string) error {
 }
 
 // getWatchedTables scans the database for tables that match our watch conditions
-func (p *PublicationManager) getWatchedTables(ctx context.Context) ([]string, error) {
+func (p *Manager) getWatchedTables(ctx context.Context) ([]string, error) {
 	query := `
 	select array_agg(table_schema || '.' || table_name)
 	from information_schema.tables

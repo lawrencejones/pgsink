@@ -126,7 +126,7 @@ func main() {
 	var (
 		sink   sinks.Sink
 		sub    *subscription.Subscription
-		pubmgr *publication.PublicationManager
+		pubmgr *publication.Manager
 	)
 
 	mustSink := func(sink sinks.Sink, err error) sinks.Sink {
@@ -150,11 +150,11 @@ func main() {
 		logger := kitlog.With(logger, "component", "publication")
 
 		var err error
-		pubmgr, err = publication.CreatePublicationManager(
+		pubmgr, err = publication.CreateManager(
 			ctx,
 			logger,
 			mustConnectionPool(2),
-			publication.PublicationManagerOptions{
+			publication.ManagerOptions{
 				Name:         *name,
 				Schemas:      *schemas,
 				Excludes:     *excludes,

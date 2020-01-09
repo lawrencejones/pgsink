@@ -22,13 +22,13 @@ func randomSuffix() string {
 	return strings.SplitN(uuid.NewV4().String(), "-", 2)[0]
 }
 
-var _ = Describe("PublicationManager", func() {
+var _ = Describe("Manager", func() {
 	var (
 		ctx    context.Context
 		cancel func()
 		pool   *pgx.ConnPool
-		pubmgr *publication.PublicationManager
-		opts   *publication.PublicationManagerOptions
+		pubmgr *publication.Manager
+		opts   *publication.ManagerOptions
 		err    error
 
 		name          = "pubmgr_integration"
@@ -66,7 +66,7 @@ var _ = Describe("PublicationManager", func() {
 		mustExec(`create table %s (id bigserial primary key);`, []interface{}{existingTable}, "failed to create sync table")
 		mustExec(`create table %s (id bigserial primary key);`, []interface{}{ignoredTable}, "failed to create sync table")
 
-		opts = &publication.PublicationManagerOptions{
+		opts = &publication.ManagerOptions{
 			Name:         name,
 			Schemas:      []string{"public"},
 			Excludes:     []string{ignoredTable},
@@ -78,9 +78,9 @@ var _ = Describe("PublicationManager", func() {
 		cancel()
 	})
 
-	Describe("CreatePublicationManager()", func() {
+	Describe("CreateManager()", func() {
 		JustBeforeEach(func() {
-			pubmgr, err = publication.CreatePublicationManager(ctx, logger, pool, *opts)
+			pubmgr, err = publication.CreateManager(ctx, logger, pool, *opts)
 		})
 
 		It("creates a publication of the given name", func() {
@@ -111,7 +111,7 @@ var _ = Describe("PublicationManager", func() {
 			// Call Create() as we need to initialise the manager with an identifier. It's a bit
 			// sad we need Create() to work in order to test Sync(), but there is a crucial
 			// dependency there.
-			pubmgr, err = publication.CreatePublicationManager(ctx, logger, pool, *opts)
+			pubmgr, err = publication.CreateManager(ctx, logger, pool, *opts)
 			Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 
 			go func() {
