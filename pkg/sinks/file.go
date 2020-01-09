@@ -6,23 +6,14 @@ import (
 	"sync"
 
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
+	"github.com/lawrencejones/pg2sink/pkg/changelog/serialize"
 	"github.com/pkg/errors"
 )
-
-// AckCallback will acknowledge successful publication of up-to this message. It is not
-// guaranteed to be called for any intermediate messages.
-type AckCallback func(changelog.Entry)
-
-// Sink is a generic sink destination for a changelog. It will consume entries until
-// either an error, or the entries run out.
-type Sink interface {
-	Consume(context.Context, changelog.Changelog, AckCallback) error
-}
 
 var _ Sink = &File{}
 
 func NewFile(opts FileOptions) (*File, error) {
-	sink := &File{serializer: changelog.DefaultSerializer}
+	sink := &File{serializer: serialize.DefaultSerializer}
 
 	var err error
 	sink.schemas, err = openFile(opts.SchemasPath)
@@ -57,7 +48,7 @@ type FileOptions struct {
 type File struct {
 	schemas       *os.File
 	modifications *os.File
-	serializer    changelog.Serializer
+	serializer    serialize.Serializer
 	sync.Mutex
 }
 

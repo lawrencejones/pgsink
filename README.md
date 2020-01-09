@@ -7,11 +7,11 @@ is GCP Pub/Sub.
 
 ```
 pkg/changelog     // Schema & Modification types, the public output types
-pkg/imports       // manages imports for tables in the publication
+pkg/imports       // manages imports for subscribed tables
 pkg/logical       // all logical decoding helpers
 pkg/migration     // database migrations for internal pg2sink tables
 pkg/publication   // creates and manages table membership for a Postgres publication
-pkg/pubsub        // Pub/Sub relay publisher, batched and acknowledgement hooks
+pkg/sinks         // output destinations, all implementing a Sink interface
 pkg/subscription  // subscribes to publication, streaming Schema/Modification
 pkg/util          // utilities that should be in Go's stdlib
 ```
