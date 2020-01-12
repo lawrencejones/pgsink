@@ -21,12 +21,13 @@ import (
 )
 
 type ImporterOptions struct {
-	WorkerCount     int           // maximum parallel import workers
-	PublicationID   string        // identifier for Postgres publication
-	PollInterval    time.Duration // interval to check for new import jobs
-	SnapshotTimeout time.Duration // max duration to hold open a Postgres snapshot
-	BatchLimit      int           // max rows to pull from the database per import job
-	BufferSize      int           // channel buffer between Postgres and sink
+	WorkerCount      int           // maximum parallel import workers
+	PublicationID    string        // identifier for Postgres publication
+	SubscriptionName string        // name of subscription (should match replication slot name)
+	PollInterval     time.Duration // interval to check for new import jobs
+	SnapshotTimeout  time.Duration // max duration to hold open a Postgres snapshot
+	BatchLimit       int           // max rows to pull from the database per import job
+	BufferSize       int           // channel buffer between Postgres and sink
 }
 
 func NewImporter(logger kitlog.Logger, pool *pgx.ConnPool, sink sinks.Sink, opts ImporterOptions) *Importer {
@@ -99,7 +100,7 @@ func (i Importer) acquireAndWork(ctx context.Context, logger kitlog.Logger) (*Jo
 		}
 	}()
 
-	job, err := JobStore{i.pool}.Acquire(ctx, tx, i.opts.PublicationID)
+	job, err := JobStore{i.pool}.Acquire(ctx, tx, i.opts.PublicationID, i.opts.SubscriptionName)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to acquire job")
 	}

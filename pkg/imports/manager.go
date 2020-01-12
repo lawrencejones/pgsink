@@ -12,8 +12,9 @@ import (
 )
 
 type ManagerOptions struct {
-	PublicationID string        // identifier of the current publication
-	PollInterval  time.Duration // interval to poll for new import jobs
+	PublicationID    string        // identifier of the current publication
+	SubscriptionName string        // name of subscription (should be the replication slot name)
+	PollInterval     time.Duration // interval to poll for new import jobs
 }
 
 func NewManager(logger kitlog.Logger, pool *pgx.ConnPool, opts ManagerOptions) *Manager {
@@ -47,7 +48,7 @@ func (i Manager) Sync(ctx context.Context) error {
 			return errors.Wrap(err, "failed to query published tables")
 		}
 
-		importedTables, err := JobStore{i.pool}.GetImportedTables(ctx, i.opts.PublicationID)
+		importedTables, err := JobStore{i.pool}.GetImportedTables(ctx, i.opts.PublicationID, i.opts.SubscriptionName)
 		if err != nil {
 			return errors.Wrap(err, "failed to query imported tables")
 		}
@@ -55,7 +56,7 @@ func (i Manager) Sync(ctx context.Context) error {
 		notImportedTables := util.Diff(publishedTables, importedTables)
 		for _, table := range notImportedTables {
 			logger.Log("event", "import_job.create", "table", table)
-			job, err := JobStore{i.pool}.Create(ctx, i.opts.PublicationID, table)
+			job, err := JobStore{i.pool}.Create(ctx, i.opts.PublicationID, i.opts.SubscriptionName, table)
 			if err != nil {
 				return errors.Wrap(err, "failed to create import job")
 			}

@@ -182,8 +182,9 @@ func main() {
 			logger,
 			mustConnectionPool(1),
 			imports.ManagerOptions{
-				PublicationID: pubmgr.GetPublicationID(),
-				PollInterval:  *importManagerPollInterval,
+				PublicationID:    pubmgr.GetPublicationID(),
+				SubscriptionName: *slotName,
+				PollInterval:     *importManagerPollInterval,
 			},
 		)
 
@@ -203,12 +204,13 @@ func main() {
 			mustConnectionPool(*importerWorkerCount),
 			sink,
 			imports.ImporterOptions{
-				WorkerCount:     *importerWorkerCount,
-				PublicationID:   pubmgr.GetPublicationID(),
-				PollInterval:    *importerPollInterval,
-				SnapshotTimeout: *importerSnapshotTimeout,
-				BatchLimit:      *importerBatchLimit,
-				BufferSize:      *importerBufferSize,
+				WorkerCount:      *importerWorkerCount,
+				PublicationID:    pubmgr.GetPublicationID(),
+				SubscriptionName: *slotName,
+				PollInterval:     *importerPollInterval,
+				SnapshotTimeout:  *importerSnapshotTimeout,
+				BatchLimit:       *importerBatchLimit,
+				BufferSize:       *importerBufferSize,
 			},
 		)
 
