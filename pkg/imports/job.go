@@ -17,11 +17,10 @@ type Job struct {
 	CreatedAt        time.Time  // set when first created
 }
 
-func Scan(row interface {
+func (j Job) Scan(row interface {
 	Scan(...interface{}) error
 }) (*Job, error) {
-	j := &Job{}
-	return j, row.Scan(
+	return &j, row.Scan(
 		&j.ID, &j.PublicationID, &j.SubscriptionName, &j.TableName, &j.Cursor, &j.CompletedAt, &j.CreatedAt,
 	)
 }
@@ -49,7 +48,7 @@ func (i JobStore) Get(ctx context.Context, id int64) (*Job, error) {
 	where id = $1;
 	`
 
-	return Scan(i.QueryRowEx(ctx, query, nil, id))
+	return Job{}.Scan(i.QueryRowEx(ctx, query, nil, id))
 }
 
 func (i JobStore) Create(ctx context.Context, publicationID, subscriptionName, tableName string) (*Job, error) {
@@ -60,7 +59,7 @@ func (i JobStore) Create(ctx context.Context, publicationID, subscriptionName, t
 	returning id, publication_id, subscription_name, table_name, cursor, completed_at, created_at
 	;`
 
-	return Scan(i.QueryRowEx(ctx, query, nil, publicationID, subscriptionName, tableName))
+	return Job{}.Scan(i.QueryRowEx(ctx, query, nil, publicationID, subscriptionName, tableName))
 }
 
 // GetImportedTables finds all tables that have a corresponding import job for this
@@ -116,7 +115,7 @@ func (i JobStore) Acquire(ctx context.Context, tx *pgx.Tx, publicationID, subscr
 	defer rows.Close()
 
 	for rows.Next() { // there will be at most one
-		return Scan(rows)
+		return Job{}.Scan(rows)
 	}
 
 	return nil, nil
