@@ -2,6 +2,8 @@ package publication
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/pgtype"
@@ -30,4 +32,28 @@ func GetPublishedTables(ctx context.Context, pool *pgx.ConnPool, identifier stri
 	}
 
 	return tables, tablesReceiver.AssignTo(&tables)
+}
+
+// Publication wraps a publication name
+type Publication string
+
+// AddTable adds the specified table into the publication
+func (p Publication) AddTable(ctx context.Context, pool *pgx.ConnPool, table string) error {
+	query := fmt.Sprintf(`alter publication %s add table %s;`, string(p), table)
+	_, err := pool.ExecEx(ctx, query, nil)
+	return err
+}
+
+// SetTables resets the publication to include the given tables only
+func (p Publication) SetTables(ctx context.Context, pool *pgx.ConnPool, tables ...string) error {
+	query := fmt.Sprintf(`alter publication %s set table %s;`, string(p), strings.Join(tables, ", "))
+	_, err := pool.ExecEx(ctx, query, nil)
+	return err
+}
+
+// RemoveTable adds the specified table into the publication
+func (p Publication) RemoveTable(ctx context.Context, pool *pgx.ConnPool, table string) error {
+	query := fmt.Sprintf(`alter publication %s remove table %s;`, string(p), table)
+	_, err := pool.ExecEx(ctx, query, nil)
+	return err
 }

@@ -150,19 +150,12 @@ func (p *Manager) Sync(ctx context.Context) (err error) {
 					"adding", strings.Join(watchedNotPublished, ","),
 					"removing", strings.Join(publishedNotWatched, ","))
 
-				if err := p.alter(ctx, watched); err != nil {
+				if err := Publication(p.opts.Name).SetTables(ctx, p.pool, watched...); err != nil {
 					return errors.Wrap(err, "failed to alter publication")
 				}
 			}
 		}
 	}
-}
-
-func (p *Manager) alter(ctx context.Context, tables []string) error {
-	query := fmt.Sprintf(`alter publication %s set table %s;`, p.opts.Name, strings.Join(tables, ", "))
-	_, err := p.pool.ExecEx(ctx, query, nil)
-
-	return err
 }
 
 // getWatchedTables scans the database for tables that match our watch conditions
