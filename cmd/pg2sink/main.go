@@ -31,9 +31,7 @@ var (
 	app = kingpin.New("pg2sink", "Publish Postgres changes to pubsub").Version(versionStanza())
 
 	// Global flags
-	debug          = app.Flag("debug", "Enable debug logging").Default("false").Bool()
-	metricsAddress = app.Flag("metrics-address", "Address to bind HTTP metrics listener").Default("127.0.0.1").String()
-	metricsPort    = app.Flag("metrics-port", "Port to bind HTTP metrics listener").Default("9525").Uint16()
+	debug = app.Flag("debug", "Enable debug logging").Default("false").Bool()
 
 	// Database connection paramters
 	host     = app.Flag("host", "Postgres host").Envar("PGHOST").Default("127.0.0.1").String()
@@ -45,11 +43,14 @@ var (
 	publicationName = app.Flag("publication-name", "Publication name").Default("pg2sink").String()
 	slotName        = app.Flag("slot-name", "Replication slot name").Default("pg2sink").String()
 
-	add = app.Command("add", "Add table to existing publication")
+	add      = app.Command("add", "Add table to existing publication")
+	addTable = add.Flag("table", "Table to add to publication, e.g. public.example").Required().String()
 
 	remove = app.Command("remove", "Remove table from existing publication")
 
 	stream                          = app.Command("stream", "Stream changes into sink")
+	streamMetricsAddress            = stream.Flag("metrics-address", "Address to bind HTTP metrics listener").Default("127.0.0.1").String()
+	streamMetricsPort               = stream.Flag("metrics-port", "Port to bind HTTP metrics listener").Default("9525").Uint16()
 	streamManagePublication         = stream.Flag("manage-publication", "Auto-manage tables in publication").Default("false").Bool()
 	streamSchemas                   = stream.Flag("schema", "Postgres schema to watch for changes").Default("public").Strings()
 	streamExcludes                  = stream.Flag("exclude", "Table name to exclude from changes").Strings()
@@ -88,10 +89,6 @@ func main() {
 	logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", kitlog.DefaultCaller)
 	stdlog.SetOutput(kitlog.NewStdlibAdapter(logger))
 
-	logger.Log("event", "metrics.listen", "address", *metricsAddress, "port", *metricsPort)
-	http.Handle("/metrics", promhttp.Handler())
-	go http.ListenAndServe(fmt.Sprintf("%s:%v", *metricsAddress, *metricsPort), nil)
-
 	ctx, cancel := setupSignalHandler()
 	defer cancel()
 
@@ -127,6 +124,14 @@ func main() {
 	}
 
 	switch command {
+	case add.FullCommand():
+		logger := kitlog.With(logger, "table", *addTable, "publication", *publicationName)
+		if err := publication.Publication(*publicationName).AddTable(ctx, mustConnectionPool(1), *addTable); err != nil {
+			kingpin.Fatalf("failed to add table to publication: %v", err)
+		}
+
+		logger.Log("event", "added_table")
+
 	case stream.FullCommand():
 		var (
 			sink   sinks.Sink
@@ -150,6 +155,10 @@ func main() {
 		}
 
 		var g run.Group
+
+		logger.Log("event", "metrics.listen", "address", *streamMetricsAddress, "port", *streamMetricsPort)
+		http.Handle("/metrics", promhttp.Handler())
+		go http.ListenAndServe(fmt.Sprintf("%s:%v", *streamMetricsAddress, *streamMetricsPort), nil)
 
 		{
 			logger := kitlog.With(logger, "component", "publication")
