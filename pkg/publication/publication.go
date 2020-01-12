@@ -37,6 +37,24 @@ func GetPublishedTables(ctx context.Context, conn models.Connection, identifier 
 // Publication wraps a publication name
 type Publication string
 
+// GetIdentifier finds the comment value assigned to the publication. This is where we
+// store a uuid to uniquely identify a publication, and to detect when a publication has
+// been dropped and recreated.
+func (p Publication) GetIdentifier(ctx context.Context, conn models.Connection) (string, error) {
+	query := `
+	select obj_description(pg_publication.oid, 'pg_publication') as id
+	from pg_publication
+	where pubname = $1
+	;`
+
+	var identifier string
+	if err := conn.QueryRowEx(ctx, query, nil, string(p)).Scan(&identifier); err != nil {
+		return "", err
+	}
+
+	return identifier, nil
+}
+
 // AddTable adds the specified table into the publication
 func (p Publication) AddTable(ctx context.Context, conn models.Connection, table string) error {
 	query := fmt.Sprintf(`alter publication %s add table %s;`, string(p), table)
@@ -51,9 +69,9 @@ func (p Publication) SetTables(ctx context.Context, conn models.Connection, tabl
 	return err
 }
 
-// RemoveTable adds the specified table into the publication
-func (p Publication) RemoveTable(ctx context.Context, conn models.Connection, table string) error {
-	query := fmt.Sprintf(`alter publication %s remove table %s;`, string(p), table)
+// DropTable removes the given table from the publication
+func (p Publication) DropTable(ctx context.Context, conn models.Connection, table string) error {
+	query := fmt.Sprintf(`alter publication %s drop table %s;`, string(p), table)
 	_, err := conn.ExecEx(ctx, query, nil)
 	return err
 }

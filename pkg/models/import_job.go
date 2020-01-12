@@ -24,7 +24,7 @@ type ImportJobStore struct{ Connection }
 
 func (s ImportJobStore) Columns() []string {
 	return []string{
-		"id", "publication_id", "subscription_name", "table_name", "cursor", "completed_at", "created_at", "expires_at",
+		"id", "publication_id", "subscription_name", "table_name", "cursor", "completed_at", "created_at", "expired_at",
 	}
 }
 
@@ -59,6 +59,33 @@ func (s ImportJobStore) Create(ctx context.Context, publicationID, subscriptionN
 	return s.Scan(s.QueryRowEx(ctx, query, nil, publicationID, subscriptionName, tableName))
 }
 
+// Where executes a SQL query with the given clause against the import_jobs table.
+func (s ImportJobStore) Where(ctx context.Context, clause string, args ...interface{}) ([]*ImportJob, error) {
+	query := s.buildSelect(`
+	select %s
+	from pg2sink.import_jobs
+	where `) + clause + ";"
+
+	rows, err := s.QueryEx(ctx, query, nil, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	jobs := []*ImportJob{}
+	for rows.Next() {
+		job, err := s.Scan(rows)
+		if err != nil {
+			return nil, err
+		}
+
+		jobs = append(jobs, job)
+	}
+
+	return jobs, nil
+}
+
 // GetImportedTables finds all tables that have a corresponding import job for this
 // publication. If an import has expired, it doesn't count.
 func (s ImportJobStore) GetImportedTables(ctx context.Context, publicationID, subscriptionName string) ([]string, error) {
@@ -67,7 +94,7 @@ func (s ImportJobStore) GetImportedTables(ctx context.Context, publicationID, su
 	from pg2sink.import_jobs
 	where publication_id = $1
 	and subscription_name = $2
-	and expires_at is null
+	and expired_at is null
 	;`
 
 	tableNames := []string{}
@@ -100,7 +127,7 @@ func (s ImportJobStore) Acquire(ctx context.Context, tx *pgx.Tx, publicationID, 
 	where publication_id = $1
 	and subscription_name = $2
 	and completed_at is null
-	and expires_at is null
+	and expired_at is null
 	order by error is null desc
 	for update skip locked
 	limit 1
@@ -141,6 +168,18 @@ func (s ImportJobStore) Complete(ctx context.Context, id int64) (time.Time, erro
 
 	var completedAt time.Time
 	return completedAt, s.QueryRowEx(ctx, query, nil, id).Scan(&completedAt)
+}
+
+func (s ImportJobStore) Expire(ctx context.Context, id int64) (time.Time, error) {
+	query := `
+	update pg2sink.import_jobs
+	   set expired_at = now()
+	 where id = $1
+	returning expired_at
+	;`
+
+	var expiredAt time.Time
+	return expiredAt, s.QueryRowEx(ctx, query, nil, id).Scan(&expiredAt)
 }
 
 func (s ImportJobStore) SetError(ctx context.Context, id int64, jobErr error) error {

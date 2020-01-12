@@ -18,6 +18,7 @@ import (
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 	"github.com/lawrencejones/pg2sink/pkg/imports"
 	"github.com/lawrencejones/pg2sink/pkg/migration"
+	"github.com/lawrencejones/pg2sink/pkg/models"
 	"github.com/lawrencejones/pg2sink/pkg/publication"
 	"github.com/lawrencejones/pg2sink/pkg/sinks"
 	"github.com/lawrencejones/pg2sink/pkg/subscription"
@@ -46,7 +47,8 @@ var (
 	add      = app.Command("add", "Add table to existing publication")
 	addTable = add.Flag("table", "Table to add to publication, e.g. public.example").Required().String()
 
-	remove = app.Command("remove", "Remove table from existing publication")
+	remove      = app.Command("remove", "Remove table from existing publication")
+	removeTable = remove.Flag("table", "Table to remove from publication, e.g. public.example").Required().String()
 
 	stream                          = app.Command("stream", "Stream changes into sink")
 	streamMetricsAddress            = stream.Flag("metrics-address", "Address to bind HTTP metrics listener").Default("127.0.0.1").String()
@@ -77,7 +79,6 @@ var (
 
 func main() {
 	command := kingpin.MustParse(app.Parse(os.Args[1:]))
-
 	logger = kitlog.NewLogfmtLogger(kitlog.NewSyncWriter(os.Stderr))
 
 	if *debug {
@@ -131,6 +132,43 @@ func main() {
 		}
 
 		logger.Log("event", "added_table")
+
+	case remove.FullCommand():
+		pool := mustConnectionPool(1)
+		tx, err := pool.Begin()
+		if err != nil {
+			kingpin.Fatalf("failed to open transaction: %v", err)
+		}
+
+		publicationID, err := publication.Publication(*publicationName).GetIdentifier(ctx, tx)
+		if err != nil {
+			kingpin.Fatalf("failed to find matching publication: %v", err)
+		}
+
+		logger := kitlog.With(logger, "table", *removeTable, "publication", *publicationName)
+		if err := publication.Publication(*publicationName).DropTable(ctx, tx, *removeTable); err != nil {
+			kingpin.Fatalf("failed to remove table from publication: %v", err)
+		}
+
+		jobStore := models.ImportJobStore{tx}
+		jobs, err := jobStore.Where(ctx, `publication_id = $1 and table_name = $2`, publicationID, *removeTable)
+		if err != nil {
+			kingpin.Fatalf("failed to find import jobs for table: %v", err)
+		}
+
+		for _, job := range jobs {
+			logger.Log("event", "expiring_import_job", "job_id", job.ID, "subscription_name",
+				job.SubscriptionName, "completed_at", job.CompletedAt)
+			if _, err := jobStore.Expire(ctx, job.ID); err != nil {
+				kingpin.Fatalf("failed to mark job as expired: %v", err)
+			}
+		}
+
+		if err := tx.Commit(); err != nil {
+			kingpin.Fatalf("failed to commit transaction: %v", err)
+		}
+
+		logger.Log("event", "removed_table")
 
 	case stream.FullCommand():
 		var (
