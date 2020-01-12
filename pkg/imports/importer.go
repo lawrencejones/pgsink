@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/pgtype"
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 	"github.com/lawrencejones/pg2sink/pkg/logical"
+	"github.com/lawrencejones/pg2sink/pkg/models"
 	"github.com/lawrencejones/pg2sink/pkg/sinks"
 	"github.com/lawrencejones/pg2sink/pkg/util"
 	"github.com/pkg/errors"
@@ -88,7 +89,7 @@ func (i Importer) runWorker(ctx context.Context) {
 	}
 }
 
-func (i Importer) acquireAndWork(ctx context.Context, logger kitlog.Logger) (*Job, error) {
+func (i Importer) acquireAndWork(ctx context.Context, logger kitlog.Logger) (*models.ImportJob, error) {
 	tx, err := i.pool.Begin()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open job acquire transaction")
@@ -100,7 +101,7 @@ func (i Importer) acquireAndWork(ctx context.Context, logger kitlog.Logger) (*Jo
 		}
 	}()
 
-	job, err := JobStore{i.pool}.Acquire(ctx, tx, i.opts.PublicationID, i.opts.SubscriptionName)
+	job, err := models.ImportJobStore{i.pool}.Acquire(ctx, tx, i.opts.PublicationID, i.opts.SubscriptionName)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to acquire job")
 	}
@@ -111,7 +112,7 @@ func (i Importer) acquireAndWork(ctx context.Context, logger kitlog.Logger) (*Jo
 
 	logger = kitlog.With(logger, "job_id", job.ID, "table_name", job.TableName)
 	if err := i.work(ctx, logger, tx, job); err != nil {
-		if err := (JobStore{tx}).SetError(ctx, job.ID, err); err != nil {
+		if err := i.jobStore(tx).SetError(ctx, job.ID, err); err != nil {
 			logger.Log("error", err, "msg", "failed to set the error on our job")
 		}
 
@@ -139,7 +140,7 @@ var (
 	)
 )
 
-func (i Importer) work(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, job *Job) error {
+func (i Importer) work(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, job *models.ImportJob) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -269,7 +270,7 @@ forEachRow:
 
 	if modification == nil {
 		logger.Log("event", "import.complete")
-		_, err := JobStore{tx}.Complete(ctx, job.ID)
+		_, err := i.jobStore(tx).Complete(ctx, job.ID)
 		return err
 	}
 
@@ -280,13 +281,21 @@ forEachRow:
 	}
 
 	logger.Log("event", "import.update_cursor", "cursor", lastCursor)
-	return JobStore{tx}.UpdateCursor(ctx, job.ID, string(lastCursorText))
+	return i.jobStore(tx).UpdateCursor(ctx, job.ID, string(lastCursorText))
+}
+
+func (i Importer) jobStore(conn models.Connection) models.ImportJobStore {
+	if conn == nil {
+		conn = i.pool
+	}
+
+	return models.ImportJobStore{conn}
 }
 
 // buildRelation generates the logical.Relation structure by querying Postgres catalog
 // tables. Importantly, this populates the relation.Columns slice, providing type
 // information that can later be used to marshal Golang types.
-func buildRelation(ctx context.Context, conn Connection, tableName string) (*logical.Relation, error) {
+func buildRelation(ctx context.Context, conn models.Connection, tableName string) (*logical.Relation, error) {
 	// Eg. oid = 16411, namespace = public, relname = example
 	query := `
 	select pg_class.oid as oid
@@ -362,7 +371,7 @@ func (n noPrimaryKeyError) Error() string {
 
 // getPrimaryKeyColumn identifies the primary key column of the given table. It only
 // supports tables with primary keys, and of those, only single column primary keys.
-func getPrimaryKeyColumn(ctx context.Context, conn Connection, tableName string) (string, error) {
+func getPrimaryKeyColumn(ctx context.Context, conn models.Connection, tableName string) (string, error) {
 	query := `
 	select array_agg(pg_attribute.attname)
 	from pg_index join pg_attribute

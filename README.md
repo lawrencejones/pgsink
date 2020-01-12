@@ -7,6 +7,7 @@ is GCP Pub/Sub.
 
 ```
 pkg/changelog     // Schema & Modification types, the public output types
+pkg/models        // Internal database models, such as ImportJob
 pkg/imports       // manages imports for subscribed tables
 pkg/logical       // all logical decoding helpers
 pkg/migration     // database migrations for internal pg2sink tables

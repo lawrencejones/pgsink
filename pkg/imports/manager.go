@@ -5,7 +5,7 @@ import (
 	"time"
 
 	kitlog "github.com/go-kit/kit/log"
-	"github.com/jackc/pgx"
+	"github.com/lawrencejones/pg2sink/pkg/models"
 	"github.com/lawrencejones/pg2sink/pkg/publication"
 	"github.com/lawrencejones/pg2sink/pkg/util"
 	"github.com/pkg/errors"
@@ -17,10 +17,10 @@ type ManagerOptions struct {
 	PollInterval     time.Duration // interval to poll for new import jobs
 }
 
-func NewManager(logger kitlog.Logger, pool *pgx.ConnPool, opts ManagerOptions) *Manager {
+func NewManager(logger kitlog.Logger, conn models.Connection, opts ManagerOptions) *Manager {
 	return &Manager{
 		logger: logger,
-		pool:   pool,
+		conn:   conn,
 		opts:   opts,
 	}
 }
@@ -28,7 +28,7 @@ func NewManager(logger kitlog.Logger, pool *pgx.ConnPool, opts ManagerOptions) *
 // Manager ensures we create import jobs for all tables that have not yet been imported.
 type Manager struct {
 	logger kitlog.Logger
-	pool   *pgx.ConnPool
+	conn   models.Connection
 	opts   ManagerOptions
 }
 
@@ -40,15 +40,16 @@ type Manager struct {
 // adds import jobs for those tables.
 func (i Manager) Sync(ctx context.Context) error {
 	logger := kitlog.With(i.logger, "publication_id", i.opts.PublicationID)
+	jobStore := models.ImportJobStore{i.conn}
 
 	for {
 		logger.Log("event", "sync.poll")
-		publishedTables, err := publication.GetPublishedTables(ctx, i.pool, i.opts.PublicationID)
+		publishedTables, err := publication.GetPublishedTables(ctx, i.conn, i.opts.PublicationID)
 		if err != nil {
 			return errors.Wrap(err, "failed to query published tables")
 		}
 
-		importedTables, err := JobStore{i.pool}.GetImportedTables(ctx, i.opts.PublicationID, i.opts.SubscriptionName)
+		importedTables, err := jobStore.GetImportedTables(ctx, i.opts.PublicationID, i.opts.SubscriptionName)
 		if err != nil {
 			return errors.Wrap(err, "failed to query imported tables")
 		}
@@ -56,7 +57,7 @@ func (i Manager) Sync(ctx context.Context) error {
 		notImportedTables := util.Diff(publishedTables, importedTables)
 		for _, table := range notImportedTables {
 			logger.Log("event", "import_job.create", "table", table)
-			job, err := JobStore{i.pool}.Create(ctx, i.opts.PublicationID, i.opts.SubscriptionName, table)
+			job, err := jobStore.Create(ctx, i.opts.PublicationID, i.opts.SubscriptionName, table)
 			if err != nil {
 				return errors.Wrap(err, "failed to create import job")
 			}

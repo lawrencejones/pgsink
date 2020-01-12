@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/pgtype"
+	"github.com/lawrencejones/pg2sink/pkg/models"
 )
 
 // GetPublishedTables returns a slice of table names that exist against the given
 // publication. It will error if the publication does not exist, or if the identifier does
 // not match.
-func GetPublishedTables(ctx context.Context, pool *pgx.ConnPool, identifier string) ([]string, error) {
+func GetPublishedTables(ctx context.Context, conn models.Connection, identifier string) ([]string, error) {
 	// Careful! This query has been constructed so that the scan will fail if there is no
 	// matching publication. It's important we do this so we can detect if a publication has
 	// disappeared under us, so don't go changing this without understanding the
@@ -27,7 +27,7 @@ func GetPublishedTables(ctx context.Context, pool *pgx.ConnPool, identifier stri
 	tablesReceiver := pgtype.TextArray{}
 	var tables []string
 
-	if err := pool.QueryRowEx(ctx, query, nil, identifier).Scan(&tablesReceiver); err != nil {
+	if err := conn.QueryRowEx(ctx, query, nil, identifier).Scan(&tablesReceiver); err != nil {
 		return nil, err
 	}
 
@@ -38,22 +38,22 @@ func GetPublishedTables(ctx context.Context, pool *pgx.ConnPool, identifier stri
 type Publication string
 
 // AddTable adds the specified table into the publication
-func (p Publication) AddTable(ctx context.Context, pool *pgx.ConnPool, table string) error {
+func (p Publication) AddTable(ctx context.Context, conn models.Connection, table string) error {
 	query := fmt.Sprintf(`alter publication %s add table %s;`, string(p), table)
-	_, err := pool.ExecEx(ctx, query, nil)
+	_, err := conn.ExecEx(ctx, query, nil)
 	return err
 }
 
 // SetTables resets the publication to include the given tables only
-func (p Publication) SetTables(ctx context.Context, pool *pgx.ConnPool, tables ...string) error {
+func (p Publication) SetTables(ctx context.Context, conn models.Connection, tables ...string) error {
 	query := fmt.Sprintf(`alter publication %s set table %s;`, string(p), strings.Join(tables, ", "))
-	_, err := pool.ExecEx(ctx, query, nil)
+	_, err := conn.ExecEx(ctx, query, nil)
 	return err
 }
 
 // RemoveTable adds the specified table into the publication
-func (p Publication) RemoveTable(ctx context.Context, pool *pgx.ConnPool, table string) error {
+func (p Publication) RemoveTable(ctx context.Context, conn models.Connection, table string) error {
 	query := fmt.Sprintf(`alter publication %s remove table %s;`, string(p), table)
-	_, err := pool.ExecEx(ctx, query, nil)
+	_, err := conn.ExecEx(ctx, query, nil)
 	return err
 }
