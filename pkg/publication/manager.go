@@ -137,7 +137,7 @@ func (p *Manager) Sync(ctx context.Context) (err error) {
 				return errors.Wrap(err, "failed to discover watched tables")
 			}
 
-			published, err := GetPublishedTables(ctx, p.pool, p.publicationID)
+			published, err := Publication(p.opts.Name).GetPublishedTables(ctx, p.pool, p.publicationID)
 			if err != nil {
 				return errors.Wrap(err, "failed to query published tables")
 			}

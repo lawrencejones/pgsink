@@ -12,6 +12,7 @@ import (
 )
 
 type ManagerOptions struct {
+	PublicationName  string        // name of the current publication
 	PublicationID    string        // identifier of the current publication
 	SubscriptionName string        // name of subscription (should be the replication slot name)
 	PollInterval     time.Duration // interval to poll for new import jobs
@@ -41,10 +42,11 @@ type Manager struct {
 func (i Manager) Sync(ctx context.Context) error {
 	logger := kitlog.With(i.logger, "publication_id", i.opts.PublicationID)
 	jobStore := models.ImportJobStore{i.conn}
+	pub := publication.Publication(i.opts.PublicationName)
 
 	for {
 		logger.Log("event", "sync.poll")
-		publishedTables, err := publication.GetPublishedTables(ctx, i.conn, i.opts.PublicationID)
+		publishedTables, err := pub.GetPublishedTables(ctx, i.conn, i.opts.PublicationID)
 		if err != nil {
 			return errors.Wrap(err, "failed to query published tables")
 		}

@@ -38,7 +38,7 @@ var _ = Describe("Manager", func() {
 	)
 
 	getPublishedTables := func() []string {
-		tables, _ := publication.GetPublishedTables(ctx, pool, pubmgr.GetPublicationID())
+		tables, _ := publication.Publication(name).GetPublishedTables(ctx, pool, pubmgr.GetPublicationID())
 		return tables
 	}
 

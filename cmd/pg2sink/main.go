@@ -22,6 +22,7 @@ import (
 	"github.com/lawrencejones/pg2sink/pkg/publication"
 	"github.com/lawrencejones/pg2sink/pkg/sinks"
 	"github.com/lawrencejones/pg2sink/pkg/subscription"
+	"github.com/lawrencejones/pg2sink/pkg/util"
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -46,6 +47,9 @@ var (
 
 	add      = app.Command("add", "Add table to existing publication")
 	addTable = add.Flag("table", "Table to add to publication, e.g. public.example").Required().String()
+
+	resync      = app.Command("resync", "Resync table for a given subscription")
+	resyncTable = resync.Flag("table", "Table to mark for resync").Required().String()
 
 	remove      = app.Command("remove", "Remove table from existing publication")
 	removeTable = remove.Flag("table", "Table to remove from publication, e.g. public.example").Required().String()
@@ -132,6 +136,50 @@ func main() {
 		}
 
 		logger.Log("event", "added_table")
+
+	case resync.FullCommand():
+		pool := mustConnectionPool(1)
+		pub := publication.Publication(*publicationName)
+		publicationID, err := pub.GetIdentifier(ctx, pool)
+		if err != nil {
+			kingpin.Fatalf("failed to find publication: %v", err)
+		}
+
+		published, err := pub.GetPublishedTables(ctx, pool, publicationID)
+		if err != nil {
+			kingpin.Fatalf("failed to list published tables: %v", err)
+		}
+
+		if !util.Includes(published, *resyncTable) {
+			kingpin.Fatalf("table %s is not in publication %s", *resyncTable, publicationName)
+		}
+
+		tx, err := pool.Begin()
+		if err != nil {
+			kingpin.Fatalf("failed to open transaction: %v", err)
+		}
+
+		jobStore := models.ImportJobStore{tx}
+		jobs, err := jobStore.Where(ctx,
+			`publication_id = $1 and subscription_name = $2 and table_name = $3`,
+			publicationID, *slotName, *resyncTable)
+		if err != nil {
+			kingpin.Fatalf("failed to find import jobs for table: %v", err)
+		}
+
+		for _, job := range jobs {
+			logger.Log("event", "expiring_import_job", "job_id", job.ID, "subscription_name",
+				job.SubscriptionName, "completed_at", job.CompletedAt)
+			if _, err := jobStore.Expire(ctx, job.ID); err != nil {
+				kingpin.Fatalf("failed to mark job as expired: %v", err)
+			}
+		}
+
+		if err := tx.Commit(); err != nil {
+			kingpin.Fatalf("failed to commit transaction: %v", err)
+		}
+
+		logger.Log("event", "resync_triggered")
 
 	case remove.FullCommand():
 		pool := mustConnectionPool(1)
@@ -236,6 +284,7 @@ func main() {
 				logger,
 				mustConnectionPool(1),
 				imports.ManagerOptions{
+					PublicationName:  *publicationName,
 					PublicationID:    pubmgr.GetPublicationID(),
 					SubscriptionName: *slotName,
 					PollInterval:     *streamImportManagerPollInterval,
