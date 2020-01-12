@@ -13,7 +13,7 @@ func init() {
 func Up20200112145911(tx *sql.Tx) error {
 	_, err := tx.Exec(`
 	alter table pg2sink.import_jobs
-	add column expires_at timestamptz;
+	add column expired_at timestamptz;
 	`)
 
 	return err
@@ -22,7 +22,7 @@ func Up20200112145911(tx *sql.Tx) error {
 func Down20200112145911(tx *sql.Tx) error {
 	_, err := tx.Exec(`
 	alter table pg2sink.import_jobs
-	drop column expires_at;
+	drop column expired_at;
 	`)
 
 	return err
