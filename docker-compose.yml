@@ -56,6 +56,14 @@ services:
       - 3000:3000
     restart: always
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.16.0
+    ports:
+      - 5775:5775/udp  # zipkin.thrift compact
+      - 6831:6831/udp  # jaeger.thrift compact
+      - 6832:6832/udp  # jaeger.thrift binary
+      - 16686:16686    # Frontend
+
 # Persist data across restarts
 volumes:
   postgres-data:

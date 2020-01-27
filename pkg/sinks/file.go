@@ -8,6 +8,7 @@ import (
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 	"github.com/lawrencejones/pg2sink/pkg/changelog/serialize"
 	"github.com/pkg/errors"
+	"go.opencensus.io/trace"
 )
 
 var _ Sink = &File{}
@@ -52,7 +53,10 @@ type File struct {
 	sync.Mutex
 }
 
-func (s *File) Consume(_ context.Context, entries changelog.Changelog, ack AckCallback) error {
+func (s *File) Consume(ctx context.Context, entries changelog.Changelog, ack AckCallback) error {
+	ctx, span := trace.StartSpan(ctx, "pkg/sinks.File.Consume")
+	defer span.End()
+
 	for envelope := range entries {
 		switch entry := envelope.Unwrap().(type) {
 		case *changelog.Schema:
