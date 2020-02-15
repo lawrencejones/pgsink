@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"syscall"
 
+	"contrib.go.opencensus.io/exporter/jaeger"
 	"github.com/alecthomas/kingpin"
 	"github.com/davecgh/go-spew/spew"
 	kitlog "github.com/go-kit/kit/log"
@@ -25,6 +26,7 @@ import (
 	"github.com/lawrencejones/pg2sink/pkg/util"
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opencensus.io/trace"
 )
 
 var logger kitlog.Logger
@@ -57,6 +59,7 @@ var (
 	stream                          = app.Command("stream", "Stream changes into sink")
 	streamMetricsAddress            = stream.Flag("metrics-address", "Address to bind HTTP metrics listener").Default("127.0.0.1").String()
 	streamMetricsPort               = stream.Flag("metrics-port", "Port to bind HTTP metrics listener").Default("9525").Uint16()
+	streamJaegerAgentEndpoint       = stream.Flag("jaeger-agent-endpoint", "Endpoint for Jaeger agent").Default("localhost:6831").String()
 	streamManagePublication         = stream.Flag("manage-publication", "Auto-manage tables in publication").Default("false").Bool()
 	streamSchemas                   = stream.Flag("schema", "Postgres schema to watch for changes").Default("public").Strings()
 	streamExcludes                  = stream.Flag("exclude", "Table name to exclude from changes").Strings()
@@ -245,6 +248,20 @@ func main() {
 		logger.Log("event", "metrics.listen", "address", *streamMetricsAddress, "port", *streamMetricsPort)
 		http.Handle("/metrics", promhttp.Handler())
 		go http.ListenAndServe(fmt.Sprintf("%s:%v", *streamMetricsAddress, *streamMetricsPort), nil)
+
+		jexporter, err := jaeger.NewExporter(jaeger.Options{
+			AgentEndpoint: *streamJaegerAgentEndpoint,
+			Process: jaeger.Process{
+				ServiceName: "pg2sink",
+			},
+		})
+
+		if err != nil {
+			kingpin.Fatalf("failed to configure jaeger: %v", err)
+		}
+
+		trace.RegisterExporter(jexporter)
+		trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
 
 		{
 			logger := kitlog.With(logger, "component", "publication")

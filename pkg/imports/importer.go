@@ -3,22 +3,22 @@ package imports
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
-	kitlog "github.com/go-kit/kit/log"
-	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/pgtype"
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 	"github.com/lawrencejones/pg2sink/pkg/logical"
 	"github.com/lawrencejones/pg2sink/pkg/models"
 	"github.com/lawrencejones/pg2sink/pkg/sinks"
-	"github.com/lawrencejones/pg2sink/pkg/util"
+
+	kitlog "github.com/go-kit/kit/log"
+	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/pgtype"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	uuid "github.com/satori/go.uuid"
+	"go.opencensus.io/trace"
 )
 
 type ImporterOptions struct {
@@ -130,6 +130,14 @@ var (
 		},
 		[]string{"table"},
 	)
+	workQueryDurationSeconds = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "pg2sink_importer_work_query_duration_seconds",
+			Help:    "Distribution of time import queries were held open",
+			Buckets: prometheus.ExponentialBuckets(0.125, 2, 12), // 0.125 -> 512s
+		},
+		[]string{"table"},
+	)
 	workSinkFlushDurationSeconds = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "pg2sink_importer_work_sink_flush_duration_seconds",
@@ -144,97 +152,115 @@ func (i Importer) work(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, jo
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	ctx, span := trace.StartSpan(ctx, "pkg/imports.Importer.work")
+	defer span.End()
+	span.AddAttributes(
+		trace.StringAttribute("publication_id", job.PublicationID),
+		trace.StringAttribute("subscription_name", job.SubscriptionName),
+		trace.StringAttribute("table", job.TableName),
+		trace.StringAttribute("cursor", fmt.Sprintf("%v", job.Cursor)),
+		trace.Int64Attribute("job_id", job.ID),
+		trace.Int64Attribute("buffer_size", int64(i.opts.BufferSize)),
+		trace.Int64Attribute("batch_limit", int64(i.opts.BatchLimit)),
+	)
+
+	cfg, err := buildJobConfig(ctx, logger, tx, job)
+	if err != nil {
+		return errors.Wrap(err, "failed to build job config")
+	}
+
+	// Open a channel for changelog messages. We'll first send a schema, then the
+	// modifications
 	entries := make(changelog.Changelog, i.opts.BufferSize)
-	sinkConsumeChan := make(chan error)
+	sinkDoneChan := make(chan error)
 	go func() {
-		sinkConsumeChan <- i.sink.Consume(ctx, entries, nil)
-		close(sinkConsumeChan)
+		sinkDoneChan <- i.sink.Consume(ctx, entries, nil)
+		close(sinkDoneChan)
 	}()
 
-	// We should query for the primary key as the first thing we do, as this may fail if the
-	// table is misconfigured. It's better to fail here, before we've pushed anything into
-	// the changelog, than after pushing the schema when we discover the table is
-	// incompatible.
-	logger.Log("event", "primary_key.lookup", "msg", "querying Postgres for relations primary key column")
-	primaryKey, err := getPrimaryKeyColumn(ctx, tx, job.TableName)
-	if err != nil {
-		return err
-	}
-
-	logger.Log("event", "relation.build", "msg", "querying Postgres for relation type information")
-	relation, err := buildRelation(ctx, tx, job.TableName)
-	if err != nil {
-		return errors.Wrap(err, "failed to build relation for table")
-	}
-
 	logger.Log("event", "changelog.push_schema", "msg", "pushing relation schema")
-	schema := changelog.SchemaFromRelation(time.Now(), nil, relation)
+	schema := changelog.SchemaFromRelation(time.Now(), nil, cfg.Relation)
 	entries <- changelog.Entry{Schema: &schema}
 
-	var primaryKeyScanner logical.ValueScanner
-
-	// Go can't handle splatting non-empty-interface types into a parameter list of
-	// empty-interfaces, so we have to construct an interface{} slice of scanners.
-	scanners := make([]interface{}, len(relation.Columns))
-	for idx, column := range relation.Columns {
-		scanner := logical.TypeForOID(column.Type)
-		scanners[idx] = scanner
-
-		// We'll need this scanner to convert the cursor value between what the table accepts
-		// and what we'll store in import_jobs
-		if column.Name == primaryKey {
-			primaryKeyScanner = scanner
-		}
-	}
-
-	// We need to translate the import_jobs.cursor value, which is text, into a type that
-	// will be supported for querying into the table. We can use the primaryKeyScanner for
-	// this, which ensures we reliably encode/decode Postgres types.
-	var cursor interface{}
-	if job.Cursor != nil {
-		if err := primaryKeyScanner.Scan(*job.Cursor); err != nil {
-			return errors.Wrap(err, "incompatible cursor in import_jobs table")
-		}
-
-		cursor = primaryKeyScanner.Get()
-	}
-
-	logger.Log("event", "import.query_exec", "msg", "executing an import query", "cursor", cursor)
-	queryStart := time.Now()
-	query := buildQuery(relation, primaryKey, i.opts.BatchLimit, cursor)
-	rows, err := tx.QueryEx(ctx, query, nil, util.Compact([]interface{}{cursor})...)
+	logger.Log("event", "changelog.scan_modification_batch")
+	batchSize, lastCursor, earlyExit, err := i.scanBatch(ctx, logger, tx, cfg, entries)
 	if err != nil {
-		return errors.Wrap(err, "failed to query table")
+		return errors.Wrap(err, "failed to scan batch of imported rows")
 	}
 
-	defer rows.Close() // in case we panic, or forget to call it
+	// Now we've scanned all the rows, we should close our entries channel
+	close(entries)
+
+	// Wait for the sink to flush, or our context to end
+	logger.Log("event", "changelog.wait_for_sink", "msg", "pausing until sink has flushed all changes")
+	if err := i.waitForSink(ctx, logger, job, sinkDoneChan); err != nil {
+		return errors.Wrap(err, "failed waiting for sink")
+	}
+
+	logger.Log("event", "import.update_cursor", "cursor", lastCursor)
+	if err := i.jobStore(tx).UpdateCursor(ctx, job.ID, lastCursor); err != nil {
+		return errors.Wrap(err, "failed to update cursor")
+	}
+
+	if !earlyExit && batchSize < i.opts.BatchLimit {
+		logger.Log("event", "import.complete", "msg", "imported all rows, marking as complete")
+		if _, err := i.jobStore(tx).Complete(ctx, job.ID); err != nil {
+			return errors.Wrap(err, "failed to mark job as complete")
+		}
+	}
+
+	return nil
+}
+
+// scanBatch runs a query against the import table and scans each row into the changelog.
+// It holds the query for up-to the SnapshotTimeout, ensuring we don't block vacuums or
+// other maintenance tasks.
+func (i Importer) scanBatch(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, cfg *JobConfig, entries changelog.Changelog) (int, string, bool, error) {
+	ctx, span := trace.StartSpan(ctx, "pkg/imports.Importer.scanBatch")
+	defer span.End()
+
+	fail := func(err error) (int, string, bool, error) {
+		return -1, "", false, err
+	}
 
 	var (
 		timestamp         pgtype.Timestamp
-		modificationCount int
-		modification      *changelog.Modification
+		earlyExit         = false
+		modificationCount = 0
 		holdSnapshotUntil = time.After(i.opts.SnapshotTimeout)
 		tableRowsRead     = workPostgresRowsReadTotal.With(
-			prometheus.Labels{"table": job.TableName},
+			prometheus.Labels{"table": cfg.TableName},
 		)
 	)
 
+	rows, err := cfg.Query(ctx, tx, i.opts.BatchLimit)
+	if err != nil {
+		return fail(errors.Wrap(err, "failed to query table"))
+	}
+
+	defer rows.Close()
+	defer prometheus.NewTimer(prometheus.ObserverFunc(func(v float64) {
+		logger.Log("event", "import.query_close", "duration", v,
+			"early_exit", earlyExit, "modification_count", modificationCount)
+		workQueryDurationSeconds.WithLabelValues(cfg.TableName).Observe(v)
+	})).ObserveDuration()
+
 forEachRow:
 	for rows.Next() {
-		if err := rows.Scan(append([]interface{}{&timestamp}, scanners...)...); err != nil {
-			return errors.Wrap(err, "failed to scan table")
+		if err := rows.Scan(append([]interface{}{&timestamp}, cfg.Scanners...)...); err != nil {
+			return fail(errors.Wrap(err, "failed to scan table"))
 		}
 
 		row := map[string]interface{}{}
-		for idx, column := range relation.Columns {
-			row[column.Name] = scanners[idx].(logical.ValueScanner).Get()
+		for idx, column := range cfg.Relation.Columns {
+			row[column.Name] = cfg.Scanners[idx].(logical.ValueScanner).Get()
 		}
 
 		tableRowsRead.Inc()
 		modificationCount++
-		modification = &changelog.Modification{
+		modification := &changelog.Modification{
 			Timestamp: timestamp.Get().(time.Time),
-			Namespace: relation.String(),
+			Namespace: cfg.Relation.String(),
 			After:     row,
 		}
 
@@ -242,46 +268,41 @@ forEachRow:
 
 		select {
 		case <-holdSnapshotUntil:
+			span.Annotate([]trace.Attribute{}, "Exceeded snapshot deadline")
+			earlyExit = true
 			break forEachRow
 		default: // continue
 		}
 	}
 
-	logger = kitlog.With(logger, "modification_count", modificationCount)
+	// The last processed primary key is the last scanned row, so we can use EncodeText to
+	// retrieve it.
+	lastCursor, err := cfg.PrimaryKeyScanner.EncodeText(nil, []byte{})
+	if err != nil {
+		return fail(errors.Wrap(err, "failed to encode last processed cursor"))
+	}
 
-	// Release our snapshot, which was held for the benefit of our cursor. Also close our
-	// entries channel, as we have nothing left to push.
-	logger.Log("event", "import.query_close", "duration", time.Since(queryStart).Seconds())
-	rows.Close()
-	close(entries)
+	// Release our snapshot, which was held for the benefit of our cursor
+	return modificationCount, string(lastCursor), earlyExit, nil
+}
 
-	flushStart := time.Now()
+func (i Importer) waitForSink(ctx context.Context, logger kitlog.Logger, job *models.ImportJob, sinkDoneChan chan error) error {
+	ctx, span := trace.StartSpan(ctx, "pkg/imports.Importer.waitForSink")
+	defer span.End()
+
+	timer := prometheus.NewTimer(prometheus.ObserverFunc(func(v float64) {
+		logger.Log("event", "wait_for_sink", "duration", v)
+		workSinkFlushDurationSeconds.WithLabelValues(job.TableName).Observe(v)
+	}))
+	defer timer.ObserveDuration()
+
 	select {
 	case <-ctx.Done():
+		span.Annotate([]trace.Attribute{}, "Timed out before sink could flush")
 		return fmt.Errorf("timed out before sink could flush")
-	case err := <-sinkConsumeChan:
-		flushDuration := time.Since(flushStart)
-		workSinkFlushDurationSeconds.WithLabelValues(job.TableName).Observe(flushDuration.Seconds())
-		logger.Log("event", "sink_consume.flush", "duration", flushDuration.Seconds())
-		if err != nil {
-			return errors.Wrap(err, "failed to flush sink")
-		}
+	case err := <-sinkDoneChan:
+		return errors.Wrap(err, "failed to flush sink")
 	}
-
-	if modification == nil {
-		logger.Log("event", "import.complete")
-		_, err := i.jobStore(tx).Complete(ctx, job.ID)
-		return err
-	}
-
-	lastCursor := modification.After.(map[string]interface{})[primaryKey]
-	lastCursorText, err := primaryKeyScanner.EncodeText(nil, []byte{})
-	if err != nil {
-		return errors.Wrap(err, "failed to encode last processed cursor")
-	}
-
-	logger.Log("event", "import.update_cursor", "cursor", lastCursor)
-	return i.jobStore(tx).UpdateCursor(ctx, job.ID, string(lastCursorText))
 }
 
 func (i Importer) jobStore(conn models.Connection) models.ImportJobStore {
@@ -290,112 +311,4 @@ func (i Importer) jobStore(conn models.Connection) models.ImportJobStore {
 	}
 
 	return models.ImportJobStore{conn}
-}
-
-// buildRelation generates the logical.Relation structure by querying Postgres catalog
-// tables. Importantly, this populates the relation.Columns slice, providing type
-// information that can later be used to marshal Golang types.
-func buildRelation(ctx context.Context, conn models.Connection, tableName string) (*logical.Relation, error) {
-	// Eg. oid = 16411, namespace = public, relname = example
-	query := `
-	select pg_class.oid as oid
-	     , nspname as namespace
-	     , relname as name
-		from pg_class join pg_namespace on pg_class.relnamespace=pg_namespace.oid
-	 where pg_class.oid = $1::regclass::oid;
-	`
-
-	relation := &logical.Relation{Columns: []logical.Column{}}
-	err := conn.QueryRowEx(ctx, query, nil, tableName).Scan(&relation.ID, &relation.Namespace, &relation.Name)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to identify table namespace and name")
-	}
-
-	// Eg. name = id, type = 20
-	columnQuery := `
-	select attname as name
-			 , atttypid as type
-	  from pg_attribute
-	 where attrelid = $1 and attnum > 0 and not attisdropped
-	 order by attnum;
-	`
-
-	rows, err := conn.QueryEx(ctx, columnQuery, nil, relation.ID)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to query pg_attribute for relation columns")
-	}
-
-	defer rows.Close()
-
-	for rows.Next() {
-		column := logical.Column{}
-		if err := rows.Scan(&column.Name, &column.Type); err != nil {
-			return nil, errors.Wrap(err, "failed to scan column types")
-		}
-
-		relation.Columns = append(relation.Columns, column)
-	}
-
-	return relation, nil
-}
-
-// buildQuery creates a query string for the given relation, with an optional cursor.
-// Prepended to the columns is now(), which enables us to timestamp our imported rows to
-// the database time.
-func buildQuery(relation *logical.Relation, primaryKey string, limit int, cursor interface{}) string {
-	columnNames := make([]string, len(relation.Columns))
-	for idx, column := range relation.Columns {
-		columnNames[idx] = column.Name
-	}
-
-	query := fmt.Sprintf(`select now(), %s from %s`, strings.Join(columnNames, ", "), relation.String())
-	if cursor != nil {
-		query += fmt.Sprintf(` where %s > $1`, primaryKey)
-	}
-	query += fmt.Sprintf(` order by %s limit %d`, primaryKey, limit)
-
-	return query
-}
-
-type multiplePrimaryKeysError []string
-
-func (m multiplePrimaryKeysError) Error() string {
-	return fmt.Sprintf("unsupported multiple primary keys: %s", strings.Join(m, ","))
-}
-
-type noPrimaryKeyError struct{}
-
-func (n noPrimaryKeyError) Error() string {
-	return "no primary key found"
-}
-
-// getPrimaryKeyColumn identifies the primary key column of the given table. It only
-// supports tables with primary keys, and of those, only single column primary keys.
-func getPrimaryKeyColumn(ctx context.Context, conn models.Connection, tableName string) (string, error) {
-	query := `
-	select array_agg(pg_attribute.attname)
-	from pg_index join pg_attribute
-	on pg_attribute.attrelid = pg_index.indrelid and pg_attribute.attnum = ANY(pg_index.indkey)
-	where pg_index.indrelid = $1::regclass
-	and pg_index.indisprimary;
-	`
-
-	primaryKeysTextArray := pgtype.TextArray{}
-	err := conn.QueryRowEx(ctx, query, nil, tableName).Scan(&primaryKeysTextArray)
-	if err != nil {
-		return "", err
-	}
-
-	var primaryKeys []string
-	if err := primaryKeysTextArray.AssignTo(&primaryKeys); err != nil {
-		return "", err
-	}
-
-	if len(primaryKeys) == 0 {
-		return "", new(noPrimaryKeyError)
-	} else if len(primaryKeys) > 1 {
-		return "", multiplePrimaryKeysError(primaryKeys)
-	}
-
-	return primaryKeys[0], nil
 }
