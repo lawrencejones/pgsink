@@ -57,7 +57,7 @@ func (r *Registry) Marshal(msg interface{}) (relation *Relation, before interfac
 	switch cast := msg.(type) {
 	case *Insert:
 		relation = r.Get(cast.ID)
-		before = relation.Marshal(cast.Row)
+		after = relation.Marshal(cast.Row)
 	case *Update:
 		relation = r.Get(cast.ID)
 		before, after = relation.Marshal(cast.OldRow), relation.Marshal(cast.Row)

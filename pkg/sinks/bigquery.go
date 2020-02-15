@@ -75,6 +75,7 @@ func (s *BigQuery) Consume(ctx context.Context, entries changelog.Changelog, ack
 	defer span.End()
 
 	specFingerprints := map[string]uint64{}
+	rawSchemaCache := map[string]bigquery.Schema{}
 	for envelope := range entries {
 		switch entry := envelope.Unwrap().(type) {
 		case *changelog.Schema:
@@ -95,11 +96,45 @@ func (s *BigQuery) Consume(ctx context.Context, entries changelog.Changelog, ack
 				return err
 			}
 
+			rawSchemaCache[entry.Spec.Namespace] = raw.Schema
 			if _, err := s.syncViewTable(ctx, entry, raw); err != nil {
 				return err
 			}
 		case *changelog.Modification:
-			panic("not implemented")
+			rawSchema := rawSchemaCache[entry.Namespace]
+			if rawSchema == nil {
+				panic(fmt.Sprintf("no schema for %s, cannot proceed", entry.Namespace))
+			}
+
+			var payloadSchema bigquery.Schema
+			for _, field := range rawSchema {
+				if field.Name == "payload" {
+					payloadSchema = field.Schema
+					break
+				}
+			}
+
+			// When deletion, we'll update this row with the contents at delete
+			row := entry.AfterOrBefore()
+			values := []bigquery.Value{}
+			for _, field := range payloadSchema {
+				values = append(values, row[field.Name])
+			}
+
+			table := s.dataset.Table(fmt.Sprintf("%s_raw", getTableName(entry.Namespace)))
+			err := table.Inserter().Put(ctx, &bigquery.ValuesSaver{
+				Schema: rawSchema,
+				Row: []bigquery.Value{
+					entry.Timestamp,
+					entry.LSN,
+					entry.Operation(),
+					bigquery.Value(values),
+				},
+			})
+
+			if err != nil {
+				return errors.Wrapf(err, "failed to insert into table %s", table.FullyQualifiedName())
+			}
 		}
 	}
 
@@ -111,7 +146,7 @@ func (s *BigQuery) Consume(ctx context.Context, entries changelog.Changelog, ack
 func (s *BigQuery) syncRawTable(ctx context.Context, entry *changelog.Schema) (*bigquery.TableMetadata, error) {
 	logger := kitlog.With(s.logger, "postgres_relation", entry.Spec.Namespace)
 
-	tableName := fmt.Sprintf("%s_raw", getTableName(entry))
+	tableName := fmt.Sprintf("%s_raw", getTableName(entry.Spec.Namespace))
 	logger = kitlog.With(logger, "table", tableName)
 	table := s.dataset.Table(tableName)
 	existing, err := table.Metadata(ctx)
@@ -217,7 +252,7 @@ func (s *BigQuery) buildRawTableMetadata(tableName string, spec changelog.Schema
 // syncViewTable creates or updates the most-recent row state view, which depends on the
 // raw changelog table.
 func (s *BigQuery) syncViewTable(ctx context.Context, entry *changelog.Schema, raw *bigquery.TableMetadata) (*bigquery.TableMetadata, error) {
-	tableName := getTableName(entry)
+	tableName := getTableName(entry.Spec.Namespace)
 	logger := kitlog.With(s.logger, "raw_table", raw.Name, "table", tableName)
 
 	table := s.dataset.Table(tableName)
@@ -282,10 +317,10 @@ func (s *BigQuery) buildViewTableMetadata(tableName string, raw *bigquery.TableM
 // doesn't support periods in the table name, so we have to remove the schema. If people
 // have multiple tables in different namespaces and switch the source schema then...
 // they're gonna have a bad time.
-func getTableName(schema *changelog.Schema) string {
-	elements := strings.SplitN(schema.Spec.Namespace, ".", 2)
+func getTableName(schemaNamespace string) string {
+	elements := strings.SplitN(schemaNamespace, ".", 2)
 	if len(elements) != 2 {
-		panic(fmt.Sprintf("invalid Postgres schema.table_name string: %s", schema.Spec.Namespace))
+		panic(fmt.Sprintf("invalid Postgres schema.table_name string: %s", schemaNamespace))
 	}
 
 	return elements[1]
