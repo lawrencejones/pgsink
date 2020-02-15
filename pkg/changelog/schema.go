@@ -1,11 +1,13 @@
 package changelog
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/pgtype"
 	"github.com/lawrencejones/pg2sink/pkg/logical"
+	goavro "github.com/linkedin/goavro/v2"
 )
 
 // Schema is a timestamped Avro schema object. We use the timestamp field to order schema
@@ -53,6 +55,26 @@ type SchemaSpecification struct {
 	Type      string        `json:"type"`      // always record
 	Name      string        `json:"name"`      // always value
 	Fields    []SchemaField `json:"fields"`    // schema fields
+}
+
+// GetFingerprint returns a unique idenfier for the schema. It currently uses the goavro
+// Rabin calculation to produce a fingerprint, but we should move to something less janky
+// if it becomes a performance problem.
+//
+// The only important thing is that any given schema returns the same fingerprint for the
+// duration of the Go process. Beyond that, you can use any value here.
+func (s SchemaSpecification) GetFingerprint() uint64 {
+	jsonBytes, err := json.Marshal(s)
+	if err != nil {
+		panic("failed to marshal SchemaSpecification into json")
+	}
+
+	codec, err := goavro.NewCodec(string(jsonBytes))
+	if err != nil {
+		panic("failed to parse Avro codec from SchemaSpecification")
+	}
+
+	return codec.Rabin
 }
 
 type SchemaField struct {

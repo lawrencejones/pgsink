@@ -34,6 +34,8 @@ func NewBigQuery(ctx context.Context, logger kitlog.Logger, opts BigQueryOptions
 		return nil, err
 	}
 
+	kitlog.With(logger, "project", opts.ProjectID, "dataset", opts.Dataset, "location", opts.Location)
+
 	dataset := client.Dataset(opts.Dataset)
 	md, err := dataset.Metadata(ctx)
 	if allowNotFound(err) != nil {
@@ -63,8 +65,8 @@ type BigQueryOptions struct {
 }
 
 type BigQuery struct {
-	dataset *bigquery.Dataset
 	logger  kitlog.Logger
+	dataset *bigquery.Dataset
 	opts    BigQueryOptions
 }
 
@@ -72,9 +74,22 @@ func (s *BigQuery) Consume(ctx context.Context, entries changelog.Changelog, ack
 	ctx, span := trace.StartSpan(ctx, "pkg/sinks.BigQuery.Consume")
 	defer span.End()
 
+	specFingerprints := map[string]uint64{}
 	for envelope := range entries {
 		switch entry := envelope.Unwrap().(type) {
 		case *changelog.Schema:
+			logger := kitlog.With(s.logger, "namespace", entry.Spec.Namespace)
+			fingerprint := entry.Spec.GetFingerprint()
+			if existingFingerprint := specFingerprints[entry.Spec.Namespace]; existingFingerprint > 0 {
+				if existingFingerprint == fingerprint {
+					logger.Log("event", "schema.already_fingerprinted", "fingerprint", existingFingerprint,
+						"msg", "not updating BigQuery schema as fingerprint has not changed")
+					continue
+				}
+			}
+
+			logger.Log("event", "schema.new_fingerprint", "fingerprint", fingerprint,
+				"msg", "fingerprint seen for the first time, syncing BigQuery schemas")
 			raw, err := s.syncRawTable(ctx, entry)
 			if err != nil {
 				return err

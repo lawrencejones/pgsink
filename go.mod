@@ -11,13 +11,12 @@ require (
 	github.com/go-kit/kit v0.9.0
 	github.com/go-sql-driver/mysql v1.4.1 // indirect
 	github.com/gofrs/uuid v3.2.0+incompatible // indirect
-	github.com/golang/snappy v0.0.1 // indirect
 	github.com/googleapis/gax-go v2.0.2+incompatible // indirect
 	github.com/jackc/pgx v3.6.0+incompatible
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/lawrencejones/pg2pubsub v0.1.0
 	github.com/lib/pq v1.3.0 // indirect
-	github.com/linkedin/goavro v2.1.0+incompatible // indirect
+	github.com/linkedin/goavro/v2 v2.9.7
 	github.com/mattn/go-sqlite3 v2.0.2+incompatible // indirect
 	github.com/oklog/run v1.0.0
 	github.com/onsi/ginkgo v1.11.0
