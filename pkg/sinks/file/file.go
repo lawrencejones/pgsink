@@ -1,4 +1,4 @@
-package sinks
+package file
 
 import (
 	"context"
@@ -7,12 +7,13 @@ import (
 
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 	"github.com/lawrencejones/pg2sink/pkg/changelog/serialize"
+	"github.com/lawrencejones/pg2sink/pkg/sinks"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 )
 
-func NewFile(opts FileOptions) (Sink, error) {
-	sink := &File{serializer: serialize.DefaultSerializer}
+func New(opts Options) (sinks.Sink, error) {
+	sink := &Sink{serializer: serialize.DefaultSerializer}
 
 	var err error
 	sink.schemas, err = openFile(opts.SchemasPath)
@@ -28,6 +29,18 @@ func NewFile(opts FileOptions) (Sink, error) {
 	return sink, nil
 }
 
+type Sink struct {
+	schemas       *os.File
+	modifications *os.File
+	serializer    serialize.Serializer
+	sync.Mutex
+}
+
+type Options struct {
+	SchemasPath       string
+	ModificationsPath string
+}
+
 func openFile(path string) (*os.File, error) {
 	switch path {
 	case "/dev/stdout":
@@ -39,20 +52,8 @@ func openFile(path string) (*os.File, error) {
 	return os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 }
 
-type FileOptions struct {
-	SchemasPath       string
-	ModificationsPath string
-}
-
-type File struct {
-	schemas       *os.File
-	modifications *os.File
-	serializer    serialize.Serializer
-	sync.Mutex
-}
-
-func (s *File) Consume(ctx context.Context, entries changelog.Changelog, ack AckCallback) error {
-	ctx, span := trace.StartSpan(ctx, "pkg/sinks.File.Consume")
+func (s *Sink) Consume(ctx context.Context, entries changelog.Changelog, ack sinks.AckCallback) error {
+	ctx, span := trace.StartSpan(ctx, "pkg/sinks/file/Sink.Consume")
 	defer span.End()
 
 	for envelope := range entries {
@@ -82,7 +83,7 @@ func (s *File) Consume(ctx context.Context, entries changelog.Changelog, ack Ack
 
 // write wraps file modification in a lock, allowing this sink to be safe for concurrent
 // use.
-func (s *File) write(file *os.File, content []byte) (int, error) {
+func (s *Sink) write(file *os.File, content []byte) (int, error) {
 	s.Lock()
 	defer s.Unlock()
 

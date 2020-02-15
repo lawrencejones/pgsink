@@ -22,6 +22,8 @@ import (
 	"github.com/lawrencejones/pg2sink/pkg/models"
 	"github.com/lawrencejones/pg2sink/pkg/publication"
 	"github.com/lawrencejones/pg2sink/pkg/sinks"
+	sinkbigquery "github.com/lawrencejones/pg2sink/pkg/sinks/bigquery"
+	sinkfile "github.com/lawrencejones/pg2sink/pkg/sinks/file"
 	"github.com/lawrencejones/pg2sink/pkg/subscription"
 	"github.com/lawrencejones/pg2sink/pkg/util"
 	"github.com/oklog/run"
@@ -76,13 +78,13 @@ var (
 	streamImporterBufferSize        = stream.Flag("importer-buffer-size", "Buffer between pulling data from Postgres and sink").Default("100000").Int()
 
 	streamSinkType        = stream.Flag("sink", "Type of sink target").Required().String()
-	streamSinkFileOptions = sinks.FileOptions{}
+	streamSinkFileOptions = sinkfile.Options{}
 	_                     = func() (err error) {
 		stream.Flag("sink.file.schemas-path", "File path for schemas").Default("/dev/stdout").StringVar(&streamSinkFileOptions.SchemasPath)
 		stream.Flag("sink.file.modifications-path", "File path for modifications").Default("/dev/stdout").StringVar(&streamSinkFileOptions.ModificationsPath)
 		return
 	}()
-	streamSinkBigQueryOptions = sinks.BigQueryOptions{}
+	streamSinkBigQueryOptions = sinkbigquery.Options{}
 	_                         = func() (err error) {
 		stream.Flag("sink.bigquery.project-id", "Google Project ID").StringVar(&streamSinkBigQueryOptions.ProjectID)
 		stream.Flag("sink.bigquery.dataset", "BigQuery dataset name").StringVar(&streamSinkBigQueryOptions.Dataset)
@@ -245,9 +247,9 @@ func main() {
 
 		switch *streamSinkType {
 		case "file":
-			sink = mustSink(sinks.NewFile(streamSinkFileOptions))
+			sink = mustSink(sinkfile.New(streamSinkFileOptions))
 		case "bigquery":
-			sink = mustSink(sinks.NewBigQuery(ctx, logger, streamSinkBigQueryOptions))
+			sink = mustSink(sinkbigquery.New(ctx, logger, streamSinkBigQueryOptions))
 		default:
 			kingpin.Fatalf("unsupported sink type: %s", *streamSinkType)
 		}

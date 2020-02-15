@@ -1,4 +1,4 @@
-package sinks
+package bigquery
 
 import (
 	"bytes"
@@ -14,22 +14,23 @@ import (
 
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
+	"github.com/lawrencejones/pg2sink/pkg/sinks"
 	"github.com/pkg/errors"
 
-	"cloud.google.com/go/bigquery"
+	bq "cloud.google.com/go/bigquery"
 )
 
-var AvroBQTypeMap = map[string]bigquery.FieldType{
-	"boolean": bigquery.BooleanFieldType,
-	"int":     bigquery.IntegerFieldType,
-	"long":    bigquery.IntegerFieldType,
-	"float":   bigquery.FloatFieldType,
-	"double":  bigquery.FloatFieldType,
-	"string":  bigquery.StringFieldType,
+var AvroBQTypeMap = map[string]bq.FieldType{
+	"boolean": bq.BooleanFieldType,
+	"int":     bq.IntegerFieldType,
+	"long":    bq.IntegerFieldType,
+	"float":   bq.FloatFieldType,
+	"double":  bq.FloatFieldType,
+	"string":  bq.StringFieldType,
 }
 
-func NewBigQuery(ctx context.Context, logger kitlog.Logger, opts BigQueryOptions) (Sink, error) {
-	client, err := bigquery.NewClient(ctx, opts.ProjectID)
+func New(ctx context.Context, logger kitlog.Logger, opts Options) (sinks.Sink, error) {
+	client, err := bq.NewClient(ctx, opts.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +45,7 @@ func NewBigQuery(ctx context.Context, logger kitlog.Logger, opts BigQueryOptions
 
 	if md == nil {
 		logger.Log("event", "dataset.create", "msg", "dataset does not exist, creating")
-		md = &bigquery.DatasetMetadata{
+		md = &bq.DatasetMetadata{
 			Name:        opts.Dataset,
 			Location:    opts.Location,
 			Description: "Dataset created by pg2sink",
@@ -55,27 +56,27 @@ func NewBigQuery(ctx context.Context, logger kitlog.Logger, opts BigQueryOptions
 		}
 	}
 
-	return &BigQuery{logger: logger, dataset: dataset, opts: opts}, nil
+	return &Sink{logger: logger, dataset: dataset, opts: opts}, nil
 }
 
-type BigQueryOptions struct {
+type Sink struct {
+	logger  kitlog.Logger
+	dataset *bq.Dataset
+	opts    Options
+}
+
+type Options struct {
 	ProjectID string
 	Dataset   string
 	Location  string
 }
 
-type BigQuery struct {
-	logger  kitlog.Logger
-	dataset *bigquery.Dataset
-	opts    BigQueryOptions
-}
-
-func (s *BigQuery) Consume(ctx context.Context, entries changelog.Changelog, ack AckCallback) error {
+func (s *Sink) Consume(ctx context.Context, entries changelog.Changelog, ack sinks.AckCallback) error {
 	ctx, span := trace.StartSpan(ctx, "pkg/sinks.BigQuery.Consume")
 	defer span.End()
 
 	specFingerprints := map[string]uint64{}
-	rawSchemaCache := map[string]bigquery.Schema{}
+	rawSchemaCache := map[string]bq.Schema{}
 	for envelope := range entries {
 		switch entry := envelope.Unwrap().(type) {
 		case *changelog.Schema:
@@ -106,7 +107,7 @@ func (s *BigQuery) Consume(ctx context.Context, entries changelog.Changelog, ack
 				panic(fmt.Sprintf("no schema for %s, cannot proceed", entry.Namespace))
 			}
 
-			var payloadSchema bigquery.Schema
+			var payloadSchema bq.Schema
 			for _, field := range rawSchema {
 				if field.Name == "payload" {
 					payloadSchema = field.Schema
@@ -116,19 +117,19 @@ func (s *BigQuery) Consume(ctx context.Context, entries changelog.Changelog, ack
 
 			// When deletion, we'll update this row with the contents at delete
 			row := entry.AfterOrBefore()
-			values := []bigquery.Value{}
+			values := []bq.Value{}
 			for _, field := range payloadSchema {
 				values = append(values, row[field.Name])
 			}
 
 			table := s.dataset.Table(fmt.Sprintf("%s_raw", getTableName(entry.Namespace)))
-			err := table.Inserter().Put(ctx, &bigquery.ValuesSaver{
+			err := table.Inserter().Put(ctx, &bq.ValuesSaver{
 				Schema: rawSchema,
-				Row: []bigquery.Value{
+				Row: []bq.Value{
 					entry.Timestamp,
 					entry.LSN,
 					entry.Operation(),
-					bigquery.Value(values),
+					bq.Value(values),
 				},
 			})
 
@@ -143,7 +144,7 @@ func (s *BigQuery) Consume(ctx context.Context, entries changelog.Changelog, ack
 
 // syncRawTable creates or updates the raw changelog table that powers the most-recent row
 // view. It is named the same as the Postgres table it represents, but with a _raw suffix.
-func (s *BigQuery) syncRawTable(ctx context.Context, entry *changelog.Schema) (*bigquery.TableMetadata, error) {
+func (s *Sink) syncRawTable(ctx context.Context, entry *changelog.Schema) (*bq.TableMetadata, error) {
 	logger := kitlog.With(s.logger, "postgres_relation", entry.Spec.Namespace)
 
 	tableName := fmt.Sprintf("%s_raw", getTableName(entry.Spec.Namespace))
@@ -169,7 +170,7 @@ func (s *BigQuery) syncRawTable(ctx context.Context, entry *changelog.Schema) (*
 	// Blind update (without etag) as all our updates need to be backward/forward
 	// compatible, so it matters very little if someone has raced us.
 	logger.Log("event", "table.update_schema", "msg", "updating table with new schema")
-	md, err = table.Update(ctx, bigquery.TableMetadataToUpdate{Schema: md.Schema}, "")
+	md, err = table.Update(ctx, bq.TableMetadataToUpdate{Schema: md.Schema}, "")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to update table schema")
 	}
@@ -189,15 +190,15 @@ func (s *BigQuery) syncRawTable(ctx context.Context, entry *changelog.Schema) (*
 //      ...,
 //    },
 // }
-func (s *BigQuery) buildRawTableMetadata(tableName string, spec changelog.SchemaSpecification) (*bigquery.TableMetadata, error) {
-	fields := bigquery.Schema{}
+func (s *Sink) buildRawTableMetadata(tableName string, spec changelog.SchemaSpecification) (*bq.TableMetadata, error) {
+	fields := bq.Schema{}
 	for _, field := range spec.Fields {
 		bqType, ok := AvroBQTypeMap[field.GetType()]
 		if !ok {
 			return nil, fmt.Errorf("unsupported type %s for BigQuery", field.GetType())
 		}
 
-		fieldSchema := &bigquery.FieldSchema{
+		fieldSchema := &bq.FieldSchema{
 			Name:     field.Name,
 			Type:     bqType,
 			Required: false,
@@ -211,37 +212,37 @@ func (s *BigQuery) buildRawTableMetadata(tableName string, spec changelog.Schema
 		return fields[i].Name < fields[j].Name
 	})
 
-	schema := bigquery.Schema{
-		&bigquery.FieldSchema{
+	schema := bq.Schema{
+		&bq.FieldSchema{
 			Name:        "timestamp",
-			Type:        bigquery.TimestampFieldType,
+			Type:        bq.TimestampFieldType,
 			Description: "Timestamp at which the row was read from database",
 			Required:    true,
 		},
-		&bigquery.FieldSchema{
+		&bq.FieldSchema{
 			Name:        "lsn",
-			Type:        bigquery.IntegerFieldType,
+			Type:        bq.IntegerFieldType,
 			Description: "Database log sequence number at time of read, optional",
 			Required:    false,
 		},
-		&bigquery.FieldSchema{
+		&bq.FieldSchema{
 			Name:        "operation",
-			Type:        bigquery.StringFieldType,
+			Type:        bq.StringFieldType,
 			Description: "Either IMPORT, INSERT, UPDATE or DELETE",
 			Required:    true,
 		},
-		&bigquery.FieldSchema{
+		&bq.FieldSchema{
 			Name:        "payload",
-			Type:        bigquery.RecordFieldType,
+			Type:        bq.RecordFieldType,
 			Description: "Contents of database row",
 			Schema:      fields,
 		},
 	}
 
-	md := &bigquery.TableMetadata{
+	md := &bq.TableMetadata{
 		Name:   tableName,
 		Schema: schema,
-		TimePartitioning: &bigquery.TimePartitioning{
+		TimePartitioning: &bq.TimePartitioning{
 			Field: "timestamp",
 		},
 	}
@@ -251,7 +252,7 @@ func (s *BigQuery) buildRawTableMetadata(tableName string, spec changelog.Schema
 
 // syncViewTable creates or updates the most-recent row state view, which depends on the
 // raw changelog table.
-func (s *BigQuery) syncViewTable(ctx context.Context, entry *changelog.Schema, raw *bigquery.TableMetadata) (*bigquery.TableMetadata, error) {
+func (s *Sink) syncViewTable(ctx context.Context, entry *changelog.Schema, raw *bq.TableMetadata) (*bq.TableMetadata, error) {
 	tableName := getTableName(entry.Spec.Namespace)
 	logger := kitlog.With(s.logger, "raw_table", raw.Name, "table", tableName)
 
@@ -274,7 +275,7 @@ func (s *BigQuery) syncViewTable(ctx context.Context, entry *changelog.Schema, r
 	}
 
 	logger.Log("event", "table.update_view_query", "msg", "updating view table with query")
-	md, err = table.Update(ctx, bigquery.TableMetadataToUpdate{ViewQuery: md.ViewQuery}, "")
+	md, err = table.Update(ctx, bq.TableMetadataToUpdate{ViewQuery: md.ViewQuery}, "")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to update table view query")
 	}
@@ -292,7 +293,7 @@ where row_number = 1
 and operation != 'DELETE'
 `))
 
-func (s *BigQuery) buildViewTableMetadata(tableName string, raw *bigquery.TableMetadata) (*bigquery.TableMetadata, error) {
+func (s *Sink) buildViewTableMetadata(tableName string, raw *bq.TableMetadata) (*bq.TableMetadata, error) {
 	var buffer bytes.Buffer
 	err := viewQueryTemplate.Execute(
 		&buffer, struct{ EscapedRawTableIdentifier string }{
@@ -304,7 +305,7 @@ func (s *BigQuery) buildViewTableMetadata(tableName string, raw *bigquery.TableM
 		return nil, err
 	}
 
-	md := &bigquery.TableMetadata{
+	md := &bq.TableMetadata{
 		Name:      tableName,
 		ViewQuery: buffer.String(),
 		Schema:    nil, // we don't use schema for a view
