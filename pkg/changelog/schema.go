@@ -61,6 +61,16 @@ type SchemaField struct {
 	Default interface{} `json:"default"`
 }
 
+func (s SchemaField) GetType() string {
+	for _, t := range s.Type {
+		if t != "null" {
+			return t
+		}
+	}
+
+	panic("all schema fields should have a non-null type")
+}
+
 // Avro provides a limited number of primitives that we need to map to Postgres OIDs. This
 // SchemaField can perform this mapping, defaulting to string if not possible. All types
 // should be nullable in order to allow deletions, given Avro's back/forward compatibility

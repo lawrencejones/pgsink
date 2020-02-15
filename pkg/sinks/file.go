@@ -11,9 +11,7 @@ import (
 	"go.opencensus.io/trace"
 )
 
-var _ Sink = &File{}
-
-func NewFile(opts FileOptions) (*File, error) {
+func NewFile(opts FileOptions) (Sink, error) {
 	sink := &File{serializer: serialize.DefaultSerializer}
 
 	var err error

@@ -61,7 +61,7 @@ var (
 	streamMetricsPort               = stream.Flag("metrics-port", "Port to bind HTTP metrics listener").Default("9525").Uint16()
 	streamJaegerAgentEndpoint       = stream.Flag("jaeger-agent-endpoint", "Endpoint for Jaeger agent").Default("localhost:6831").String()
 	streamManagePublication         = stream.Flag("manage-publication", "Auto-manage tables in publication").Default("false").Bool()
-	streamSchemas                   = stream.Flag("schema", "Postgres schema to watch for changes").Default("public").Strings()
+	streamSchema                    = stream.Flag("schema", "Postgres schema to watch for changes").Default("public").String()
 	streamExcludes                  = stream.Flag("exclude", "Table name to exclude from changes").Strings()
 	streamIncludes                  = stream.Flag("include", "Table name to include from changes (activates whitelist)").Strings()
 	streamPollInterval              = stream.Flag("poll-interval", "Interval to poll for new tables").Default("10s").Duration()
@@ -75,11 +75,18 @@ var (
 	streamImporterBatchLimit        = stream.Flag("importer-batch-limit", "Maximum rows to pull per import job pagination").Default("100000").Int()
 	streamImporterBufferSize        = stream.Flag("importer-buffer-size", "Buffer between pulling data from Postgres and sink").Default("100000").Int()
 
-	streamSinkType        = stream.Flag("sink", "Type of sink target").Default("file").String()
+	streamSinkType        = stream.Flag("sink", "Type of sink target").Required().String()
 	streamSinkFileOptions = sinks.FileOptions{}
 	_                     = func() (err error) {
 		stream.Flag("sink.file.schemas-path", "File path for schemas").Default("/dev/stdout").StringVar(&streamSinkFileOptions.SchemasPath)
 		stream.Flag("sink.file.modifications-path", "File path for modifications").Default("/dev/stdout").StringVar(&streamSinkFileOptions.ModificationsPath)
+		return
+	}()
+	streamSinkBigQueryOptions = sinks.BigQueryOptions{}
+	_                         = func() (err error) {
+		stream.Flag("sink.bigquery.project-id", "Google Project ID").StringVar(&streamSinkBigQueryOptions.ProjectID)
+		stream.Flag("sink.bigquery.dataset", "BigQuery dataset name").StringVar(&streamSinkBigQueryOptions.Dataset)
+		stream.Flag("sink.bigquery.location", "BigQuery dataset location").Default("EU").StringVar(&streamSinkBigQueryOptions.Location)
 		return
 	}()
 )
@@ -239,6 +246,8 @@ func main() {
 		switch *streamSinkType {
 		case "file":
 			sink = mustSink(sinks.NewFile(streamSinkFileOptions))
+		case "bigquery":
+			sink = mustSink(sinks.NewBigQuery(ctx, logger, streamSinkBigQueryOptions))
 		default:
 			kingpin.Fatalf("unsupported sink type: %s", *streamSinkType)
 		}
@@ -273,7 +282,7 @@ func main() {
 				mustConnectionPool(2),
 				publication.ManagerOptions{
 					Name:         *publicationName,
-					Schemas:      *streamSchemas,
+					Schemas:      []string{*streamSchema},
 					Excludes:     *streamExcludes,
 					Includes:     *streamIncludes,
 					PollInterval: *streamPollInterval,
