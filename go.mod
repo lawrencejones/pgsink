@@ -6,6 +6,7 @@ require (
 	cloud.google.com/go v0.34.0
 	contrib.go.opencensus.io/exporter/jaeger v0.2.0
 	github.com/alecthomas/kingpin v2.2.6+incompatible
+	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-kit/kit v0.9.0
