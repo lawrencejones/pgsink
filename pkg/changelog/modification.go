@@ -15,6 +15,77 @@ type Modification struct {
 	After     interface{} `json:"after"`     // row after modification
 }
 
+// ModificationBuilder provides a fluent interface around constructing Modifications. This
+// is used by tests to easily create fixtures.
+var ModificationBuilder = modificationBuilderFunc(func(opts ...func(*Modification)) *Modification {
+	m := &Modification{}
+	for _, opt := range opts {
+		opt(m)
+	}
+
+	return m
+})
+
+type modificationBuilderFunc func(opts ...func(*Modification)) *Modification
+
+func (b modificationBuilderFunc) WithBase(base *Modification) func(*Modification) {
+	return func(m *Modification) {
+		*m = *base
+	}
+}
+
+func (b modificationBuilderFunc) WithTimestampNow() func(*Modification) {
+	return func(m *Modification) {
+		m.Timestamp = time.Now()
+	}
+}
+
+func (b modificationBuilderFunc) WithNamespace(n string) func(*Modification) {
+	return func(m *Modification) {
+		m.Namespace = Namespace(n)
+	}
+}
+
+func (b modificationBuilderFunc) WithLSN(lsn uint64) func(*Modification) {
+	return func(m *Modification) {
+		m.LSN = &lsn
+	}
+}
+
+func (b modificationBuilderFunc) WithBefore(before map[string]interface{}) func(*Modification) {
+	return func(m *Modification) {
+		m.Before = before
+	}
+}
+
+func (b modificationBuilderFunc) WithAfter(after map[string]interface{}) func(*Modification) {
+	return func(m *Modification) {
+		m.After = after
+	}
+}
+
+func (b modificationBuilderFunc) WithUpdate(afterDiff map[string]interface{}) func(*Modification) {
+	return func(m *Modification) {
+		if m.After == nil {
+			panic("cannot use WithUpdate without first configuring an After")
+		}
+
+		// What was the after, is now the before
+		m.Before = m.After
+
+		after := map[string]interface{}{}
+		for key, value := range m.Before.(map[string]interface{}) {
+			after[key] = value
+		}
+
+		for key, value := range afterDiff {
+			after[key] = value
+		}
+
+		m.After = after
+	}
+}
+
 const (
 	ModificationOperationImport = "IMPORT"
 	ModificationOperationInsert = "INSERT"
