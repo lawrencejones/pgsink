@@ -2,7 +2,6 @@ package changelog
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/pgtype"
@@ -22,7 +21,7 @@ type Schema struct {
 // SchemaFromRelation generates a schema from a logical relation message
 func SchemaFromRelation(timestamp time.Time, lsn *uint64, relation *logical.Relation) Schema {
 	spec := SchemaSpecification{
-		Namespace: fmt.Sprintf("%s.%s", relation.Namespace, relation.Name),
+		Namespace: BuildNamespace(relation.Namespace, relation.Name),
 		Type:      schemaType,
 		Name:      schemaName,
 		Fields:    []SchemaField{},
@@ -51,7 +50,7 @@ const (
 // Postgres table under the same namespace, and a row inside this table has a schema of
 // type 'record' named 'value'.
 type SchemaSpecification struct {
-	Namespace string        `json:"namespace"` // <schema>.<table>
+	Namespace Namespace     `json:"namespace"` // <schema>.<table>
 	Type      string        `json:"type"`      // always record
 	Name      string        `json:"name"`      // always value
 	Fields    []SchemaField `json:"fields"`    // schema fields

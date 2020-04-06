@@ -9,7 +9,7 @@ import (
 // this modification.
 type Modification struct {
 	Timestamp time.Time   `json:"timestamp"` // commit timestamp, or time of import
-	Namespace string      `json:"namespace"` // <schema>.<table>
+	Namespace Namespace   `json:"namespace"` // <schema>.<table>
 	LSN       *uint64     `json:"lsn"`       // log sequence number, where appropriate
 	Before    interface{} `json:"before"`    // row before modification, if relevant
 	After     interface{} `json:"after"`     // row after modification

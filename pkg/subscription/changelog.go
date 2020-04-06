@@ -1,8 +1,6 @@
 package subscription
 
 import (
-	"fmt"
-
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 	"github.com/lawrencejones/pg2sink/pkg/logical"
@@ -32,7 +30,7 @@ func BuildChangelog(logger kitlog.Logger, raw <-chan interface{}) changelog.Chan
 
 				var relation *logical.Relation
 				relation, modification.Before, modification.After = registry.Marshal(msg.Entry)
-				modification.Namespace = fmt.Sprintf("%s.%s", relation.Namespace, relation.Name)
+				modification.Namespace = changelog.BuildNamespace(relation.Namespace, relation.Name)
 
 				output <- changelog.Entry{Modification: modification}
 			default:
