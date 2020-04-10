@@ -15,6 +15,9 @@ var _ = Describe("asyncInserter", func() {
 			New: func(backend *fakeInserter) generic.AsyncInserter {
 				return generic.WrapAsync(backend)
 			},
+			NewBackend: func() *fakeInserter {
+				return &fakeInserter{MemoryInserter: generic.NewMemoryInserter()}
+			},
 		}
 	)
 

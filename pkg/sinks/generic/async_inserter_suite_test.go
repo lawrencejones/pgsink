@@ -20,7 +20,8 @@ import (
 //
 // All implementations of AsyncInserters should pass this test suite.
 type AsyncInserterSuite struct {
-	New func(backend *fakeInserter) generic.AsyncInserter
+	New        func(backend *fakeInserter) generic.AsyncInserter
+	NewBackend func() *fakeInserter
 }
 
 func (s AsyncInserterSuite) Bind(ctx *context.Context, async *generic.AsyncInserter, backend **fakeInserter, cancel *func()) {
@@ -30,7 +31,7 @@ func (s AsyncInserterSuite) Bind(ctx *context.Context, async *generic.AsyncInser
 
 	BeforeEach(func() {
 		*ctx, *cancel = context.WithTimeout(context.Background(), time.Second)
-		*backend = &fakeInserter{MemoryInserter: generic.NewMemoryInserter()}
+		*backend = s.NewBackend()
 	})
 
 	AfterEach(func() {

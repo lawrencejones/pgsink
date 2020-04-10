@@ -25,14 +25,17 @@ var _ = Describe("bufferedInserter", func() {
 			New: func(backend *fakeInserter) generic.AsyncInserter {
 				return generic.WithBuffer(generic.WrapAsync(backend), bufferSize)
 			},
+			NewBackend: func() *fakeInserter {
+				return &fakeInserter{MemoryInserter: generic.NewMemoryInserter()}
+			},
 		}
 	)
 
-	// By default, we'll use a buffer size of 2
-	BeforeEach(func() { bufferSize = 2 })
-
 	// Have the suite do our setup, and bind the given variables
 	suite.Bind(&ctx, &async, &backend, &cancel)
+
+	// By default, we'll use a buffer size of 2
+	BeforeEach(func() { bufferSize = 2 })
 
 	Describe("AsyncInserter interface", func() {
 		// Set the buffer size to 1, otherwise we'll timeout waiting on the buffer to overflow
