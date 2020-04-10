@@ -89,6 +89,9 @@ var (
 		stream.Flag("sink.bigquery.project-id", "Google Project ID").StringVar(&streamSinkBigQueryOptions.ProjectID)
 		stream.Flag("sink.bigquery.dataset", "BigQuery dataset name").StringVar(&streamSinkBigQueryOptions.Dataset)
 		stream.Flag("sink.bigquery.location", "BigQuery dataset location").Default("EU").StringVar(&streamSinkBigQueryOptions.Location)
+		stream.Flag("sink.bigquery.flush-interval", "Flush tables at this interval").Default("5s").DurationVar(&streamSinkBigQueryOptions.FlushInterval)
+		stream.Flag("sink.bigquery.flush-limit", "Force flush when total buffered rows exceeds this value").Default("10000").IntVar(&streamSinkBigQueryOptions.FlushLimit)
+		stream.Flag("sink.bigquery.table-buffer-size", "Row buffer size per table").Default("1000").IntVar(&streamSinkBigQueryOptions.TableBufferSize)
 		return
 	}()
 )

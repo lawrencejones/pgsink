@@ -4,73 +4,96 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
+
+	"go.opencensus.io/trace"
 
 	bq "cloud.google.com/go/bigquery"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
+	"github.com/lawrencejones/pg2sink/pkg/util"
 	"github.com/pkg/errors"
 )
 
-type Dataset struct {
-	dataset *bq.Dataset
-	tables  map[string]*Table
-	sync.RWMutex
+// Syncer manages a BigQuery dataset that is the destination for the sink. It provides a
+// method to SyncTables into the dataset, ensuring the BigQuery schema matches the
+// incoming relations, and GetSyncedTable(modification) which can fetch a handle to the
+// destination table in BigQuery.
+type Syncer interface {
+	SyncTables(context.Context, kitlog.Logger, *changelog.Schema) (*Table, SyncOutcome, error)
 }
 
-func newDataset(dataset *bq.Dataset) *Dataset {
-	return &Dataset{
+// Table is a cached BigQuery table entry, associated with a schema and fingerprint that
+// created it.
+type Table struct {
+	Raw         *bq.Table
+	RawMetadata *bq.TableMetadata
+	Schema      *changelog.Schema
+	Fingerprint uint64
+}
+
+type datasetSyncer struct {
+	dataset *bq.Dataset
+	cache   util.Cache
+}
+
+func newDatasetSyncer(dataset *bq.Dataset) *datasetSyncer {
+	return &datasetSyncer{
 		dataset: dataset,
-		tables:  map[string]*Table{},
+		cache:   util.NewCache(),
 	}
 }
 
-type Table struct {
-	raw         *bq.Table
-	rawMetadata *bq.TableMetadata
-	schema      *changelog.Schema
-	fingerprint uint64
-}
+type SyncOutcome string
 
-func (d *Dataset) Sync(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) error {
+const (
+	SyncFailed SyncOutcome = "failed"
+	SyncNoop               = "noop"
+	SyncUpdate             = "update"
+)
+
+// SyncTables attempts to reconcile the incoming schema against the BigQuery table it
+// tracks. If the schema is unchanged since it was last synced, we do nothing. Once
+// synced, the table is available via the GetSyncedTable method.
+func (d *datasetSyncer) SyncTables(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) (*Table, SyncOutcome, error) {
+	ctx, span := trace.StartSpan(ctx, "pkg/sinks/bigquery/datasetSyncer.SyncTables")
+	defer span.End()
+
 	logger = kitlog.With(logger, "namespace", schema.Spec.Namespace)
 	fingerprint := schema.Spec.GetFingerprint()
-	existingTable := d.get(schema.Spec.Namespace)
+	existing, ok := d.cache.Get(string(schema.Spec.Namespace)).(*Table)
 
-	if existingTable != nil && existingTable.fingerprint == fingerprint {
+	if ok && existing != nil && existing.Fingerprint == fingerprint {
 		logger.Log("event", "schema.already_fingerprinted", "fingerprint", fingerprint,
 			"msg", "not updating BigQuery schema as fingerprint has not changed")
-		return nil
+		return existing, SyncNoop, nil
 	}
 
 	logger.Log("event", "schema.new_fingerprint", "fingerprint", fingerprint,
 		"msg", "fingerprint seen for the first time, syncing BigQuery schemas")
 	raw, rawMetadata, err := d.syncRawTable(ctx, logger, schema)
 	if err != nil {
-		return err
+		return nil, SyncFailed, err
 	}
 
 	if _, _, err := d.syncViewTable(ctx, logger, schema, raw); err != nil {
-		return err
+		return nil, SyncFailed, err
 	}
 
-	d.set(schema.Spec.Namespace, &Table{
-		raw:         raw,
-		rawMetadata: rawMetadata,
-		schema:      schema,
-		fingerprint: fingerprint,
-	})
+	table := &Table{
+		Raw:         raw,
+		RawMetadata: rawMetadata,
+		Schema:      schema,
+		Fingerprint: fingerprint,
+	}
 
-	return nil
-}
+	d.cache.Set(string(schema.Spec.Namespace), table)
 
-func (d *Dataset) TableFor(modification *changelog.Modification) *Table {
-	return d.get(modification.Namespace)
+	return table, SyncUpdate, nil
 }
 
 // syncRawTable creates or updates the raw changelog table that powers the most-recent row
 // view. It is named the same as the Postgres table it represents, but with a _raw suffix.
-func (d *Dataset) syncRawTable(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) (*bq.Table, *bq.TableMetadata, error) {
+func (d *datasetSyncer) syncRawTable(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) (*bq.Table, *bq.TableMetadata, error) {
 	tableName := fmt.Sprintf("%s_raw", stripPostgresSchema(schema.Spec.Namespace))
 	table := d.dataset.Table(tableName)
 	md, err := buildRaw(tableName, schema.Spec)
@@ -84,7 +107,7 @@ func (d *Dataset) syncRawTable(ctx context.Context, logger kitlog.Logger, schema
 
 // syncViewTable creates or updates the most-recent row state view, which depends on the
 // raw changelog table.
-func (d *Dataset) syncViewTable(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema, raw *bq.Table) (*bq.Table, *bq.TableMetadata, error) {
+func (d *datasetSyncer) syncViewTable(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema, raw *bq.Table) (*bq.Table, *bq.TableMetadata, error) {
 	tableName := stripPostgresSchema(schema.Spec.Namespace)
 	table := d.dataset.Table(tableName)
 	md, err := buildView(tableName, raw)
@@ -96,28 +119,14 @@ func (d *Dataset) syncViewTable(ctx context.Context, logger kitlog.Logger, schem
 	return table, md, err
 }
 
-func (d *Dataset) get(name string) *Table {
-	d.RLock()
-	table := d.tables[name]
-	d.RUnlock() // don't defer, as defer costs more than direct invocation
-	return table
-}
-
-func (d *Dataset) set(name string, table *Table) {
-	d.Lock()
-	defer d.Unlock()
-
-	d.tables[name] = table
-}
-
 // stripPostgresSchema removes the Postgres schema from the specification namespace.
 // BigQuery doesn't support periods in the table name, so we have to remove the schema. If
 // people have multiple tables in different namespaces and switch the source schema
 // then...  they're gonna have a bad time.
-func stripPostgresSchema(schemaNamespace string) string {
-	elements := strings.SplitN(schemaNamespace, ".", 2)
+func stripPostgresSchema(ns changelog.Namespace) string {
+	elements := strings.SplitN(string(ns), ".", 2)
 	if len(elements) != 2 {
-		panic(fmt.Sprintf("invalid Postgres schema.table_name string: %s", schemaNamespace))
+		panic(fmt.Sprintf("invalid Postgres schema.table_name string: %s", ns))
 	}
 
 	return elements[1]
