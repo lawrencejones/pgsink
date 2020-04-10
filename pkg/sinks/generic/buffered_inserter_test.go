@@ -2,7 +2,6 @@ package generic_test
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
@@ -18,43 +17,42 @@ var _ = Describe("bufferedInserter", func() {
 	var (
 		ctx        context.Context
 		bufferSize int
-		buffered   generic.AsyncInserter
-		inserter   *fakeInserter
+		async      generic.AsyncInserter
+		backend    *fakeInserter
 		cancel     func()
+
+		suite = AsyncInserterSuite{
+			New: func(backend *fakeInserter) generic.AsyncInserter {
+				return generic.WithBuffer(generic.WrapAsync(backend), bufferSize)
+			},
+		}
 	)
 
-	JustBeforeEach(func() {
-		buffered = generic.WithBuffer(generic.WrapAsync(inserter), bufferSize)
-	})
+	// By default, we'll use a buffer size of 2
+	BeforeEach(func() { bufferSize = 2 })
 
-	BeforeEach(func() {
-		ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-		inserter = &fakeInserter{MemoryInserter: generic.NewMemoryInserter()}
-		bufferSize = 2
-	})
+	// Have the suite do our setup, and bind the given variables
+	suite.Bind(&ctx, &async, &backend, &cancel)
 
-	AfterEach(func() {
-		cancel()
+	Describe("AsyncInserter interface", func() {
+		// Set the buffer size to 1, otherwise we'll timeout waiting on the buffer to overflow
+		// in the generic test suite
+		BeforeEach(func() { bufferSize = 1 })
+
+		verifyGenericAsyncInserter(suite)
 	})
 
 	Describe(".Insert", func() {
 		var (
 			result        generic.InsertResult
 			modifications []*changelog.Modification
-			insertCount   uint32
 		)
 
 		JustBeforeEach(func() {
-			result = buffered.Insert(ctx, modifications)
+			result = async.Insert(ctx, modifications)
 		})
 
 		BeforeEach(func() {
-			insertCount = 0
-			inserter.BeforeFunc = func(context.Context, []*changelog.Modification) error {
-				atomic.AddUint32(&insertCount, 1)
-				return nil
-			}
-
 			modifications = []*changelog.Modification{
 				fixtureExample1Insert,
 				fixtureExample1UpdateFirst,
@@ -63,7 +61,7 @@ var _ = Describe("bufferedInserter", func() {
 		})
 
 		It("inserts modifications split by batches", func() {
-			_, _, err := buffered.Flush(ctx).Get(ctx)
+			_, _, err := async.Flush(ctx).Get(ctx)
 			Expect(err).NotTo(HaveOccurred(), "expected flush to succeed, as no insertion should fail")
 
 			count, lsn, err := result.Get(ctx)
@@ -71,7 +69,7 @@ var _ = Describe("bufferedInserter", func() {
 			Expect(err).To(BeNil(), "no insertions should fail, so expected nil error")
 			Expect(count).To(Equal(3), "inserted 3 modifications, was expecting 3 to be confirmed")
 			Expect(lsn).To(PointTo(BeNumerically("==", 3)), "max LSN of insertions was 3")
-			Expect(atomic.LoadUint32(&insertCount)).To(Equal(uint32(2)), "should only insert 2 batches")
+			Expect(len(backend.Batches())).To(BeEquivalentTo(2), "should perform insert in 2 batches")
 		})
 
 		Context("when exactly matching buffer size", func() {
@@ -89,7 +87,7 @@ var _ = Describe("bufferedInserter", func() {
 
 				Expect(err).To(BeNil(), "no insertions should fail, so expected nil error")
 				Expect(count).To(Equal(3), "inserted 3 modifications, was expecting 3 to be confirmed")
-				Expect(atomic.LoadUint32(&insertCount)).To(Equal(uint32(1)), "should only insert a single batche")
+				Expect(len(backend.Batches())).To(BeEquivalentTo(1), "should only insert 1 batch")
 			})
 		})
 
@@ -101,7 +99,7 @@ var _ = Describe("bufferedInserter", func() {
 			// asynchronous insertion, just in case.
 			It("does not insert modifications", func() {
 				time.Sleep(5 * time.Millisecond)
-				Expect(inserter.Batches()).To(BeEmpty())
+				Expect(backend.Batches()).To(BeEmpty())
 			})
 		})
 	})

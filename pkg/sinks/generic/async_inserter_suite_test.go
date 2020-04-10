@@ -23,7 +23,7 @@ type AsyncInserterSuite struct {
 	New func(backend *fakeInserter) generic.AsyncInserter
 }
 
-func (s AsyncInserterSuite) Setup(ctx *context.Context, async *generic.AsyncInserter, backend **fakeInserter, cancel *func()) {
+func (s AsyncInserterSuite) Bind(ctx *context.Context, async *generic.AsyncInserter, backend **fakeInserter, cancel *func()) {
 	JustBeforeEach(func() {
 		*async = s.New(*backend)
 	})
@@ -73,7 +73,7 @@ func verifyGenericAsyncInserter(suite AsyncInserterSuite) {
 		cancel  func()
 	)
 
-	suite.Setup(&ctx, &async, &backend, &cancel)
+	suite.Bind(&ctx, &async, &backend, &cancel)
 
 	maxLSN := func(modifications []*changelog.Modification) *uint64 {
 		var lsn *uint64
