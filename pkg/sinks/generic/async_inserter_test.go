@@ -12,11 +12,11 @@ import (
 var _ = Describe("asyncInserter", func() {
 	var (
 		suite = AsyncInserterSuite{
-			New: func(backend *fakeInserter) generic.AsyncInserter {
-				return generic.WrapAsync(backend)
+			New: func(backend fakeBackend) generic.AsyncInserter {
+				return generic.WrapAsync(backend[0])
 			},
-			NewBackend: func() *fakeInserter {
-				return &fakeInserter{MemoryInserter: generic.NewMemoryInserter()}
+			NewBackend: func() fakeBackend {
+				return newFakeBackend(&fakeInserter{MemoryInserter: generic.NewMemoryInserter()})
 			},
 		}
 	)

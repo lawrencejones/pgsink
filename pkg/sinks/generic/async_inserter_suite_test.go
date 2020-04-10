@@ -20,11 +20,11 @@ import (
 //
 // All implementations of AsyncInserters should pass this test suite.
 type AsyncInserterSuite struct {
-	New        func(backend *fakeInserter) generic.AsyncInserter
-	NewBackend func() *fakeInserter
+	New        func(backend fakeBackend) generic.AsyncInserter
+	NewBackend func() fakeBackend
 }
 
-func (s AsyncInserterSuite) Bind(ctx *context.Context, async *generic.AsyncInserter, backend **fakeInserter, cancel *func()) {
+func (s AsyncInserterSuite) Bind(ctx *context.Context, async *generic.AsyncInserter, backend *fakeBackend, cancel *func()) {
 	JustBeforeEach(func() {
 		*async = s.New(*backend)
 	})
@@ -70,7 +70,7 @@ func verifyGenericAsyncInserter(suite AsyncInserterSuite) {
 	var (
 		ctx     context.Context
 		async   generic.AsyncInserter
-		backend *fakeInserter
+		backend fakeBackend
 		cancel  func()
 	)
 
@@ -108,7 +108,7 @@ func verifyGenericAsyncInserter(suite AsyncInserterSuite) {
 			)
 
 			BeforeEach(func() {
-				resumes = []chan struct{}{backend.Pause()}
+				resumes = backend.Pause()
 			})
 
 			AfterEach(func() {
@@ -147,7 +147,7 @@ func verifyGenericAsyncInserter(suite AsyncInserterSuite) {
 			)
 
 			BeforeEach(func() {
-				succeeds = []func(){backend.Fail(fmt.Errorf("hot dang"))}
+				succeeds = backend.Fail(fmt.Errorf("hot dang"))
 			})
 
 			JustBeforeEach(func() {
@@ -194,7 +194,7 @@ func verifyGenericAsyncInserter(suite AsyncInserterSuite) {
 			})
 
 			BeforeEach(func() {
-				resumes = []chan struct{}{backend.Pause()}
+				resumes = backend.Pause()
 			})
 
 			It("returns a promise that resolves once all in-flight inserts complete", func() {

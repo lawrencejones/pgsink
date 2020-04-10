@@ -18,15 +18,15 @@ var _ = Describe("bufferedInserter", func() {
 		ctx        context.Context
 		bufferSize int
 		async      generic.AsyncInserter
-		backend    *fakeInserter
+		backend    fakeBackend
 		cancel     func()
 
 		suite = AsyncInserterSuite{
-			New: func(backend *fakeInserter) generic.AsyncInserter {
-				return generic.WithBuffer(generic.WrapAsync(backend), bufferSize)
+			New: func(backend fakeBackend) generic.AsyncInserter {
+				return generic.WithBuffer(generic.WrapAsync(backend[0]), bufferSize)
 			},
-			NewBackend: func() *fakeInserter {
-				return &fakeInserter{MemoryInserter: generic.NewMemoryInserter()}
+			NewBackend: func() fakeBackend {
+				return newFakeBackend(&fakeInserter{MemoryInserter: generic.NewMemoryInserter()})
 			},
 		}
 	)
