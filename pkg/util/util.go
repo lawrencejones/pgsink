@@ -101,3 +101,37 @@ func Compact(elements []interface{}) []interface{} {
 
 	return output
 }
+
+// Cache arbitrary objects in a race-safe manner
+type Cache interface {
+	Get(key string) interface{}
+	Set(key string, value interface{}) (old interface{})
+}
+
+func NewCache() Cache {
+	return &syncCache{
+		entries: map[string]interface{}{},
+	}
+}
+
+type syncCache struct {
+	entries map[string]interface{}
+	sync.RWMutex
+}
+
+func (c *syncCache) Get(key string) interface{} {
+	c.RLock()
+	entry := c.entries[key]
+	c.RUnlock() // don't defer, as defer costs more than direct invocation
+	return entry
+}
+
+func (c *syncCache) Set(key string, value interface{}) (old interface{}) {
+	c.Lock()
+	defer c.Unlock()
+
+	old = c.entries[key]
+	c.entries[key] = value
+
+	return
+}
