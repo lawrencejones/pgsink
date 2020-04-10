@@ -27,19 +27,66 @@ var (
 		changelog.ModificationBuilder.WithLSN(3),
 		changelog.ModificationBuilder.WithUpdate(map[string]interface{}{"msg": "second"}),
 	)
+	// insert into dog (id, name) values (1, 'scooby');
+	fixtureDog1Insert = changelog.ModificationBuilder(
+		changelog.ModificationBuilder.WithTimestampNow(),
+		changelog.ModificationBuilder.WithNamespace("public.dog"),
+		changelog.ModificationBuilder.WithLSN(4),
+		changelog.ModificationBuilder.WithAfter(map[string]interface{}{"id": 1, "name": "scooby"}),
+	)
+	// insert into dog (id, name) values (2, 'clifford');
+	fixtureDog2Insert = changelog.ModificationBuilder(
+		changelog.ModificationBuilder.WithBase(fixtureDog1Insert),
+		changelog.ModificationBuilder.WithLSN(5),
+		changelog.ModificationBuilder.WithUpdate(map[string]interface{}{"id": 2, "name": "clifford"}),
+	)
+	// insert into cat (id, name, lives) values (1, 'tom', 9);
+	fixtureCat1Insert = changelog.ModificationBuilder(
+		changelog.ModificationBuilder.WithTimestampNow(),
+		changelog.ModificationBuilder.WithNamespace("public.cat"),
+		changelog.ModificationBuilder.WithLSN(6),
+		changelog.ModificationBuilder.WithAfter(map[string]interface{}{"id": 1, "name": "tom", "lives": 9}),
+	)
 )
 
 // fakeInserter wraps an in-memory inserter, providing the ability to hook before and
 // after functions into the insertion process.
 type fakeInserter struct {
 	*generic.MemoryInserter
-	BeforeFunc func(context.Context, []*changelog.Modification)
+	BeforeFunc func(context.Context, []*changelog.Modification) error
 	AfterFunc  func(context.Context, []*changelog.Modification)
+}
+
+func (f *fakeInserter) Pause() (resume chan struct{}) {
+	resume = make(chan struct{})
+
+	f.BeforeFunc = func(ctx context.Context, _ []*changelog.Modification) error {
+		select {
+		case <-ctx.Done():
+			logger.Log("event", "inserter.expired", "msg", "context expired before inserters were resumed")
+		case <-resume:
+			logger.Log("event", "inserter.resume", "msg", "resumed, inserts will now proceed")
+		}
+
+		return nil
+	}
+
+	return resume
+}
+
+func (f *fakeInserter) Fail(err error) func() {
+	f.BeforeFunc = func(ctx context.Context, _ []*changelog.Modification) error {
+		return err
+	}
+
+	return func() { f.BeforeFunc = nil }
 }
 
 func (f *fakeInserter) Insert(ctx context.Context, modifications []*changelog.Modification) (int, *uint64, error) {
 	if f.BeforeFunc != nil {
-		f.BeforeFunc(ctx, modifications)
+		if err := f.BeforeFunc(ctx, modifications); err != nil {
+			return -1, nil, err
+		}
 	}
 
 	if f.AfterFunc != nil {

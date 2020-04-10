@@ -50,8 +50,9 @@ var _ = Describe("bufferedInserter", func() {
 
 		BeforeEach(func() {
 			insertCount = 0
-			inserter.BeforeFunc = func(context.Context, []*changelog.Modification) {
+			inserter.BeforeFunc = func(context.Context, []*changelog.Modification) error {
 				atomic.AddUint32(&insertCount, 1)
+				return nil
 			}
 
 			modifications = []*changelog.Modification{
