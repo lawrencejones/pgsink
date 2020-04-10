@@ -5,6 +5,11 @@ import (
 
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 	"github.com/lawrencejones/pg2sink/pkg/sinks/generic"
+
+	_ "github.com/onsi/ginkgo"
+	_ "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/gomega"
+	_ "github.com/onsi/gomega/gstruct"
 )
 
 var (
@@ -49,6 +54,11 @@ var (
 	)
 )
 
+// ExpectResolveSuccess is shorthand to confirm a result has resolved without error
+func ExpectResolveSuccess(_ int, _ *uint64, err error, msg ...interface{}) {
+	Expect(err).NotTo(HaveOccurred(), msg...)
+}
+
 // fakeBackend aggregates many fakeBackend, providing an interface that can be used to
 // inspect what has been inserted, as well as manipulating each inserter to simulate
 // different types of failure.
@@ -82,10 +92,10 @@ func (f fakeBackend) Batches() [][]*changelog.Modification {
 // Pause causes all inserters to hang until the returned channel is closed. While most
 // backends will contain just one inserter, we support one or many by returning a slice
 // of channels.
-func (f fakeBackend) Pause() (resumes []chan struct{}) {
+func (f fakeBackend) Pause(ctx context.Context) (resumes []chan struct{}) {
 	resumes = []chan struct{}{}
 	for _, inserter := range f {
-		resumes = append(resumes, inserter.Pause())
+		resumes = append(resumes, inserter.Pause(ctx))
 	}
 
 	return resumes
@@ -111,7 +121,11 @@ type fakeInserter struct {
 	AfterFunc  func(context.Context, []*changelog.Modification)
 }
 
-func (f *fakeInserter) Pause() (resume chan struct{}) {
+func newFakeInserter() *fakeInserter {
+	return &fakeInserter{MemoryInserter: generic.NewMemoryInserter()}
+}
+
+func (f *fakeInserter) Pause(ctx context.Context) (resume chan struct{}) {
 	resume = make(chan struct{})
 
 	f.BeforeFunc = func(ctx context.Context, _ []*changelog.Modification) error {

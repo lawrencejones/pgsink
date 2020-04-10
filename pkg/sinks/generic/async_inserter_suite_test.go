@@ -56,6 +56,11 @@ func (s AsyncInserterSuite) InsertMany(ctx context.Context, async generic.AsyncI
 		[]*changelog.Modification{fixtureExample1Insert},
 		[]*changelog.Modification{fixtureExample1UpdateSecond},
 		[]*changelog.Modification{fixtureExample1UpdateFirst},
+		[]*changelog.Modification{
+			fixtureDog1Insert,
+			fixtureDog2Insert,
+			fixtureCat1Insert,
+		},
 	}
 
 	results := []generic.InsertResult{}
@@ -97,6 +102,7 @@ func verifyGenericAsyncInserter(suite AsyncInserterSuite) {
 			Expect(err).To(BeNil(), "insert should succeed, so an error is unexpected")
 			Expect(count).To(Equal(len(ms)), "insertion count doesn't match what we inserted")
 			Expect(lsn).To(PointTo(BeNumerically("==", *maxLSN(ms))), "should equal the highest inserted lsn")
+
 			Expect(backend.Store()).To(
 				ConsistOf(ms), "result resolved, so expected modifications to be inserted",
 			)
@@ -108,7 +114,7 @@ func verifyGenericAsyncInserter(suite AsyncInserterSuite) {
 			)
 
 			BeforeEach(func() {
-				resumes = backend.Pause()
+				resumes = backend.Pause(ctx)
 			})
 
 			AfterEach(func() {
@@ -194,7 +200,7 @@ func verifyGenericAsyncInserter(suite AsyncInserterSuite) {
 			})
 
 			BeforeEach(func() {
-				resumes = backend.Pause()
+				resumes = backend.Pause(ctx)
 			})
 
 			It("returns a promise that resolves once all in-flight inserts complete", func() {
@@ -204,8 +210,10 @@ func verifyGenericAsyncInserter(suite AsyncInserterSuite) {
 					ms = append(ms, batch...)
 				}
 
+			resumeOneByOne:
 				for idx, resume := range resumes {
 					// Resume the backend inserter
+					logger.Log("event", "resume.index", "index", idx, "total", len(resumes), "resume", fmt.Sprintf("%p", resume))
 					close(resume)
 
 					timeoutCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
@@ -216,13 +224,13 @@ func verifyGenericAsyncInserter(suite AsyncInserterSuite) {
 					// If we're not the last backend inserter to be resumed, then we should expect
 					// to timeout. Flush should only succeed when all pending inserts have
 					// completed, so nothing should resolve until everything has been inserted.
-					if idx != len(resumes)-1 {
+					if idx < len(resumes)-1 {
 						Expect(err).NotTo(BeNil(), "inserters remain paused, so flush should not have succeeded")
 						Expect(backend.Store()).NotTo(
 							ConsistOf(ms), "we should not have inserted everything until all inserters are resumed",
 						)
 
-						continue
+						continue resumeOneByOne
 					}
 
 					Expect(err).To(BeNil(), "all inserters have been resumed, so flush should have succeeded")

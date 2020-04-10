@@ -13,41 +13,48 @@ import (
 	_ "github.com/onsi/gomega/gstruct"
 )
 
-func newFakeInserter() *fakeInserter {
-	return &fakeInserter{MemoryInserter: generic.NewMemoryInserter()}
-}
-
-func ExpectResolveSuccess(_ int, _ *uint64, err error, msg ...interface{}) {
-	Expect(err).NotTo(HaveOccurred(), msg...)
-}
-
-var _ = Describe("Router", func() {
+var _ = Describe("router", func() {
 	var (
-		ctx          context.Context
-		router       generic.Router
-		dogNS, catNS changelog.Namespace
-		dog, cat     *fakeInserter
-		cancel       func()
+		ctx                     context.Context
+		router                  generic.Router
+		async                   generic.AsyncInserter
+		backend                 fakeBackend
+		exampleNS, dogNS, catNS changelog.Namespace
+		example, dog, cat       *fakeInserter
+		cancel                  func()
+
+		suite = AsyncInserterSuite{
+			// We don't use the provided fakeBackend here, as we connect the router to the
+			// individual inserters using Register
+			New: func(_ fakeBackend) generic.AsyncInserter {
+				router = generic.NewRouter(logger)
+
+				exampleResult := router.Register(ctx, exampleNS, generic.WrapAsync(example))
+				ExpectResolveSuccess(exampleResult.Get(ctx))
+
+				dogResult := router.Register(ctx, dogNS, generic.WrapAsync(dog))
+				ExpectResolveSuccess(dogResult.Get(ctx))
+
+				catResult := router.Register(ctx, catNS, generic.WrapAsync(cat))
+				ExpectResolveSuccess(catResult.Get(ctx))
+
+				return router
+			},
+			NewBackend: func() fakeBackend {
+				example, exampleNS = newFakeInserter(), changelog.Namespace("public.example")
+				dog, dogNS = newFakeInserter(), changelog.Namespace("public.dog")
+				cat, catNS = newFakeInserter(), changelog.Namespace("public.cat")
+
+				return newFakeBackend(example, dog, cat)
+			},
+		}
 	)
 
-	JustBeforeEach(func() {
-		router = generic.NewRouter(logger)
+	// Have the suite do our setup, and bind the given variables
+	suite.Bind(&ctx, &async, &backend, &cancel)
 
-		dogResult := router.Register(ctx, dogNS, generic.WrapAsync(dog))
-		ExpectResolveSuccess(dogResult.Get(ctx))
-
-		catResult := router.Register(ctx, catNS, generic.WrapAsync(cat))
-		ExpectResolveSuccess(catResult.Get(ctx))
-	})
-
-	BeforeEach(func() {
-		ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-		dog, dogNS = newFakeInserter(), changelog.Namespace("public.dog")
-		cat, catNS = newFakeInserter(), changelog.Namespace("public.cat")
-	})
-
-	AfterEach(func() {
-		cancel()
+	Describe("AsyncInserter interface", func() {
+		verifyGenericAsyncInserter(suite)
 	})
 
 	It("routes inserts to the correct inserter", func() {
@@ -61,23 +68,11 @@ var _ = Describe("Router", func() {
 	Describe(".Flush", func() {
 		Context("when inserters take a while to flush", func() {
 			var (
-				release chan struct{}
+				resume chan struct{}
 			)
 
 			BeforeEach(func() {
-				release = make(chan struct{})
-
-				// Cause the dog inserter to hang until explicitly released
-				dog.BeforeFunc = func(context.Context, []*changelog.Modification) error {
-					select {
-					case <-ctx.Done():
-						logger.Log("event", "inserter.expired", "msg", "context expired before the inserter was released")
-					case <-release:
-						logger.Log("event", "inserter.release", "msg", "released, proceeding")
-					}
-
-					return nil
-				}
+				resume = dog.Pause(ctx)
 			})
 
 			It("waits for each inserter to flush", func() {
@@ -92,7 +87,7 @@ var _ = Describe("Router", func() {
 					Expect(err).NotTo(BeNil(), "dog inserter is blocked, so our flush should timeout")
 				}
 
-				close(release)
+				close(resume)
 				count, _, err := router.Flush(ctx).Get(ctx)
 				Expect(err).To(BeNil(), "all inserters are unblocked, so flush should succeed")
 				Expect(count).To(Equal(0), "Flush resets, so we expect it to be unaware of the previous insertions")
