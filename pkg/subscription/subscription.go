@@ -66,6 +66,11 @@ func (s *Subscription) CreateReplicationSlot(ctx context.Context) error {
 // whatever the server tells us our replication slot was last recorded at, then proceed to
 // heartbeat and replicate our remote.
 func (s *Subscription) StartReplication(ctx context.Context) error {
+	defer func() {
+		s.logger.Log("event", "replication_finished", "msg", "closing replication message channel")
+		close(s.messages)
+	}()
+
 	s.logger.Log("event", "start_replication", "publication", s.opts.Publication, "slot", s.opts.Name)
 	pluginArguments := []string{
 		`"proto_version" '1'`, fmt.Sprintf(`"publication_names" '%s'`, s.opts.Publication),
@@ -83,7 +88,8 @@ func (s *Subscription) StartReplication(ctx context.Context) error {
 		for {
 			msg, err := s.conn.WaitForReplicationMessage(ctx)
 			if err != nil {
-				return err
+				s.logger.Log("event", "initial_heartbeat_failed", "error", err)
+				return errors.Wrap(err, "failed to receive initial heartbeat")
 			}
 
 			if msg.ServerHeartbeat != nil {
@@ -146,8 +152,6 @@ var (
 //
 // Once we're done, we close the received channel so our consumers know we're done.
 func (s *Subscription) startReceiving(ctx context.Context) error {
-	defer close(s.messages)
-
 	for {
 		msg, err := s.conn.WaitForReplicationMessage(ctx)
 
