@@ -16,17 +16,6 @@ services:
     ports:
       - 5432:5432
 
-  pubsub:
-    hostname: pubsub
-    build:
-      dockerfile: Dockerfile
-      context: docker/gcloud-pubsub-emulator
-    restart: on-failure
-    volumes:
-      - pubsub-data:/data
-    ports:
-      - 8080:8080
-
   prometheus:
     image: prom/prometheus:v2.15.1
     volumes:
@@ -67,7 +56,6 @@ services:
 # Persist data across restarts
 volumes:
   postgres-data:
-  pubsub-data:
   prometheus-data:
   grafana-data:
 
