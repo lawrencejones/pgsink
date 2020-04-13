@@ -42,9 +42,9 @@ var SinkBuilder = sinkBuilderFunc(func(logger kitlog.Logger, opts ...func(*sink)
 
 type sinkBuilderFunc func(logger kitlog.Logger, opts ...func(*sink)) Sink
 
-func (b sinkBuilderFunc) WithSyncer(syncer Syncer) func(*sink) {
+func (b sinkBuilderFunc) WithSchemaHandler(schemaHandler SchemaHandler) func(*sink) {
 	return func(s *sink) {
-		s.syncer = syncer
+		s.schemaHandler = schemaHandler
 	}
 }
 
@@ -65,7 +65,7 @@ type sink struct {
 	builders      []func(AsyncInserter) AsyncInserter
 	flushInterval time.Duration
 	router        Router
-	syncer        Syncer
+	schemaHandler SchemaHandler
 }
 
 // Consume runs two concurrent threads, one that continually flushes the router and
@@ -123,13 +123,13 @@ func (s *sink) handleSchema(ctx context.Context, schema *changelog.Schema) error
 	logger := kitlog.With(s.logger, "event", "handle_schema", "namespace", string(schema.Spec.Namespace))
 	defer logger.Log()
 
-	route, inserter, outcome, err := s.syncer.Sync(ctx, s.logger, schema)
+	route, inserter, outcome, err := s.schemaHandler.Handle(ctx, s.logger, schema)
 	logger = kitlog.With(logger, "route", string(route), "outcome", string(outcome))
 	if err != nil {
 		return err
 	}
 
-	if outcome == SyncUpdate {
+	if outcome == SchemaHandlerUpdate {
 		s.router.Register(ctx, route, s.buildInserter(inserter))
 	}
 
