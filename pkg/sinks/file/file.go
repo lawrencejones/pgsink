@@ -45,19 +45,21 @@ func New(logger kitlog.Logger, opts Options) (generic.Sink, error) {
 	// TODO: We don't use the serialize package properly yet. Until we do, there's no point
 	// paramterising it.
 	serializer := serialize.DefaultSerializer
+	inserter := &inserter{file: modifications, serializer: serializer}
 
 	sink := generic.SinkBuilder(
 		logger,
 		generic.SinkBuilder.WithBuffer(opts.BufferSize),
 		generic.SinkBuilder.WithFlushInterval(opts.FlushInterval),
-		generic.SinkBuilder.WithSyncer(
-			generic.SyncAlwaysUpdateFunc(
-				func(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) (changelog.Namespace, generic.Inserter, error) {
+		generic.SinkBuilder.WithSchemaHandler(
+			generic.SchemaHandlerGlobalInserter(
+				inserter,
+				func(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) error {
 					if _, err := fmt.Fprintln(schemas, string(serializer.Register(schema))); err != nil {
-						return "", nil, errors.Wrap(err, "failed to write schema")
+						return errors.Wrap(err, "failed to write schema")
 					}
 
-					return generic.RouterMatchAll, &inserter{file: modifications, serializer: serializer}, nil
+					return nil
 				},
 			),
 		),
