@@ -8,6 +8,9 @@ import (
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 )
 
+// RouterMatchAll can be used to route all inserts to a catch-all inserter
+var RouterMatchAll = changelog.Namespace("*")
+
 type Router interface {
 	// Register notifies the router that all subsequent insertions for the given namespace
 	// should be routed to a new inserter. Register returns an InsertResult from flushing
@@ -40,6 +43,10 @@ func NewRouter(logger kitlog.Logger) Router {
 func (r *router) Register(ctx context.Context, ns changelog.Namespace, i AsyncInserter) InsertResult {
 	r.Lock()
 	defer r.Unlock()
+
+	if len(r.routes) > 0 && ns == RouterMatchAll {
+		panic("the RouterMatchAll route cannot be used with existing routes")
+	}
 
 	// By default, we'll return an empty insertion result. This is what you'll get if a
 	// route was never registered.
@@ -80,6 +87,9 @@ func (r *router) Insert(ctx context.Context, modifications []*changelog.Modifica
 	result := EmptyInsertResult
 	for _, modification := range modifications {
 		inserter, ok := r.routes[modification.Namespace]
+		if !ok {
+			inserter, ok = r.routes[RouterMatchAll]
+		}
 		if !ok || inserter == nil {
 			panic("asked to route modification before namespace was registered")
 		}
