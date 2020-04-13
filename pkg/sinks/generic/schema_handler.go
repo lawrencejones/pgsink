@@ -10,10 +10,9 @@ import (
 
 // SchemaHandler responds to new schemas by idempotently updating and configuring the Sink
 // to receive corresponding modifications. It returns an Inserter that can be used to
-// handle modification associated with the given schema, along with the
-// changelog.Namespace that should be configured to route to this schema in the Router.
+// handle modification associated with the given schema.
 type SchemaHandler interface {
-	Handle(context.Context, kitlog.Logger, *changelog.Schema) (changelog.Namespace, Inserter, SchemaHandlerOutcome, error)
+	Handle(context.Context, kitlog.Logger, *changelog.Schema) (Inserter, SchemaHandlerOutcome, error)
 }
 
 type SchemaHandlerOutcome string
@@ -25,9 +24,9 @@ const (
 )
 
 // SchemaHandlerFunc is shorthand for creating a handler from a function
-type SchemaHandlerFunc func(context.Context, kitlog.Logger, *changelog.Schema) (changelog.Namespace, Inserter, SchemaHandlerOutcome, error)
+type SchemaHandlerFunc func(context.Context, kitlog.Logger, *changelog.Schema) (Inserter, SchemaHandlerOutcome, error)
 
-func (s SchemaHandlerFunc) Handle(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) (changelog.Namespace, Inserter, SchemaHandlerOutcome, error) {
+func (s SchemaHandlerFunc) Handle(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) (Inserter, SchemaHandlerOutcome, error) {
 	return s(ctx, logger, schema)
 }
 
@@ -37,9 +36,9 @@ func (s SchemaHandlerFunc) Handle(ctx context.Context, logger kitlog.Logger, sch
 func SchemaHandlerGlobalInserter(inserter Inserter, schemaHandler func(context.Context, kitlog.Logger, *changelog.Schema) error) SchemaHandler {
 	var hasRun bool
 	return SchemaHandlerFunc(
-		func(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) (changelog.Namespace, Inserter, SchemaHandlerOutcome, error) {
+		func(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) (Inserter, SchemaHandlerOutcome, error) {
 			if err := schemaHandler(ctx, logger, schema); err != nil {
-				return "", nil, SchemaHandlerFailed, err
+				return nil, SchemaHandlerFailed, err
 			}
 
 			// We only want to return SchemaHandlerUpdate once, as we never change the inserter
@@ -49,7 +48,7 @@ func SchemaHandlerGlobalInserter(inserter Inserter, schemaHandler func(context.C
 				outcome = SchemaHandlerUpdate
 			}
 
-			return RouterMatchAll, inserter, outcome, nil
+			return inserter, outcome, nil
 		},
 	)
 }

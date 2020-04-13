@@ -8,8 +8,9 @@ import (
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 )
 
-// RouterMatchAll can be used to route all inserts to a catch-all inserter
-var RouterMatchAll = changelog.Namespace("*")
+// Route is a string representing a routing key for incoming modifications. Inserters are
+// associated with these routes.
+type Route string
 
 type Router interface {
 	// Register notifies the router that all subsequent insertions for the given namespace
@@ -17,7 +18,7 @@ type Router interface {
 	// any inserters that were previously routed via this namespace. Any previous inserters
 	// flush is added to the routers in-flight result, preserving the semantics of flush to
 	// ensure we appropriately handle failed flushes.
-	Register(context.Context, changelog.Namespace, AsyncInserter) InsertResult
+	Register(context.Context, Route, AsyncInserter) InsertResult
 
 	// Otherwise, a router looks exactly like a normal AsyncInserter. It should be
 	// transparent that each insert is routed to other inserters, and it should be possible
@@ -27,7 +28,7 @@ type Router interface {
 
 type router struct {
 	logger kitlog.Logger
-	routes map[changelog.Namespace]AsyncInserter
+	routes map[Route]AsyncInserter
 	result InsertResult
 	sync.RWMutex
 }
@@ -35,25 +36,21 @@ type router struct {
 func NewRouter(logger kitlog.Logger) Router {
 	return &router{
 		logger: logger,
-		routes: map[changelog.Namespace]AsyncInserter{},
+		routes: map[Route]AsyncInserter{},
 		result: EmptyInsertResult,
 	}
 }
 
-func (r *router) Register(ctx context.Context, ns changelog.Namespace, i AsyncInserter) InsertResult {
+func (r *router) Register(ctx context.Context, route Route, i AsyncInserter) InsertResult {
 	r.Lock()
 	defer r.Unlock()
-
-	if len(r.routes) > 0 && ns == RouterMatchAll {
-		panic("the RouterMatchAll route cannot be used with existing routes")
-	}
 
 	// By default, we'll return an empty insertion result. This is what you'll get if a
 	// route was never registered.
 	flushResult := EmptyInsertResult
 
-	logger := kitlog.With(r.logger, "namespace", ns)
-	existing, ok := r.routes[ns]
+	logger := kitlog.With(r.logger, "route", route)
+	existing, ok := r.routes[route]
 	if ok && existing != nil {
 		logger.Log("event", "existing_route.flush", "msg", "inserter already registered, flushing")
 		flushResult = existing.Flush(ctx)
@@ -67,7 +64,7 @@ func (r *router) Register(ctx context.Context, ns changelog.Namespace, i AsyncIn
 	}
 
 	logger.Log("event", "route.register", "msg", "registering inserter for namespace")
-	r.routes[ns] = i
+	r.routes[route] = i
 
 	return flushResult
 }
@@ -86,10 +83,7 @@ func (r *router) Insert(ctx context.Context, modifications []*changelog.Modifica
 
 	result := EmptyInsertResult
 	for _, modification := range modifications {
-		inserter, ok := r.routes[modification.Namespace]
-		if !ok {
-			inserter, ok = r.routes[RouterMatchAll]
-		}
+		inserter, ok := r.routes[Route(modification.Namespace)]
 		if !ok || inserter == nil {
 			panic("asked to route modification before namespace was registered")
 		}
