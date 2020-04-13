@@ -26,7 +26,7 @@ type Sink interface {
 
 // SinkBuilder allows sink implementations to easily compose the sink-specific
 // implementations into a generic sink implementation that fulfils the Sink contract.
-var SinkBuilder = sinkBuilderFunc(func(logger kitlog.Logger, opts ...func(*sink)) *sink {
+var SinkBuilder = sinkBuilderFunc(func(logger kitlog.Logger, opts ...func(*sink)) Sink {
 	s := &sink{
 		logger:   logger,
 		builders: []func(AsyncInserter) AsyncInserter{},
@@ -40,7 +40,7 @@ var SinkBuilder = sinkBuilderFunc(func(logger kitlog.Logger, opts ...func(*sink)
 	return s
 })
 
-type sinkBuilderFunc func(logger kitlog.Logger, opts ...func(*sink)) *sink
+type sinkBuilderFunc func(logger kitlog.Logger, opts ...func(*sink)) Sink
 
 func (b sinkBuilderFunc) WithSyncer(syncer Syncer) func(*sink) {
 	return func(s *sink) {
@@ -68,6 +68,10 @@ type sink struct {
 	syncer        Syncer
 }
 
+// Consume runs two concurrent threads, one that continually flushes the router and
+// another that consumes changelog entries, pushing them into the router. When the
+// changelog entries have finished, we quit the insertion and wait for a final flush to
+// return.
 func (s *sink) Consume(ctx context.Context, entries changelog.Changelog, ack AckCallback) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
