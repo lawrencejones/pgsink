@@ -2,8 +2,7 @@
 
 This tool connects to a Postgres database via logical replication, creating the
 plumbing required to subscribe to changes on tables within a specific schema.
-These changes are then pushed into a sink destination, which at time of writing
-is GCP Pub/Sub.
+These changes are then pushed into one of the supported sink destinations.
 
 ```
 pkg/changelog     // Schema & Modification types, the public output types
@@ -30,15 +29,15 @@ pg2sink_postgres_1 is up-to-date
 pg2sink_grafana_1 is up-to-date
 ```
 
-Then run `make recreatedb` to create a `pg2sink_test` database. You can now
-access your database like so:
+Then run `make recreatedb` to create a `pg2sink` database. You can now access
+your database like so:
 
 ```console
-$ psql --host localhost --user pg2sink_test pg2sink_test
-pg2sink_test=> \q
+$ psql --host localhost --user pg2sink pg2sink
+pg2sink=> \q
 ```
 
-pg2sink will work with this database: try `pg2sink --decode-only`.
+pg2sink will work with this database: try `pg2sink --sink=file --decode-only`.
 
 ### Database migrations
 
@@ -60,19 +59,19 @@ $ psql pg2sink
 psql (11.5)
 Type "help" for help.
 
-pg2sink=# create table example (id bigserial primary key, msg text);
+pg2sink=# create table public.example (id bigserial primary key, msg text);
 CREATE TABLE
 
-pg2sink=# insert into example (msg) values ('hello world');
+pg2sink=# insert into public.example (msg) values ('hello world');
 INSERT 1
 ```
 
-pg2sink will stream these changes from the database and send it to Google's
-Pub/Sub service. Two types of message are sent, data and schema. Data messages
-contain the inserted/updated/deleted row content in JSON form, with each column
-value stored as a string.
+pg2sink will stream these changes from the database and send it to the
+configured sink. Changes are expressed as a stream of messages, either a
+`Schema` that describes the structure of a Postgres table, or a `Modification`
+corresponding to an insert/update/delete of a row in Postgres.
 
-Our example would produce the following data message, where `timestamp` is the
+Our example would produce the following modification, where `timestamp` is the
 time at which the change was committed and `sequence` the operation index within
 the transaction:
 
@@ -90,11 +89,9 @@ the transaction:
 }
 ```
 
-For some, receiving JSON with string keys will be perfectly suitable for their
-use cases. For others, it will be important that schemas are available to later
-interpret type information such as numeric precision. We publish Avro schema
-definitions via a separate Pub/Sub topic that can be used to parse these data
-messages:
+Also sent, arriving before the modification element, will be a schema entry that
+describes the `public.example` table. We represent these as Avro schemas, built
+from the Postgres catalog information.
 
 ```json
 {
