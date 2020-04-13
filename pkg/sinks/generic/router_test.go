@@ -65,6 +65,12 @@ var _ = Describe("router", func() {
 		Expect(cat.Store()).To(ConsistOf(fixtureCat1Insert))
 	})
 
+	Context("when registered RouterMatchAll route", func() {
+		PIt("routes all inserters to this inserter", func() {
+			// TODO
+		})
+	})
+
 	Describe(".Flush", func() {
 		Context("when inserters take a while to flush", func() {
 			var (
