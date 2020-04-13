@@ -22,7 +22,6 @@ import (
 	"github.com/lawrencejones/pg2sink/pkg/models"
 	"github.com/lawrencejones/pg2sink/pkg/publication"
 	"github.com/lawrencejones/pg2sink/pkg/sinks"
-	sinkbigquery "github.com/lawrencejones/pg2sink/pkg/sinks/bigquery"
 	sinkfile "github.com/lawrencejones/pg2sink/pkg/sinks/file"
 	"github.com/lawrencejones/pg2sink/pkg/subscription"
 	"github.com/lawrencejones/pg2sink/pkg/util"
@@ -82,13 +81,6 @@ var (
 	_                     = func() (err error) {
 		stream.Flag("sink.file.schemas-path", "File path for schemas").Default("/dev/stdout").StringVar(&streamSinkFileOptions.SchemasPath)
 		stream.Flag("sink.file.modifications-path", "File path for modifications").Default("/dev/stdout").StringVar(&streamSinkFileOptions.ModificationsPath)
-		return
-	}()
-	streamSinkBigQueryOptions = sinkbigquery.Options{}
-	_                         = func() (err error) {
-		stream.Flag("sink.bigquery.project-id", "Google Project ID").StringVar(&streamSinkBigQueryOptions.ProjectID)
-		stream.Flag("sink.bigquery.dataset", "BigQuery dataset name").StringVar(&streamSinkBigQueryOptions.Dataset)
-		stream.Flag("sink.bigquery.location", "BigQuery dataset location").Default("EU").StringVar(&streamSinkBigQueryOptions.Location)
 		return
 	}()
 )
@@ -248,8 +240,6 @@ func main() {
 		switch *streamSinkType {
 		case "file":
 			sink = mustSink(sinkfile.New(streamSinkFileOptions))
-		case "bigquery":
-			sink = mustSink(sinkbigquery.New(ctx, logger, streamSinkBigQueryOptions))
 		default:
 			kingpin.Fatalf("unsupported sink type: %s", *streamSinkType)
 		}

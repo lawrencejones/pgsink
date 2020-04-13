@@ -7,11 +7,11 @@ import (
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 )
 
-// Inserter provides a synchronous interface around inserting data into BigQuery.
+// Inserter provides a synchronous interface around inserting data into a sink
 type Inserter interface {
 	// Insert receives changelog modifications to insert into a table. It returns the count
 	// of rows inserted, and the highest non-nil LSN from the batch of modification
-	// confirmed to be written to the BigQuery table.
+	// confirmed to be written to the sink
 	Insert(context.Context, []*changelog.Modification) (count int, lsn *uint64, err error)
 }
 
