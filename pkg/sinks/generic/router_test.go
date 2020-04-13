@@ -15,13 +15,13 @@ import (
 
 var _ = Describe("router", func() {
 	var (
-		ctx                     context.Context
-		router                  generic.Router
-		async                   generic.AsyncInserter
-		backend                 fakeBackend
-		exampleNS, dogNS, catNS changelog.Namespace
-		example, dog, cat       *fakeInserter
-		cancel                  func()
+		ctx                              context.Context
+		router                           generic.Router
+		async                            generic.AsyncInserter
+		backend                          fakeBackend
+		exampleRoute, dogRoute, catRoute generic.Route
+		example, dog, cat                *fakeInserter
+		cancel                           func()
 
 		suite = AsyncInserterSuite{
 			// We don't use the provided fakeBackend here, as we connect the router to the
@@ -29,21 +29,21 @@ var _ = Describe("router", func() {
 			New: func(_ fakeBackend) generic.AsyncInserter {
 				router = generic.NewRouter(logger)
 
-				exampleResult := router.Register(ctx, exampleNS, generic.WrapAsync(example))
+				exampleResult := router.Register(ctx, exampleRoute, generic.WrapAsync(example))
 				ExpectResolveSuccess(exampleResult.Get(ctx))
 
-				dogResult := router.Register(ctx, dogNS, generic.WrapAsync(dog))
+				dogResult := router.Register(ctx, dogRoute, generic.WrapAsync(dog))
 				ExpectResolveSuccess(dogResult.Get(ctx))
 
-				catResult := router.Register(ctx, catNS, generic.WrapAsync(cat))
+				catResult := router.Register(ctx, catRoute, generic.WrapAsync(cat))
 				ExpectResolveSuccess(catResult.Get(ctx))
 
 				return router
 			},
 			NewBackend: func() fakeBackend {
-				example, exampleNS = newFakeInserter(), changelog.Namespace("public.example")
-				dog, dogNS = newFakeInserter(), changelog.Namespace("public.dog")
-				cat, catNS = newFakeInserter(), changelog.Namespace("public.cat")
+				example, exampleRoute = newFakeInserter(), generic.Route("public.example")
+				dog, dogRoute = newFakeInserter(), generic.Route("public.dog")
+				cat, catRoute = newFakeInserter(), generic.Route("public.cat")
 
 				return newFakeBackend(example, dog, cat)
 			},

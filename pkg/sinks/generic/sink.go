@@ -123,14 +123,14 @@ func (s *sink) handleSchema(ctx context.Context, schema *changelog.Schema) error
 	logger := kitlog.With(s.logger, "event", "handle_schema", "namespace", string(schema.Spec.Namespace))
 	defer logger.Log()
 
-	route, inserter, outcome, err := s.schemaHandler.Handle(ctx, s.logger, schema)
-	logger = kitlog.With(logger, "route", string(route), "outcome", string(outcome))
+	inserter, outcome, err := s.schemaHandler.Handle(ctx, s.logger, schema)
+	logger = kitlog.With(logger, "outcome", string(outcome))
 	if err != nil {
 		return err
 	}
 
 	if outcome == SchemaHandlerUpdate {
-		s.router.Register(ctx, route, s.buildInserter(inserter))
+		s.router.Register(ctx, Route(schema.Spec.Namespace), s.buildInserter(inserter))
 	}
 
 	return nil
