@@ -10,21 +10,22 @@ import (
 	"runtime"
 	"syscall"
 
+	"github.com/lawrencejones/pg2sink/pkg/changelog"
+	"github.com/lawrencejones/pg2sink/pkg/imports"
+	"github.com/lawrencejones/pg2sink/pkg/migration"
+	"github.com/lawrencejones/pg2sink/pkg/models"
+	"github.com/lawrencejones/pg2sink/pkg/publication"
+	sinkfile "github.com/lawrencejones/pg2sink/pkg/sinks/file"
+	"github.com/lawrencejones/pg2sink/pkg/sinks/generic"
+	"github.com/lawrencejones/pg2sink/pkg/subscription"
+	"github.com/lawrencejones/pg2sink/pkg/util"
+
 	"contrib.go.opencensus.io/exporter/jaeger"
 	"github.com/alecthomas/kingpin"
 	"github.com/davecgh/go-spew/spew"
 	kitlog "github.com/go-kit/kit/log"
 	level "github.com/go-kit/kit/log/level"
 	"github.com/jackc/pgx"
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
-	"github.com/lawrencejones/pg2sink/pkg/imports"
-	"github.com/lawrencejones/pg2sink/pkg/migration"
-	"github.com/lawrencejones/pg2sink/pkg/models"
-	"github.com/lawrencejones/pg2sink/pkg/publication"
-	"github.com/lawrencejones/pg2sink/pkg/sinks"
-	sinkfile "github.com/lawrencejones/pg2sink/pkg/sinks/file"
-	"github.com/lawrencejones/pg2sink/pkg/subscription"
-	"github.com/lawrencejones/pg2sink/pkg/util"
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opencensus.io/trace"
@@ -77,12 +78,7 @@ var (
 	streamImporterBufferSize        = stream.Flag("importer-buffer-size", "Buffer between pulling data from Postgres and sink").Default("100000").Int()
 
 	streamSinkType        = stream.Flag("sink", "Type of sink target").Required().String()
-	streamSinkFileOptions = sinkfile.Options{}
-	_                     = func() (err error) {
-		stream.Flag("sink.file.schemas-path", "File path for schemas").Default("/dev/stdout").StringVar(&streamSinkFileOptions.SchemasPath)
-		stream.Flag("sink.file.modifications-path", "File path for modifications").Default("/dev/stdout").StringVar(&streamSinkFileOptions.ModificationsPath)
-		return
-	}()
+	streamSinkFileOptions = new(sinkfile.Options).Bind(stream, "sink.file.")
 )
 
 func main() {
@@ -224,12 +220,12 @@ func main() {
 
 	case stream.FullCommand():
 		var (
-			sink   sinks.Sink
+			sink   generic.Sink
 			sub    *subscription.Subscription
 			pubmgr *publication.Manager
 		)
 
-		mustSink := func(sink sinks.Sink, err error) sinks.Sink {
+		mustSink := func(sink generic.Sink, err error) generic.Sink {
 			if err != nil {
 				kingpin.Fatalf("failed to create file sink: %v", err)
 			}
@@ -239,7 +235,7 @@ func main() {
 
 		switch *streamSinkType {
 		case "file":
-			sink = mustSink(sinkfile.New(streamSinkFileOptions))
+			sink = mustSink(sinkfile.New(logger, *streamSinkFileOptions))
 		default:
 			kingpin.Fatalf("unsupported sink type: %s", *streamSinkType)
 		}

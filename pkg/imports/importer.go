@@ -9,7 +9,7 @@ import (
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 	"github.com/lawrencejones/pg2sink/pkg/logical"
 	"github.com/lawrencejones/pg2sink/pkg/models"
-	"github.com/lawrencejones/pg2sink/pkg/sinks"
+	"github.com/lawrencejones/pg2sink/pkg/sinks/generic"
 
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgx"
@@ -31,7 +31,7 @@ type ImporterOptions struct {
 	BufferSize       int           // channel buffer between Postgres and sink
 }
 
-func NewImporter(logger kitlog.Logger, pool *pgx.ConnPool, sink sinks.Sink, opts ImporterOptions) *Importer {
+func NewImporter(logger kitlog.Logger, pool *pgx.ConnPool, sink generic.Sink, opts ImporterOptions) *Importer {
 	return &Importer{
 		logger: logger,
 		pool:   pool,
@@ -43,7 +43,7 @@ func NewImporter(logger kitlog.Logger, pool *pgx.ConnPool, sink sinks.Sink, opts
 type Importer struct {
 	logger kitlog.Logger
 	pool   *pgx.ConnPool
-	sink   sinks.Sink
+	sink   generic.Sink
 	opts   ImporterOptions
 }
 
