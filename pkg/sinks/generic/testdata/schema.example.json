@@ -1,0 +1,27 @@
+{
+  "timestamp": "2020-04-20T15:31:28.723201Z",
+  "lsn": 61055496,
+  "spec": {
+    "namespace": "public.example",
+    "type": "record",
+    "name": "value",
+    "fields": [
+      {
+        "name": "id",
+        "type": [
+          "null",
+          "long"
+        ],
+        "default": null
+      },
+      {
+        "name": "msg",
+        "type": [
+          "null",
+          "string"
+        ],
+        "default": null
+      }
+    ]
+  }
+}

@@ -2,6 +2,7 @@ package generic
 
 import (
 	"context"
+	"sync"
 
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 
@@ -51,4 +52,50 @@ func SchemaHandlerGlobalInserter(inserter Inserter, schemaHandler func(context.C
 			return inserter, outcome, nil
 		},
 	)
+}
+
+// SchemaHandlerCacheOnFingerprint caches schema handler responses on the fingerprint of
+// the received schema. This means any subsequent identical schemas are provided the old,
+// cached version of the previous handler call.
+func SchemaHandlerCacheOnFingerprint(handler SchemaHandler) SchemaHandler {
+	return &schemaHandlerCached{
+		handler: handler,
+		cache:   map[uint64]Inserter{},
+	}
+}
+
+type schemaHandlerCached struct {
+	handler SchemaHandler
+	cache   map[uint64]Inserter
+	sync.Mutex
+}
+
+type fingerprintedInserter struct {
+	inserter    Inserter
+	fingerprint uint64
+}
+
+func (s *schemaHandlerCached) Handle(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) (Inserter, SchemaHandlerOutcome, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	logger = kitlog.With(logger, "namespace", schema.Spec.Namespace)
+	fingerprint := schema.Spec.GetFingerprint()
+	existing, ok := s.cache[fingerprint]
+
+	if ok && existing != nil {
+		logger.Log("event", "schema.already_fingerprinted", "fingerprint", fingerprint,
+			"msg", "returning cached inserter from previous fingerprint")
+		return existing, SchemaHandlerNoop, nil
+	}
+
+	logger.Log("event", "schema.new_fingerprint", "fingerprint", fingerprint,
+		"msg", "fingerprint seen for the first time, calling schema handler")
+	inserter, outcome, err := s.handler.Handle(ctx, logger, schema)
+
+	// Cache the inserter. Callers need to be aware that we'll do this even if we fail to
+	// handle the schema.
+	s.cache[fingerprint] = inserter
+
+	return inserter, outcome, err
 }
