@@ -106,4 +106,19 @@ var _ = Describe("NewBufferedInserter", func() {
 			})
 		})
 	})
+
+	Describe(".Flush", func() {
+		Context("when there are no buffered elements", func() {
+			// We rely on buffered inserters no-op'ing when there are no modifications to be
+			// flushed. Otherwise periodic flushing can get very expensive.
+			It("does not perform any insertion", func() {
+				_, _, err := async.Flush(ctx).Get(ctx)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(len(backend.Batches())).To(
+					Equal(0), "no modifications to flush but caused an insert anyway",
+				)
+			})
+		})
+	})
 })
