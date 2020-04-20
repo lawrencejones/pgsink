@@ -15,6 +15,7 @@ import (
 	"github.com/lawrencejones/pg2sink/pkg/migration"
 	"github.com/lawrencejones/pg2sink/pkg/models"
 	"github.com/lawrencejones/pg2sink/pkg/publication"
+	sinkbigquery "github.com/lawrencejones/pg2sink/pkg/sinks/bigquery"
 	sinkfile "github.com/lawrencejones/pg2sink/pkg/sinks/file"
 	"github.com/lawrencejones/pg2sink/pkg/sinks/generic"
 	"github.com/lawrencejones/pg2sink/pkg/subscription"
@@ -77,8 +78,9 @@ var (
 	streamImporterBatchLimit        = stream.Flag("importer-batch-limit", "Maximum rows to pull per import job pagination").Default("100000").Int()
 	streamImporterBufferSize        = stream.Flag("importer-buffer-size", "Buffer between pulling data from Postgres and sink").Default("100000").Int()
 
-	streamSinkType        = stream.Flag("sink", "Type of sink target").Required().String()
-	streamSinkFileOptions = new(sinkfile.Options).Bind(stream, "sink.file.")
+	streamSinkType            = stream.Flag("sink", "Type of sink target").Required().String()
+	streamSinkFileOptions     = new(sinkfile.Options).Bind(stream, "sink.file.")
+	streamSinkBigQueryOptions = new(sinkbigquery.Options).Bind(stream, "sink.bigquery.")
 )
 
 func main() {
@@ -236,6 +238,8 @@ func main() {
 		switch *streamSinkType {
 		case "file":
 			sink = mustSink(sinkfile.New(logger, *streamSinkFileOptions))
+		case "bigquery":
+			sink = mustSink(sinkbigquery.New(ctx, logger, *streamSinkBigQueryOptions))
 		default:
 			kingpin.Fatalf("unsupported sink type: %s", *streamSinkType)
 		}
