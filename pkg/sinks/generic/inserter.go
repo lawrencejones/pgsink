@@ -15,12 +15,6 @@ type Inserter interface {
 	Insert(context.Context, []*changelog.Modification) (count int, lsn *uint64, err error)
 }
 
-func NewMemoryInserter() *MemoryInserter {
-	return &MemoryInserter{
-		batches: [][]*changelog.Modification{},
-	}
-}
-
 // MemoryInserter is a reference implementation of an inserter, storing modifications in
 // an in-memory buffer. It satisfies all requirements of an inserter, including
 // race-safety.
@@ -30,6 +24,12 @@ func NewMemoryInserter() *MemoryInserter {
 type MemoryInserter struct {
 	batches [][]*changelog.Modification
 	sync.Mutex
+}
+
+func NewMemoryInserter() *MemoryInserter {
+	return &MemoryInserter{
+		batches: [][]*changelog.Modification{},
+	}
 }
 
 func (i *MemoryInserter) Insert(ctx context.Context, modifications []*changelog.Modification) (count int, lsn *uint64, err error) {

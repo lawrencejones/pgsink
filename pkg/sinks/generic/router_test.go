@@ -29,13 +29,13 @@ var _ = Describe("router", func() {
 			New: func(_ fakeBackend) generic.AsyncInserter {
 				router = generic.NewRouter(logger)
 
-				exampleResult := router.Register(ctx, exampleRoute, generic.WrapAsync(example))
+				exampleResult := router.Register(ctx, exampleRoute, generic.NewAsyncInserter(example))
 				ExpectResolveSuccess(exampleResult.Get(ctx))
 
-				dogResult := router.Register(ctx, dogRoute, generic.WrapAsync(dog))
+				dogResult := router.Register(ctx, dogRoute, generic.NewAsyncInserter(dog))
 				ExpectResolveSuccess(dogResult.Get(ctx))
 
-				catResult := router.Register(ctx, catRoute, generic.WrapAsync(cat))
+				catResult := router.Register(ctx, catRoute, generic.NewAsyncInserter(cat))
 				ExpectResolveSuccess(catResult.Get(ctx))
 
 				return router

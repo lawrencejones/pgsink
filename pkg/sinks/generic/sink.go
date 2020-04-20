@@ -56,7 +56,7 @@ func (b sinkBuilderFunc) WithFlushInterval(flushInterval time.Duration) func(*si
 
 func (b sinkBuilderFunc) WithBuffer(size int) func(*sink) {
 	return func(s *sink) {
-		s.builders = append(s.builders, func(i AsyncInserter) AsyncInserter { return WithBuffer(i, size) })
+		s.builders = append(s.builders, func(i AsyncInserter) AsyncInserter { return NewBufferedInserter(i, size) })
 	}
 }
 
@@ -137,7 +137,7 @@ func (s *sink) handleSchema(ctx context.Context, schema *changelog.Schema) error
 }
 
 func (s *sink) buildInserter(original Inserter) AsyncInserter {
-	inserter := WrapAsync(original)
+	inserter := NewAsyncInserter(original)
 	for _, builder := range s.builders {
 		inserter = builder(inserter)
 	}

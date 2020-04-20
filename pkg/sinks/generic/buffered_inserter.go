@@ -7,24 +7,24 @@ import (
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 )
 
-// WithBuffer wraps any async inserter with a buffer. When an insertion overflows the
-// buffer, the insert is triggered is passed to the underlying inserter. Calling Flush
-// will also push buffered inserts into the underlying system.
-func WithBuffer(i AsyncInserter, bufferSize int) AsyncInserter {
-	return &bufferedInserter{
-		inserter:     i,
-		buffer:       make([]*changelog.Modification, 0, bufferSize),
-		bufferResult: NewInsertResult(),
-		bufferSize:   bufferSize,
-	}
-}
-
 type bufferedInserter struct {
 	inserter     AsyncInserter
 	buffer       []*changelog.Modification
 	bufferResult *insertResult
 	bufferSize   int
 	sync.Mutex
+}
+
+// NewBufferedInserter wraps any async inserter with a buffer. When an insertion overflows
+// the buffer, the insert is triggered is passed to the underlying inserter. Calling Flush
+// will also push buffered inserts into the underlying system.
+func NewBufferedInserter(i AsyncInserter, bufferSize int) AsyncInserter {
+	return &bufferedInserter{
+		inserter:     i,
+		buffer:       make([]*changelog.Modification, 0, bufferSize),
+		bufferResult: NewInsertResult(),
+		bufferSize:   bufferSize,
+	}
 }
 
 // Insert adds the given modifications to the buffer, with any overflow being chunked into

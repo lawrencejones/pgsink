@@ -9,11 +9,11 @@ import (
 	_ "github.com/onsi/gomega/gstruct"
 )
 
-var _ = Describe("asyncInserter", func() {
+var _ = Describe("NewAsyncInserter", func() {
 	var (
 		suite = AsyncInserterSuite{
 			New: func(backend fakeBackend) generic.AsyncInserter {
-				return generic.WrapAsync(backend[0])
+				return generic.NewAsyncInserter(backend[0])
 			},
 			NewBackend: func() fakeBackend {
 				return newFakeBackend(&fakeInserter{MemoryInserter: generic.NewMemoryInserter()})

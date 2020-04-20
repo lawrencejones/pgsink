@@ -13,7 +13,7 @@ import (
 	. "github.com/onsi/gomega/gstruct"
 )
 
-var _ = Describe("bufferedInserter", func() {
+var _ = Describe("NewBufferedInserter", func() {
 	var (
 		ctx        context.Context
 		bufferSize int
@@ -23,7 +23,7 @@ var _ = Describe("bufferedInserter", func() {
 
 		suite = AsyncInserterSuite{
 			New: func(backend fakeBackend) generic.AsyncInserter {
-				return generic.WithBuffer(generic.WrapAsync(backend[0]), bufferSize)
+				return generic.NewBufferedInserter(generic.NewAsyncInserter(backend[0]), bufferSize)
 			},
 			NewBackend: func() fakeBackend {
 				return newFakeBackend(&fakeInserter{MemoryInserter: generic.NewMemoryInserter()})

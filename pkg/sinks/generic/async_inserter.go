@@ -24,8 +24,8 @@ type asyncInserter struct {
 	sync.Mutex
 }
 
-// WrapAsync converts a synchronous inserter to the async contract
-func WrapAsync(i Inserter) AsyncInserter {
+// NewAsyncInserter converts a synchronous inserter to the async contract
+func NewAsyncInserter(i Inserter) AsyncInserter {
 	return &asyncInserter{
 		inserter: i,
 		result:   EmptyInsertResult,
