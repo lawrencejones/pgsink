@@ -48,6 +48,12 @@ func (b sinkBuilderFunc) WithSchemaHandler(schemaHandler SchemaHandler) func(*si
 	}
 }
 
+func (b sinkBuilderFunc) WithInstrumentation(instrument bool) func(*sink) {
+	return func(s *sink) {
+		s.instrument = instrument
+	}
+}
+
 func (b sinkBuilderFunc) WithFlushInterval(flushInterval time.Duration) func(*sink) {
 	return func(s *sink) {
 		s.flushInterval = flushInterval
@@ -63,6 +69,7 @@ func (b sinkBuilderFunc) WithBuffer(size int) func(*sink) {
 type sink struct {
 	logger        kitlog.Logger
 	builders      []func(AsyncInserter) AsyncInserter
+	instrument    bool
 	flushInterval time.Duration
 	router        Router
 	schemaHandler SchemaHandler
@@ -129,15 +136,22 @@ func (s *sink) handleSchema(ctx context.Context, schema *changelog.Schema) error
 		return err
 	}
 
+	route := Route(schema.Spec.Namespace)
 	if outcome == SchemaHandlerUpdate {
-		s.router.Register(ctx, Route(schema.Spec.Namespace), s.buildInserter(inserter))
+		s.router.Register(ctx, route, s.buildInserter(route, inserter))
 	}
 
 	return nil
 }
 
-func (s *sink) buildInserter(original Inserter) AsyncInserter {
-	inserter := NewAsyncInserter(original)
+func (s *sink) buildInserter(route Route, sync Inserter) AsyncInserter {
+	// If instrumentation is enabled, we want to instrument the sync interface. This ensures
+	// we track the lowest level operation, which is often what we'll be interested in.
+	if s.instrument {
+		sync = NewInstrumentedInserter(s.logger, route, sync)
+	}
+
+	inserter := NewAsyncInserter(sync)
 	for _, builder := range s.builders {
 		inserter = builder(inserter)
 	}

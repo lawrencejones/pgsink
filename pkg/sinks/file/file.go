@@ -19,6 +19,7 @@ type Options struct {
 	SchemasPath       string
 	ModificationsPath string
 	BufferSize        int
+	Instrument        bool
 	FlushInterval     time.Duration
 }
 
@@ -26,6 +27,7 @@ func (opt *Options) Bind(cmd *kingpin.CmdClause, prefix string) *Options {
 	cmd.Flag(fmt.Sprintf("%sschemas-path", prefix), "File path for schemas").Default("/dev/stdout").StringVar(&opt.SchemasPath)
 	cmd.Flag(fmt.Sprintf("%smodifications-path", prefix), "File path for modifications").Default("/dev/stdout").StringVar(&opt.ModificationsPath)
 	cmd.Flag(fmt.Sprintf("%sbuffer-size", prefix), "Number of modification to buffer before flushing").Default("5").IntVar(&opt.BufferSize)
+	cmd.Flag(fmt.Sprintf("%sinstrument", prefix), "Enable instrumentation").Default("true").BoolVar(&opt.Instrument)
 	cmd.Flag(fmt.Sprintf("%sflush-interval", prefix), "Time period with which we periodically flush the sink").Default("5s").DurationVar(&opt.FlushInterval)
 
 	return opt
@@ -50,6 +52,7 @@ func New(logger kitlog.Logger, opts Options) (generic.Sink, error) {
 	sink := generic.SinkBuilder(
 		logger,
 		generic.SinkBuilder.WithBuffer(opts.BufferSize),
+		generic.SinkBuilder.WithInstrumentation(opts.Instrument),
 		generic.SinkBuilder.WithFlushInterval(opts.FlushInterval),
 		generic.SinkBuilder.WithSchemaHandler(
 			generic.SchemaHandlerGlobalInserter(
