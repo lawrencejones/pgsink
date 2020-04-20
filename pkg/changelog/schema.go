@@ -80,6 +80,7 @@ type SchemaField struct {
 	Name    string      `json:"name"`
 	Type    []string    `json:"type"`
 	Default interface{} `json:"default"`
+	Key     bool        `json:"key"`
 }
 
 func (s SchemaField) GetType() string {
@@ -127,5 +128,6 @@ func schemaFieldFromColumn(c logical.Column) SchemaField {
 		Name:    c.Name,
 		Type:    []string{"null", avroType},
 		Default: nil,
+		Key:     c.Key,
 	}
 }
