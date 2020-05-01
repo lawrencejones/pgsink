@@ -26,7 +26,9 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	kitlog "github.com/go-kit/kit/log"
 	level "github.com/go-kit/kit/log/level"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pglogrepl"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opencensus.io/trace"
@@ -70,10 +72,9 @@ var (
 	streamPollInterval              = stream.Flag("poll-interval", "Interval to poll for new tables").Default("10s").Duration()
 	streamStatusHeartbeat           = stream.Flag("status-heartbeat", "Interval to heartbeat replication primary").Default("10s").Duration()
 	streamDecodeOnly                = stream.Flag("decode-only", "Interval to heartbeat replication primary").Default("false").Bool()
-	streamModificationWorkerCount   = stream.Flag("modification-worker-count", "Workers for building modifications").Default("1").Int()
 	streamImportManagerPollInterval = stream.Flag("import-manager-poll-interval", "Interval to poll for newly published tables").Default("10s").Duration()
 	streamImporterPollInterval      = stream.Flag("importer-poll-interval", "Interval to poll for new import jobs").Default("10s").Duration()
-	streamImporterWorkerCount       = stream.Flag("importer-worker-count", "Workers for processing imports").Default("1").Int()
+	streamImporterWorkerCount       = stream.Flag("importer-worker-count", "Workers for processing imports").Default("0").Int()
 	streamImporterSnapshotTimeout   = stream.Flag("importer-snapshot-timeout", "Maximum time to hold Postgres snapshots").Default("1m").Duration()
 	streamImporterBatchLimit        = stream.Flag("importer-batch-limit", "Maximum rows to pull per import job pagination").Default("100000").Int()
 	streamImporterBufferSize        = stream.Flag("importer-buffer-size", "Buffer between pulling data from Postgres and sink").Default("100000").Int()
@@ -99,16 +100,27 @@ func main() {
 	ctx, cancel := setupSignalHandler()
 	defer cancel()
 
-	logger.Log("event", "database_config", "host", *host, "port", *port, "database", *database, "user", user)
-	cfg := pgx.ConnConfig{Host: *host, Port: *port, Database: *database, User: *user}
+	// pgx makes it difficult to use the raw pgconn.Config struct without going via the
+	// ParseConfig method. We compromise by rendering a connection string for our overrides
+	// and relying on ParseConfig to identify additional Postgres parameters from libpq
+	// compatible environment variables.
+	cfg, err := pgxpool.ParseConfig(fmt.Sprintf("host=%s port=%d database=%s user=%s", *host, *port, *database, *user))
+	if err != nil {
+		kingpin.Fatalf("invalid postgres configuration: %v", err.Error())
+	}
 
-	mustConnectionPool := func(size int) *pgx.ConnPool {
-		pool, err := pgx.NewConnPool(
-			pgx.ConnPoolConfig{
-				ConnConfig:     cfg,
-				MaxConnections: size,
-			},
-		)
+	logger.Log("event", "database_config",
+		"host", cfg.ConnConfig.Host,
+		"port", cfg.ConnConfig.Port,
+		"database", cfg.ConnConfig.Database,
+		"user", cfg.ConnConfig.User,
+	)
+
+	mustConnectionPool := func(size int) *pgxpool.Pool {
+		cfg := *cfg
+		cfg.MaxConns = int32(size)
+
+		pool, err := pgxpool.ConnectConfig(ctx, &cfg)
 
 		if err != nil {
 			kingpin.Fatalf("failed to create connection pool: %v", err)
@@ -126,7 +138,7 @@ func main() {
 		}
 	}
 
-	if err := migration.Migrate(ctx, logger, cfg); err != nil {
+	if err := migration.Migrate(ctx, logger, *cfg); err != nil {
 		kingpin.Fatalf("failed to migrate database: %v", err)
 	}
 
@@ -156,7 +168,7 @@ func main() {
 			kingpin.Fatalf("table %s is not in publication %s", *resyncTable, publicationName)
 		}
 
-		tx, err := pool.Begin()
+		tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
 			kingpin.Fatalf("failed to open transaction: %v", err)
 		}
@@ -177,7 +189,7 @@ func main() {
 			}
 		}
 
-		if err := tx.Commit(); err != nil {
+		if err := tx.Commit(ctx); err != nil {
 			kingpin.Fatalf("failed to commit transaction: %v", err)
 		}
 
@@ -185,7 +197,7 @@ func main() {
 
 	case remove.FullCommand():
 		pool := mustConnectionPool(1)
-		tx, err := pool.Begin()
+		tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
 			kingpin.Fatalf("failed to open transaction: %v", err)
 		}
@@ -214,7 +226,7 @@ func main() {
 			}
 		}
 
-		if err := tx.Commit(); err != nil {
+		if err := tx.Commit(ctx); err != nil {
 			kingpin.Fatalf("failed to commit transaction: %v", err)
 		}
 
@@ -223,7 +235,7 @@ func main() {
 	case stream.FullCommand():
 		var (
 			sink   generic.Sink
-			sub    *subscription.Subscription
+			stream *subscription.Stream
 			pubmgr *publication.Manager
 		)
 
@@ -320,22 +332,22 @@ func main() {
 		{
 			logger := kitlog.With(logger, "component", "importer")
 
-			importer := imports.NewImporter(
-				logger,
-				mustConnectionPool(*streamImporterWorkerCount),
-				sink,
-				imports.ImporterOptions{
-					WorkerCount:      *streamImporterWorkerCount,
-					PublicationID:    pubmgr.GetPublicationID(),
-					SubscriptionName: *slotName,
-					PollInterval:     *streamImporterPollInterval,
-					SnapshotTimeout:  *streamImporterSnapshotTimeout,
-					BatchLimit:       *streamImporterBatchLimit,
-					BufferSize:       *streamImporterBufferSize,
-				},
-			)
-
 			if *streamImporterWorkerCount > 0 {
+				importer := imports.NewImporter(
+					logger,
+					mustConnectionPool(*streamImporterWorkerCount),
+					sink,
+					imports.ImporterOptions{
+						WorkerCount:      *streamImporterWorkerCount,
+						PublicationID:    pubmgr.GetPublicationID(),
+						SubscriptionName: *slotName,
+						PollInterval:     *streamImporterPollInterval,
+						SnapshotTimeout:  *streamImporterSnapshotTimeout,
+						BatchLimit:       *streamImporterBatchLimit,
+						BufferSize:       *streamImporterBufferSize,
+					},
+				)
+
 				g.Add(
 					func() error {
 						importer.Run(ctx)
@@ -349,14 +361,23 @@ func main() {
 		{
 			logger := kitlog.With(logger, "component", "subscription")
 
-			conn, err := pgx.ReplicationConnect(cfg)
+			params := map[string]string{"replication": "database"}
+			for key, value := range cfg.ConnConfig.RuntimeParams {
+				params[key] = value
+			}
+
+			replicationCfg := *cfg.ConnConfig
+			replicationCfg.RuntimeParams = params
+
+			conn, err := pgx.ConnectConfig(ctx, &replicationCfg)
 			if err != nil {
 				kingpin.Fatalf("failed to connect to Postgres: %v", err)
 			}
 
-			sub = subscription.NewSubscription(
+			sub, err := subscription.Create(
+				ctx,
 				logger,
-				conn,
+				conn.PgConn(),
 				subscription.SubscriptionOptions{
 					Name:            *slotName,
 					Publication:     *publicationName,
@@ -364,13 +385,18 @@ func main() {
 				},
 			)
 
-			if sub.CreateReplicationSlot(ctx); err != nil {
-				kingpin.Fatalf("failed to create replication slot: %v", err)
+			if err != nil {
+				kingpin.Fatalf("failed to create subscription: %v", err)
+			}
+
+			stream, err = sub.Start(ctx, logger)
+			if err != nil {
+				kingpin.Fatalf("failed to start subscription: %v", err)
 			}
 
 			g.Add(
 				func() error {
-					return sub.StartReplication(ctx)
+					return stream.Wait(context.Background())
 				},
 				handleError(logger),
 			)
@@ -382,17 +408,17 @@ func main() {
 			g.Add(
 				func() error {
 					if *streamDecodeOnly {
-						for msg := range sub.Receive() {
+						for msg := range stream.Messages() {
 							spew.Dump(msg)
 						}
 
 						return nil
 					}
 
-					entries := subscription.BuildChangelog(logger, sub.Receive())
+					entries := subscription.BuildChangelog(logger, stream.Messages())
 					return sink.Consume(ctx, entries, func(entry changelog.Entry) {
 						if entry.Modification != nil && entry.Modification.LSN != nil {
-							sub.ConfirmReceived(*entry.Modification.LSN)
+							stream.Confirm(pglogrepl.LSN(*entry.Modification.LSN))
 						}
 					})
 				},

@@ -1,9 +1,10 @@
 package subscription
 
 import (
-	kitlog "github.com/go-kit/kit/log"
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 	"github.com/lawrencejones/pg2sink/pkg/logical"
+
+	kitlog "github.com/go-kit/kit/log"
 )
 
 // BuildChangelog produces a stream of changelog entries from raw logical messages

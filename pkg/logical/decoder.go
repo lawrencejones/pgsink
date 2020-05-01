@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/jackc/pgx/pgtype"
+	"github.com/jackc/pgtype"
 )
 
 // PGOutput is the Postgres recognised name of our desired encoding

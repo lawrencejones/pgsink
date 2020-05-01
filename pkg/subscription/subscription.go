@@ -3,21 +3,55 @@ package subscription
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
-	kitlog "github.com/go-kit/kit/log"
-	"github.com/jackc/pgx"
 	"github.com/lawrencejones/pg2sink/pkg/logical"
-	"github.com/oklog/run"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	kitlog "github.com/go-kit/kit/log"
+	level "github.com/go-kit/kit/log/level"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pglogrepl"
+	"github.com/jackc/pgproto3/v2"
+	"github.com/pkg/errors"
 )
 
 type SubscriptionOptions struct {
 	Name            string        // name of the subscription
 	Publication     string        // name of the publication
 	StatusHeartbeat time.Duration // heartbeat interval
+}
+
+// Create initialises a subscription once the replication slot has been created. This is
+// the only way to create a subscription, to ensure a replication slot exists before
+// anyone can call Start().
+func Create(ctx context.Context, logger kitlog.Logger, conn *pgconn.PgConn, opts SubscriptionOptions) (*Subscription, error) {
+	if err := createReplicationSlot(ctx, logger, conn, opts); err != nil {
+		return nil, err
+	}
+
+	return &Subscription{conn: conn, opts: opts}, nil
+}
+
+func createReplicationSlot(ctx context.Context, logger kitlog.Logger, conn *pgconn.PgConn, opts SubscriptionOptions) (err error) {
+	logger = kitlog.With(logger, "event", "create_replication_slot", "slot", opts.Name)
+	defer func() {
+		logger.Log("event", "create_replication_slot", "error", err)
+	}()
+
+	_, err = pglogrepl.CreateReplicationSlot(ctx, conn, opts.Name, logical.PGOutput, pglogrepl.CreateReplicationSlotOptions{})
+	if err != nil {
+		if err, ok := err.(*pgconn.PgError); ok {
+			if err.Code == "42710" {
+				logger = kitlog.With(logger, "detail", "slot_already_exists")
+				return nil
+			}
+		}
+	}
+
+	return err
 }
 
 // Subscription provides the implementation of logical replication from a Postgres
@@ -27,113 +61,38 @@ type SubscriptionOptions struct {
 //
 // https://www.postgresql.org/docs/11/sql-createsubscription.html
 type Subscription struct {
-	logger   kitlog.Logger
-	conn     *pgx.ReplicationConn
-	walPos   uint64
-	messages chan interface{}
-	opts     SubscriptionOptions
+	conn *pgconn.PgConn
+	opts SubscriptionOptions
 }
 
-func NewSubscription(logger kitlog.Logger, conn *pgx.ReplicationConn, opts SubscriptionOptions) *Subscription {
-	return &Subscription{
-		logger:   logger,
-		conn:     conn,
-		walPos:   0,
-		messages: make(chan interface{}),
-		opts:     opts,
-	}
-}
-
-func (s *Subscription) CreateReplicationSlot(ctx context.Context) error {
-	logger := kitlog.With(s.logger, "slot", s.opts.Name)
-	logger.Log("event", "create_replication_slot")
-
-	if err := s.conn.CreateReplicationSlot(s.opts.Name, logical.PGOutput); err != nil {
-		if err, ok := err.(pgx.PgError); ok {
-			if err.Code == "42710" {
-				logger.Log("event", "slot_already_exists")
-				return nil
-			}
-		}
-
-		return err
+// Start begins replicating from our remote. We set our WAL position to whatever the
+// server tells us our replication slot was last recorded at, then proceed to heartbeat
+// and replicate our remote.
+func (s *Subscription) Start(ctx context.Context, logger kitlog.Logger) (*Stream, error) {
+	sysident, err := pglogrepl.IdentifySystem(ctx, s.conn)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil
-}
-
-// StartReplication begins replicating from our remote. We set our WAL position to
-// whatever the server tells us our replication slot was last recorded at, then proceed to
-// heartbeat and replicate our remote.
-func (s *Subscription) StartReplication(ctx context.Context) error {
-	defer func() {
-		s.logger.Log("event", "replication_finished", "msg", "closing replication message channel")
-		close(s.messages)
-	}()
-
-	s.logger.Log("event", "start_replication", "publication", s.opts.Publication, "slot", s.opts.Name)
-	pluginArguments := []string{
-		`"proto_version" '1'`, fmt.Sprintf(`"publication_names" '%s'`, s.opts.Publication),
-	}
-	if err := s.conn.StartReplication(s.opts.Name, 0, -1, pluginArguments...); err != nil {
-		return err
-	}
-
-	{
-		s.logger.Log("event", "wait_for_heartbeat")
-
-		ctx, cancel := context.WithTimeout(ctx, s.opts.StatusHeartbeat)
-		defer cancel()
-
-		for {
-			msg, err := s.conn.WaitForReplicationMessage(ctx)
-			if err != nil {
-				s.logger.Log("event", "initial_heartbeat_failed", "error", err)
-				return errors.Wrap(err, "failed to receive initial heartbeat")
-			}
-
-			if msg.ServerHeartbeat != nil {
-				s.walPos = msg.ServerHeartbeat.ServerWalEnd
-				withPos(s.logger, s.walPos).Log("event", "initial_heartbeat_received")
-
-				break
-			}
-		}
-	}
-
-	var g run.Group
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	g.Add(
-		func() error { return s.startHeartbeats(ctx) },
-		func(error) { cancel() },
+	logger.Log("event", "system_identification",
+		"system_id", sysident.SystemID, "timeline", sysident.Timeline,
+		"position", sysident.XLogPos, "database", sysident.DBName,
 	)
 
-	g.Add(
-		func() error { return s.startReceiving(ctx) },
-		func(error) { cancel() },
-	)
-
-	return g.Run()
-}
-
-// Receive provides the channel that our replication worker will send messages down. We
-// set the channel to be receive only as the subscription should be the only entity
-// capable of closing the channel, to avoid races.
-func (s *Subscription) Receive() <-chan interface{} {
-	return s.messages
-}
-
-// ConfirmReceived updates our WAL position, causing the next server heartbeat to update
-// the replication slot position.
-func (s *Subscription) ConfirmReceived(pos uint64) {
-	if pos < s.walPos {
-		panic("cannot confirm received position in the past")
+	options := pglogrepl.StartReplicationOptions{
+		Timeline: 0, // current server timeline
+		Mode:     pglogrepl.LogicalReplication,
+		PluginArgs: []string{
+			`"proto_version" '1'`, fmt.Sprintf(`"publication_names" '%s'`, s.opts.Publication),
+		},
 	}
 
-	s.walPos = pos
+	logger.Log("event", "start_replication", "publication", s.opts.Publication, "slot", s.opts.Name)
+	if err := pglogrepl.StartReplication(ctx, s.conn, s.opts.Name, sysident.XLogPos, options); err != nil {
+		return nil, err
+	}
+
+	return s.stream(ctx, logger, sysident), nil
 }
 
 var (
@@ -146,75 +105,109 @@ var (
 	)
 )
 
-// startReceiving will receive messages until the context expires, or we receive an error
-// from our connection. Received messages are sent down our received channel, which we
-// assume someone is consuming from.
-//
-// Once we're done, we close the received channel so our consumers know we're done.
-func (s *Subscription) startReceiving(ctx context.Context) error {
-	for {
-		msg, err := s.conn.WaitForReplicationMessage(ctx)
+func (s *Subscription) stream(ctx context.Context, logger kitlog.Logger, sysident pglogrepl.IdentifySystemResult) *Stream {
+	stream := &Stream{
+		position: sysident.XLogPos,
+		messages: make(chan interface{}),
+		done:     make(chan error, 1), // buffered by 1, to ensure progress when reporting an error
+	}
 
-		// If our context has expired then we want to quit now, as it will be the cause of
-		// our error.
-		select {
-		case <-ctx.Done():
-			return nil
-		default:
-		}
+	go func() (err error) {
+		defer func() {
+			logger.Log("event", "closing_stream", "msg", "closing messages channel")
+			close(stream.messages)
+			stream.done <- err
+			close(stream.done)
+		}()
 
-		if err != nil {
-			s.logger.Log("error", err, "msg", "failed to receive for replication message")
-			return err
-		}
+		logger := kitlog.With(logger, "stream_position", kitlog.Valuer(func() interface{} { return stream.position }))
+		nextStandbyMessageDeadline := time.Now().Add(s.opts.StatusHeartbeat)
 
-		if msg.WalMessage != nil {
-			decoded, msgType, err := logical.DecodePGOutput(msg.WalMessage.WalData)
+		for {
+			select {
+			case <-ctx.Done():
+				logger.Log("event", "context_expired", "msg", "exiting")
+				return
+			default:
+				// continue
+			}
+
+			if time.Now().After(nextStandbyMessageDeadline) {
+				// Reset the counter for another heartbeat interval
+				nextStandbyMessageDeadline = time.Now().Add(s.opts.StatusHeartbeat)
+
+				position := stream.position
+				err := pglogrepl.SendStandbyStatusUpdate(ctx, s.conn, pglogrepl.StandbyStatusUpdate{
+					WALWritePosition: position,
+				})
+
+				if err != nil {
+					return errors.Wrap(err, "failed to send standby update")
+				}
+
+				logger.Log("event", "standby_status_update", "position", position)
+			}
+
+			ctx, cancel := context.WithCancel(ctx)
+			msg, err := s.conn.ReceiveMessage(ctx)
+			cancel()
+
 			if err != nil {
-				return errors.Wrap(err, "failed to deocde wal")
+				if pgconn.Timeout(err) {
+					logger.Log("event", "receive_timeout", "msg", "retrying")
+					continue
+				}
+
+				return errors.Wrap(err, "failed to receive message")
 			}
 
-			receiveMessageTotal.WithLabelValues(msgType).Inc()
-			s.messages <- decoded // send message down our received channel
+			switch msg := msg.(type) {
+			case *pgproto3.CopyData:
+				switch msg.Data[0] {
+				case pglogrepl.PrimaryKeepaliveMessageByteID:
+					pkm, err := pglogrepl.ParsePrimaryKeepaliveMessage(msg.Data[1:])
+					if err != nil {
+						return errors.Wrap(err, "failed to parse primary keepalive message")
+					}
+
+					if pkm.ReplyRequested {
+						nextStandbyMessageDeadline = time.Now()
+					}
+
+					event := kitlog.With(logger,
+						"event", "primary_keepalive_message",
+						"position", pkm.ServerWALEnd,
+						"server_time", pkm.ServerTime.Format(time.RFC3339),
+						"reply_requested", pkm.ReplyRequested,
+					)
+
+					// If the server hasn't explicitly requested a reply, then this log should be
+					// debug level only
+					if !pkm.ReplyRequested {
+						event = level.Debug(event)
+					}
+
+					event.Log()
+
+				case pglogrepl.XLogDataByteID:
+					xld, err := pglogrepl.ParseXLogData(msg.Data[1:])
+					if err != nil {
+						return errors.Wrap(err, "failed to parse xlog data")
+					}
+
+					decoded, msgType, err := logical.DecodePGOutput(xld.WALData)
+					if err != nil {
+						return errors.Wrap(err, "failed to deocde wal")
+					}
+
+					receiveMessageTotal.WithLabelValues(msgType).Inc()
+					stream.messages <- decoded // send message down our received channel
+				}
+			default:
+				logger.Log("event", "unrecognised_message", "message", reflect.TypeOf(msg))
+			}
 		}
-	}
-}
+	}()
 
-// startHeartbeats sends standby statuses to our replication primary to confirm we've
-// successfully applied wal and to keepalive our connection.
-func (s *Subscription) startHeartbeats(ctx context.Context) error {
-	ticker := time.NewTicker(s.opts.StatusHeartbeat)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			s.logger.Log("event", "status_heartbeat_stop", "msg", "context expired, finish heartbeating")
-			err := s.sendStandbyStatus()
-			if err != nil {
-				s.logger.Log("error", err, "msg", "final heartbeat failed, expect to replay changes on next boot")
-			}
-
-			return err
-
-		case <-ticker.C:
-			if err := s.sendStandbyStatus(); err != nil {
-				s.logger.Log("error", err, "msg", "failed to send status heartbeat")
-			}
-		}
-	}
-}
-
-func (s *Subscription) sendStandbyStatus() error {
-	withPos(s.logger, s.walPos).Log("event", "send_standby_status", "msg", "heartbeating standby status")
-	status, err := pgx.NewStandbyStatus(s.walPos)
-	if err != nil {
-		return err
-	}
-
-	return s.conn.SendStandbyStatus(status)
-}
-
-func withPos(logger kitlog.Logger, pos uint64) kitlog.Logger {
-	return kitlog.With(logger, "position", pgx.FormatLSN(pos))
+	return stream
 }

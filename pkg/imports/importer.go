@@ -12,8 +12,9 @@ import (
 	"github.com/lawrencejones/pg2sink/pkg/sinks/generic"
 
 	kitlog "github.com/go-kit/kit/log"
-	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/pgtype"
+	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -31,7 +32,7 @@ type ImporterOptions struct {
 	BufferSize       int           // channel buffer between Postgres and sink
 }
 
-func NewImporter(logger kitlog.Logger, pool *pgx.ConnPool, sink generic.Sink, opts ImporterOptions) *Importer {
+func NewImporter(logger kitlog.Logger, pool *pgxpool.Pool, sink generic.Sink, opts ImporterOptions) *Importer {
 	return &Importer{
 		logger: logger,
 		pool:   pool,
@@ -42,7 +43,7 @@ func NewImporter(logger kitlog.Logger, pool *pgx.ConnPool, sink generic.Sink, op
 
 type Importer struct {
 	logger kitlog.Logger
-	pool   *pgx.ConnPool
+	pool   *pgxpool.Pool
 	sink   generic.Sink
 	opts   ImporterOptions
 }
@@ -90,13 +91,13 @@ func (i Importer) runWorker(ctx context.Context) {
 }
 
 func (i Importer) acquireAndWork(ctx context.Context, logger kitlog.Logger) (*models.ImportJob, error) {
-	tx, err := i.pool.Begin()
+	tx, err := i.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open job acquire transaction")
 	}
 
 	defer func() {
-		if err := tx.Commit(); err != nil {
+		if err := tx.Commit(ctx); err != nil {
 			logger.Log("error", err, "msg", "failed to commit transaction")
 		}
 	}()
@@ -148,7 +149,7 @@ var (
 	)
 )
 
-func (i Importer) work(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, job *models.ImportJob) error {
+func (i Importer) work(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, job *models.ImportJob) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -215,7 +216,7 @@ func (i Importer) work(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, jo
 // scanBatch runs a query against the import table and scans each row into the changelog.
 // It holds the query for up-to the SnapshotTimeout, ensuring we don't block vacuums or
 // other maintenance tasks.
-func (i Importer) scanBatch(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, cfg *JobConfig, entries changelog.Changelog) (int, string, bool, error) {
+func (i Importer) scanBatch(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, cfg *JobConfig, entries changelog.Changelog) (int, string, bool, error) {
 	ctx, span := trace.StartSpan(ctx, "pkg/imports.Importer.scanBatch")
 	defer span.End()
 

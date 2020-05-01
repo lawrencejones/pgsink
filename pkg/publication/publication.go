@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jackc/pgx/pgtype"
 	"github.com/lawrencejones/pg2sink/pkg/models"
+
+	"github.com/jackc/pgtype"
 )
 
 // Publication wraps a publication name
@@ -23,7 +24,7 @@ func (p Publication) GetIdentifier(ctx context.Context, conn models.Connection) 
 	;`
 
 	var identifier string
-	if err := conn.QueryRowEx(ctx, query, nil, string(p)).Scan(&identifier); err != nil {
+	if err := conn.QueryRow(ctx, query, string(p)).Scan(&identifier); err != nil {
 		return "", err
 	}
 
@@ -49,7 +50,7 @@ func (p Publication) GetPublishedTables(ctx context.Context, conn models.Connect
 	tablesReceiver := pgtype.TextArray{}
 	var tables []string
 
-	if err := conn.QueryRowEx(ctx, query, nil, string(p), identifier).Scan(&tablesReceiver); err != nil {
+	if err := conn.QueryRow(ctx, query, string(p), identifier).Scan(&tablesReceiver); err != nil {
 		return nil, err
 	}
 
@@ -59,20 +60,20 @@ func (p Publication) GetPublishedTables(ctx context.Context, conn models.Connect
 // AddTable adds the specified table into the publication
 func (p Publication) AddTable(ctx context.Context, conn models.Connection, table string) error {
 	query := fmt.Sprintf(`alter publication %s add table %s;`, string(p), table)
-	_, err := conn.ExecEx(ctx, query, nil)
+	_, err := conn.Exec(ctx, query)
 	return err
 }
 
 // SetTables resets the publication to include the given tables only
 func (p Publication) SetTables(ctx context.Context, conn models.Connection, tables ...string) error {
 	query := fmt.Sprintf(`alter publication %s set table %s;`, string(p), strings.Join(tables, ", "))
-	_, err := conn.ExecEx(ctx, query, nil)
+	_, err := conn.Exec(ctx, query)
 	return err
 }
 
 // DropTable removes the given table from the publication
 func (p Publication) DropTable(ctx context.Context, conn models.Connection, table string) error {
 	query := fmt.Sprintf(`alter publication %s drop table %s;`, string(p), table)
-	_, err := conn.ExecEx(ctx, query, nil)
+	_, err := conn.Exec(ctx, query)
 	return err
 }

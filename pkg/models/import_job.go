@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 )
 
 type ImportJob struct {
@@ -56,7 +56,7 @@ func (s ImportJobStore) Create(ctx context.Context, publicationID, subscriptionN
 	returning %s
 	;`)
 
-	return s.Scan(s.QueryRowEx(ctx, query, nil, publicationID, subscriptionName, tableName))
+	return s.Scan(s.QueryRow(ctx, query, publicationID, subscriptionName, tableName))
 }
 
 // Where executes a SQL query with the given clause against the import_jobs table.
@@ -66,7 +66,7 @@ func (s ImportJobStore) Where(ctx context.Context, clause string, args ...interf
 	from pg2sink.import_jobs
 	where `) + clause + ";"
 
-	rows, err := s.QueryEx(ctx, query, nil, args...)
+	rows, err := s.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (s ImportJobStore) GetImportedTables(ctx context.Context, publicationID, su
 	;`
 
 	tableNames := []string{}
-	rows, err := s.QueryEx(ctx, query, nil, publicationID, subscriptionName)
+	rows, err := s.Query(ctx, query, publicationID, subscriptionName)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (s ImportJobStore) GetImportedTables(ctx context.Context, publicationID, su
 // Acquire will return a job that is locked for the duration of the transaction. If no
 // jobs are available, we return nil. We prioritise import jobs that have not yet failed,
 // to ensure we don't get blocked by any failing import job.
-func (s ImportJobStore) Acquire(ctx context.Context, tx *pgx.Tx, publicationID, subscriptionName string) (*ImportJob, error) {
+func (s ImportJobStore) Acquire(ctx context.Context, tx pgx.Tx, publicationID, subscriptionName string) (*ImportJob, error) {
 	query := s.buildSelect(`
 	select %s
 	from pg2sink.import_jobs
@@ -133,7 +133,7 @@ func (s ImportJobStore) Acquire(ctx context.Context, tx *pgx.Tx, publicationID, 
 	limit 1
 	;`)
 
-	rows, err := tx.QueryEx(ctx, query, nil, publicationID, subscriptionName)
+	rows, err := tx.Query(ctx, query, publicationID, subscriptionName)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +154,7 @@ func (s ImportJobStore) UpdateCursor(ctx context.Context, id int64, cursor strin
 	 where id = $1
 	;`
 
-	_, err := s.ExecEx(ctx, query, nil, id, cursor)
+	_, err := s.Exec(ctx, query, id, cursor)
 	return err
 }
 
@@ -167,7 +167,7 @@ func (s ImportJobStore) Complete(ctx context.Context, id int64) (time.Time, erro
 	;`
 
 	var completedAt time.Time
-	return completedAt, s.QueryRowEx(ctx, query, nil, id).Scan(&completedAt)
+	return completedAt, s.QueryRow(ctx, query, id).Scan(&completedAt)
 }
 
 func (s ImportJobStore) Expire(ctx context.Context, id int64) (time.Time, error) {
@@ -179,7 +179,7 @@ func (s ImportJobStore) Expire(ctx context.Context, id int64) (time.Time, error)
 	;`
 
 	var expiredAt time.Time
-	return expiredAt, s.QueryRowEx(ctx, query, nil, id).Scan(&expiredAt)
+	return expiredAt, s.QueryRow(ctx, query, id).Scan(&expiredAt)
 }
 
 func (s ImportJobStore) SetError(ctx context.Context, id int64, jobErr error) error {
@@ -189,6 +189,6 @@ func (s ImportJobStore) SetError(ctx context.Context, id int64, jobErr error) er
 	 where id = $1
 	;`
 
-	_, err := s.ExecEx(ctx, query, nil, id, jobErr.Error())
+	_, err := s.Exec(ctx, query, id, jobErr.Error())
 	return err
 }

@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	kitlog "github.com/go-kit/kit/log"
-	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/pgtype"
+	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v4"
 	"github.com/lawrencejones/pg2sink/pkg/logical"
 	"github.com/lawrencejones/pg2sink/pkg/models"
 	"github.com/lawrencejones/pg2sink/pkg/util"
@@ -26,15 +26,15 @@ type JobConfig struct {
 	Cursor            interface{}
 }
 
-func (j JobConfig) Query(ctx context.Context, conn models.Connection, batchLimit int) (*pgx.Rows, error) {
+func (j JobConfig) Query(ctx context.Context, conn models.Connection, batchLimit int) (pgx.Rows, error) {
 	query := buildQuery(j.Relation, j.PrimaryKey, batchLimit, j.Cursor)
-	return conn.QueryEx(ctx, query, nil, util.Compact([]interface{}{j.Cursor})...)
+	return conn.Query(ctx, query, util.Compact([]interface{}{j.Cursor})...)
 }
 
 // buildJobConfig attempts to generate some boilerplate information that is required to
 // process an import, things such as interpreting the previous cursor value, and the
 // primary key of the table.
-func buildJobConfig(ctx context.Context, logger kitlog.Logger, tx *pgx.Tx, job *models.ImportJob) (*JobConfig, error) {
+func buildJobConfig(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, job *models.ImportJob) (*JobConfig, error) {
 	// We should query for the primary key as the first thing we do, as this may fail if the
 	// table is misconfigured. It's better to fail here, before we've pushed anything into
 	// the changelog, than after pushing the schema when we discover the table is
@@ -116,7 +116,7 @@ func buildRelation(ctx context.Context, conn models.Connection, tableName string
 	`
 
 	relation := &logical.Relation{Columns: []logical.Column{}}
-	err := conn.QueryRowEx(ctx, query, nil, tableName).Scan(&relation.ID, &relation.Namespace, &relation.Name)
+	err := conn.QueryRow(ctx, query, tableName).Scan(&relation.ID, &relation.Namespace, &relation.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to identify table namespace and name")
 	}
@@ -130,7 +130,7 @@ func buildRelation(ctx context.Context, conn models.Connection, tableName string
 	 order by attnum;
 	`
 
-	rows, err := conn.QueryEx(ctx, columnQuery, nil, relation.ID)
+	rows, err := conn.Query(ctx, columnQuery, relation.ID)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to query pg_attribute for relation columns")
 	}
@@ -194,7 +194,7 @@ func getPrimaryKeyColumn(ctx context.Context, conn models.Connection, tableName 
 	`
 
 	primaryKeysTextArray := pgtype.TextArray{}
-	err := conn.QueryRowEx(ctx, query, nil, tableName).Scan(&primaryKeysTextArray)
+	err := conn.QueryRow(ctx, query, tableName).Scan(&primaryKeysTextArray)
 	if err != nil {
 		return "", err
 	}

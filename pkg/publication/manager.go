@@ -6,10 +6,12 @@ import (
 	"strings"
 	"time"
 
-	kitlog "github.com/go-kit/kit/log"
-	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/pgtype"
 	"github.com/lawrencejones/pg2sink/pkg/util"
+
+	kitlog "github.com/go-kit/kit/log"
+	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
@@ -27,7 +29,7 @@ type ManagerOptions struct {
 //
 // The returned manager is configured to continually monitor the publication, adding or
 // removing tables as appropriate.
-func CreateManager(ctx context.Context, logger kitlog.Logger, pool *pgx.ConnPool, opts ManagerOptions) (*Manager, error) {
+func CreateManager(ctx context.Context, logger kitlog.Logger, pool *pgxpool.Pool, opts ManagerOptions) (*Manager, error) {
 	logger = kitlog.With(logger, "publication", opts.Name)
 
 	publicationID, err := getExistingPublicationID(ctx, pool, opts.Name)
@@ -60,14 +62,14 @@ func CreateManager(ctx context.Context, logger kitlog.Logger, pool *pgx.ConnPool
 
 // getExistingPublicationID fetches the publicationID commented on the target publication, if it
 // exists.
-func getExistingPublicationID(ctx context.Context, pool *pgx.ConnPool, name string) (publicationID string, err error) {
+func getExistingPublicationID(ctx context.Context, pool *pgxpool.Pool, name string) (publicationID string, err error) {
 	query := `
 	select obj_description(oid, 'pg_publication') as id
 	from pg_publication
 	where pubname=$1
 	`
 
-	rows, err := pool.QueryEx(ctx, query, nil, name)
+	rows, err := pool.Query(ctx, query, name)
 	if err != nil {
 		return "", err
 	}
@@ -85,20 +87,23 @@ func getExistingPublicationID(ctx context.Context, pool *pgx.ConnPool, name stri
 
 // createPublication transactionally creates and comments on a new publication. The
 // comment publicationID should be provided as a new UUID.
-func createPublication(ctx context.Context, pool *pgx.ConnPool, name, publicationID string) error {
-	createAndCommentQuery := fmt.Sprintf(`create publication %s;`, name) +
-		fmt.Sprintf(`comment on publication %s is '%s';`, name, publicationID)
-
-	txn, err := pool.Begin()
+func createPublication(ctx context.Context, pool *pgxpool.Pool, name, publicationID string) error {
+	txn, err := pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return err
 	}
 
-	if _, err := txn.ExecEx(ctx, createAndCommentQuery, nil); err != nil {
+	createQuery := fmt.Sprintf(`create publication %s;`, name)
+	if _, err := txn.Exec(ctx, createQuery); err != nil {
 		return err
 	}
 
-	if err := txn.Commit(); err != nil {
+	commentQuery := fmt.Sprintf(`comment on publication %s is '%s';`, name, publicationID)
+	if _, err := txn.Exec(ctx, commentQuery); err != nil {
+		return err
+	}
+
+	if err := txn.Commit(ctx); err != nil {
 		return err
 	}
 
@@ -109,7 +114,7 @@ func createPublication(ctx context.Context, pool *pgx.ConnPool, name, publicatio
 // white/blacklist.
 type Manager struct {
 	logger        kitlog.Logger
-	pool          *pgx.ConnPool
+	pool          *pgxpool.Pool
 	publicationID string
 	opts          ManagerOptions
 }
@@ -125,35 +130,36 @@ func (p *Manager) GetPublicationID() string {
 func (p *Manager) Sync(ctx context.Context) (err error) {
 	p.logger.Log("event", "sync.start")
 	for {
+		p.logger.Log("event", "sync.poll")
+		watched, err := p.getWatchedTables(ctx)
+		if err != nil {
+			return errors.Wrap(err, "failed to discover watched tables")
+		}
+
+		published, err := Publication(p.opts.Name).GetPublishedTables(ctx, p.pool, p.publicationID)
+		if err != nil {
+			return errors.Wrap(err, "failed to query published tables")
+		}
+
+		watchedNotPublished := util.Diff(watched, published)
+		publishedNotWatched := util.Diff(published, watched)
+
+		if (len(watchedNotPublished) > 0) || (len(publishedNotWatched) > 0) {
+			p.logger.Log("event", "alter_publication", "publication", p.opts.Name,
+				"adding", strings.Join(watchedNotPublished, ","),
+				"removing", strings.Join(publishedNotWatched, ","))
+
+			if err := Publication(p.opts.Name).SetTables(ctx, p.pool, watched...); err != nil {
+				return errors.Wrap(err, "failed to alter publication")
+			}
+		}
+
 		select {
 		case <-ctx.Done():
 			p.logger.Log("event", "sync.finish", "msg", "context expired, finishing sync")
 			return nil
-
 		case <-time.After(p.opts.PollInterval):
-			p.logger.Log("event", "sync.poll")
-			watched, err := p.getWatchedTables(ctx)
-			if err != nil {
-				return errors.Wrap(err, "failed to discover watched tables")
-			}
-
-			published, err := Publication(p.opts.Name).GetPublishedTables(ctx, p.pool, p.publicationID)
-			if err != nil {
-				return errors.Wrap(err, "failed to query published tables")
-			}
-
-			watchedNotPublished := util.Diff(watched, published)
-			publishedNotWatched := util.Diff(published, watched)
-
-			if (len(watchedNotPublished) > 0) || (len(publishedNotWatched) > 0) {
-				p.logger.Log("event", "alter_publication", "publication", p.opts.Name,
-					"adding", strings.Join(watchedNotPublished, ","),
-					"removing", strings.Join(publishedNotWatched, ","))
-
-				if err := Publication(p.opts.Name).SetTables(ctx, p.pool, watched...); err != nil {
-					return errors.Wrap(err, "failed to alter publication")
-				}
-			}
+			// continue
 		}
 	}
 }
@@ -170,7 +176,7 @@ func (p *Manager) getWatchedTables(ctx context.Context) ([]string, error) {
 	tablesReceiver := pgtype.TextArray{}
 	var tables []string
 
-	if err := p.pool.QueryRowEx(ctx, query, nil, p.opts.Schemas).Scan(&tablesReceiver); err != nil {
+	if err := p.pool.QueryRow(ctx, query, p.opts.Schemas).Scan(&tablesReceiver); err != nil {
 		return nil, err
 	}
 
