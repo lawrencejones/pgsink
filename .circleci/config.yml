@@ -11,9 +11,9 @@ references:
       - image: postgres:12.1
         environment:
           POSTGRES_USER: postgres
-          POSTGRES_DB: pg2pubsub_test
+          POSTGRES_DB: pg2sink_test
           POSTGRES_PASSWORD: ""
-    working_directory: /pg2pubsub
+    working_directory: /pg2sink
 
 jobs:
   unit-integration:
@@ -52,7 +52,7 @@ jobs:
 
   release:
     <<: *docker_golang
-    working_directory: /pg2pubsub
+    working_directory: /pg2sink
     steps:
       - checkout
       - run:

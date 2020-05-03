@@ -25,6 +25,6 @@ nfpm:
   vendor: lawrencejones.dev
   homepage: https://github.com/lawrencejones/pg2sink
   maintainer: Lawrence Jones me@lawrencejones.dev
-  description: Publish Postgres changes into Google Pub/Sub
+  description: Logically replicate data out of Postgres into sinks (files, Google BigQuery, etc)
   formats:
     - deb
