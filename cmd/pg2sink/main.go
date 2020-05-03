@@ -13,13 +13,11 @@ import (
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 	"github.com/lawrencejones/pg2sink/pkg/imports"
 	"github.com/lawrencejones/pg2sink/pkg/migration"
-	"github.com/lawrencejones/pg2sink/pkg/models"
 	"github.com/lawrencejones/pg2sink/pkg/publication"
 	sinkbigquery "github.com/lawrencejones/pg2sink/pkg/sinks/bigquery"
 	sinkfile "github.com/lawrencejones/pg2sink/pkg/sinks/file"
 	"github.com/lawrencejones/pg2sink/pkg/sinks/generic"
 	"github.com/lawrencejones/pg2sink/pkg/subscription"
-	"github.com/lawrencejones/pg2sink/pkg/util"
 
 	"contrib.go.opencensus.io/exporter/jaeger"
 	"github.com/alecthomas/kingpin"
@@ -51,15 +49,6 @@ var (
 	// Each stream is uniquely identified by a (publication_name, subscription_name)
 	publicationName = app.Flag("publication-name", "Publication name").Default("pg2sink").String()
 	slotName        = app.Flag("slot-name", "Replication slot name").Default("pg2sink").String()
-
-	add      = app.Command("add", "Add table to existing publication")
-	addTable = add.Flag("table", "Table to add to publication, e.g. public.example").Required().String()
-
-	resync      = app.Command("resync", "Resync table for a given subscription")
-	resyncTable = resync.Flag("table", "Table to mark for resync").Required().String()
-
-	remove      = app.Command("remove", "Remove table from existing publication")
-	removeTable = remove.Flag("table", "Table to remove from publication, e.g. public.example").Required().String()
 
 	stream                          = app.Command("stream", "Stream changes into sink")
 	streamMetricsAddress            = stream.Flag("metrics-address", "Address to bind HTTP metrics listener").Default("127.0.0.1").String()
@@ -143,95 +132,6 @@ func main() {
 	}
 
 	switch command {
-	case add.FullCommand():
-		logger := kitlog.With(logger, "table", *addTable, "publication", *publicationName)
-		if err := publication.Publication(*publicationName).AddTable(ctx, mustConnectionPool(1), *addTable); err != nil {
-			kingpin.Fatalf("failed to add table to publication: %v", err)
-		}
-
-		logger.Log("event", "added_table")
-
-	case resync.FullCommand():
-		pool := mustConnectionPool(1)
-		pub := publication.Publication(*publicationName)
-		publicationID, err := pub.GetIdentifier(ctx, pool)
-		if err != nil {
-			kingpin.Fatalf("failed to find publication: %v", err)
-		}
-
-		published, err := pub.GetPublishedTables(ctx, pool, publicationID)
-		if err != nil {
-			kingpin.Fatalf("failed to list published tables: %v", err)
-		}
-
-		if !util.Includes(published, *resyncTable) {
-			kingpin.Fatalf("table %s is not in publication %s", *resyncTable, publicationName)
-		}
-
-		tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
-		if err != nil {
-			kingpin.Fatalf("failed to open transaction: %v", err)
-		}
-
-		jobStore := models.ImportJobStore{tx}
-		jobs, err := jobStore.Where(ctx,
-			`publication_id = $1 and subscription_name = $2 and table_name = $3`,
-			publicationID, *slotName, *resyncTable)
-		if err != nil {
-			kingpin.Fatalf("failed to find import jobs for table: %v", err)
-		}
-
-		for _, job := range jobs {
-			logger.Log("event", "expiring_import_job", "job_id", job.ID, "subscription_name",
-				job.SubscriptionName, "completed_at", job.CompletedAt)
-			if _, err := jobStore.Expire(ctx, job.ID); err != nil {
-				kingpin.Fatalf("failed to mark job as expired: %v", err)
-			}
-		}
-
-		if err := tx.Commit(ctx); err != nil {
-			kingpin.Fatalf("failed to commit transaction: %v", err)
-		}
-
-		logger.Log("event", "resync_triggered")
-
-	case remove.FullCommand():
-		pool := mustConnectionPool(1)
-		tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
-		if err != nil {
-			kingpin.Fatalf("failed to open transaction: %v", err)
-		}
-
-		publicationID, err := publication.Publication(*publicationName).GetIdentifier(ctx, tx)
-		if err != nil {
-			kingpin.Fatalf("failed to find matching publication: %v", err)
-		}
-
-		logger := kitlog.With(logger, "table", *removeTable, "publication", *publicationName)
-		if err := publication.Publication(*publicationName).DropTable(ctx, tx, *removeTable); err != nil {
-			kingpin.Fatalf("failed to remove table from publication: %v", err)
-		}
-
-		jobStore := models.ImportJobStore{tx}
-		jobs, err := jobStore.Where(ctx, `publication_id = $1 and table_name = $2`, publicationID, *removeTable)
-		if err != nil {
-			kingpin.Fatalf("failed to find import jobs for table: %v", err)
-		}
-
-		for _, job := range jobs {
-			logger.Log("event", "expiring_import_job", "job_id", job.ID, "subscription_name",
-				job.SubscriptionName, "completed_at", job.CompletedAt)
-			if _, err := jobStore.Expire(ctx, job.ID); err != nil {
-				kingpin.Fatalf("failed to mark job as expired: %v", err)
-			}
-		}
-
-		if err := tx.Commit(ctx); err != nil {
-			kingpin.Fatalf("failed to commit transaction: %v", err)
-		}
-
-		logger.Log("event", "removed_table")
-
 	case stream.FullCommand():
 		var (
 			sink   generic.Sink
