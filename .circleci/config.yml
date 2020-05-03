@@ -33,6 +33,23 @@ jobs:
           name: Run tests
           command: make test
 
+  check-deps-updated:
+    <<: *docker_golang
+    steps:
+      - checkout
+      - run: go mod download
+      - run: env GOPROXY=off go build -mod=readonly ./...
+
+  check-deps-tidy:
+    <<: *docker_golang
+    steps:
+      - checkout
+      - run: go mod tidy
+      - run: |
+          if ! git diff --exit-code -- go.mod go.sum; then
+            echo "Modules not tidy; please run 'go mod tidy'";
+          fi;
+
   release:
     <<: *docker_golang
     working_directory: /pg2pubsub
@@ -59,6 +76,8 @@ workflows:
   build-integration:
     jobs:
       - unit-integration
+      - check-deps-updated
+      - check-deps-tidy
       - release:
           requires:
             - unit-integration
