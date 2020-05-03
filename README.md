@@ -1,5 +1,7 @@
 # pg2sink [![CircleCI](https://circleci.com/gh/lawrencejones/pg2sink.svg?style=svg)](https://circleci.com/gh/lawrencejones/pg2sink)
 
+> **Path to v1.0.0: https://github.com/lawrencejones/pg2sink/projects/1**
+
 This tool connects to a Postgres database via logical replication, creating the
 plumbing required to subscribe to changes on tables within a specific schema.
 These changes are then pushed into one of the supported sink destinations.
