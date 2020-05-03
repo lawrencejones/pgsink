@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/jackc/pgx/pgtype"
 	"github.com/lawrencejones/pg2sink/pkg/logical"
+
+	"github.com/jackc/pgtype"
 	goavro "github.com/linkedin/goavro/v2"
 )
 

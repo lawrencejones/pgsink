@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/lawrencejones/pg2sink/pkg/publication"
 	uuid "github.com/satori/go.uuid"
 
@@ -26,7 +26,7 @@ var _ = Describe("Manager", func() {
 	var (
 		ctx    context.Context
 		cancel func()
-		pool   *pgx.ConnPool
+		pool   *pgxpool.Pool
 		pubmgr *publication.Manager
 		opts   *publication.ManagerOptions
 		err    error
@@ -43,19 +43,18 @@ var _ = Describe("Manager", func() {
 	}
 
 	mustExec := func(sql string, args []interface{}, message string) {
-		_, err := pool.ExecEx(ctx, fmt.Sprintf(sql, args...), nil)
+		_, err := pool.Exec(ctx, fmt.Sprintf(sql, args...))
 		Expect(err).To(BeNil(), message)
 	}
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 
-		cfg, _ := pgx.ParseEnvLibpq()
-		pool, err = pgx.NewConnPool(pgx.ConnPoolConfig{ConnConfig: cfg})
+		pool, err = pgxpool.Connect(ctx, "")
 		Expect(err).NotTo(HaveOccurred(), "failed to connect to database")
 
 		// If a publication exists from previous test runs, we should tear it down
-		pool.ExecEx(ctx, fmt.Sprintf(`drop publication if exists %s`, name), nil)
+		pool.Exec(ctx, fmt.Sprintf(`drop publication if exists %s`, name))
 
 		// Remove all tables from previous test runs
 		for _, table := range []string{existingTable, ignoredTable, newTable} {
@@ -88,7 +87,7 @@ var _ = Describe("Manager", func() {
 			Expect(pubmgr.GetPublicationID()).NotTo(Equal(""), "publication ID should be a uuid")
 
 			var foundName string
-			err := pool.QueryRowEx(ctx, `select pubname from pg_publication where pubname = $1;`, nil, name).
+			err := pool.QueryRow(ctx, `select pubname from pg_publication where pubname = $1;`, name).
 				Scan(&foundName)
 			Expect(err).To(BeNil(), "failed to find publication")
 			Expect(foundName).To(Equal(name))

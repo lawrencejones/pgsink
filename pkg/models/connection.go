@@ -3,16 +3,19 @@ package models
 import (
 	"context"
 
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 type Connection interface {
-	QueryRowEx(ctx context.Context, sql string, options *pgx.QueryExOptions, args ...interface{}) *pgx.Row
-	QueryEx(ctx context.Context, sql string, options *pgx.QueryExOptions, args ...interface{}) (*pgx.Rows, error)
-	ExecEx(ctx context.Context, sql string, options *pgx.QueryExOptions, args ...interface{}) (pgx.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
 }
 
-// We want all these connection constructs to satisfy Connection
-var _ Connection = &pgx.ConnPool{}
+// We want to use a pool, connection, or transaction interchangeably throughout our model
+// code. Verify they all satisfy a tiny common interface.
+var _ Connection = &pgxpool.Pool{}
 var _ Connection = &pgx.Conn{}
-var _ Connection = &pgx.Tx{}
+var _ Connection = pgx.Tx(nil)
