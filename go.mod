@@ -3,7 +3,7 @@ module github.com/lawrencejones/pg2sink
 go 1.13
 
 require (
-	cloud.google.com/go v0.38.0
+	cloud.google.com/go v0.56.0
 	contrib.go.opencensus.io/exporter/jaeger v0.2.0
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
