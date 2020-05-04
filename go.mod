@@ -17,7 +17,7 @@ require (
 	github.com/jackc/pgx/v4 v4.6.0
 	github.com/lib/pq v1.3.0 // indirect
 	github.com/linkedin/goavro/v2 v2.9.7
-	github.com/oklog/run v1.0.0
+	github.com/oklog/run v1.1.0
 	github.com/onsi/ginkgo v1.12.0
 	github.com/onsi/gomega v1.9.0
 	github.com/pkg/errors v0.8.1
