@@ -9,14 +9,14 @@ import (
 
 // BuildChangelog produces a stream of changelog entries from raw logical messages
 // produced by a subscription.
-func BuildChangelog(logger kitlog.Logger, raw <-chan interface{}) changelog.Changelog {
+func BuildChangelog(logger kitlog.Logger, stream *Stream) changelog.Changelog {
 	output := make(changelog.Changelog)
 
 	// TODO: If this is ever modified to marshal entries in parallel, this will complicate
 	// any acknowledgement pipeline. Double check assumptions about acknowledgement order
 	// before removing ordering.
 	go func() {
-		registry, raw := logical.BuildRegistry(logger, raw)
+		registry, raw := logical.BuildRegistry(logger, stream.Messages())
 		for msg := range Sequence(raw) {
 			timestamp, lsn := msg.Begin.Timestamp, msg.Begin.LSN
 			switch entry := msg.Entry.(type) {
@@ -61,9 +61,9 @@ type SequencedMessage struct {
 //
 // This will almost always be used like so:
 //
-//     Sequence(sub.Receive())
+//     Sequence(stream.Messages())
 //
-// Where sub is a Subscription.
+// Where stream is an active Stream.
 func Sequence(messages <-chan interface{}) <-chan SequencedMessage {
 	output := make(chan SequencedMessage)
 

@@ -6,8 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lawrencejones/pg2sink/pkg/subscription"
+
 	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/lawrencejones/pg2sink/pkg/publication"
 	uuid "github.com/satori/go.uuid"
 
 	. "github.com/onsi/ginkgo"
@@ -24,21 +25,23 @@ func randomSuffix() string {
 
 var _ = Describe("Manager", func() {
 	var (
-		ctx    context.Context
-		cancel func()
-		pool   *pgxpool.Pool
-		pubmgr *publication.Manager
-		opts   *publication.ManagerOptions
-		err    error
+		ctx     context.Context
+		cancel  func()
+		pool    *pgxpool.Pool
+		manager *subscription.Manager
+		opts    *subscription.ManagerOptions
+		err     error
 
-		name          = "pubmgr_integration"
+		name          = "manager_integration"
 		existingTable = "public.pubmgr_integration_test_existing"
 		newTable      = "public.pubmgr_integration_test_new"
 		ignoredTable  = "public.pubmgr_integration_test_ignored"
 	)
 
 	getPublishedTables := func() []string {
-		tables, _ := publication.Publication(name).GetPublishedTables(ctx, pool, pubmgr.GetPublicationID())
+		tables, err := subscription.Publication{Name: name}.GetTables(ctx, pool)
+		Expect(err).NotTo(HaveOccurred(), "failed to find published tables")
+
 		return tables
 	}
 
@@ -65,10 +68,15 @@ var _ = Describe("Manager", func() {
 		mustExec(`create table %s (id bigserial primary key);`, []interface{}{existingTable}, "failed to create sync table")
 		mustExec(`create table %s (id bigserial primary key);`, []interface{}{ignoredTable}, "failed to create sync table")
 
-		opts = &publication.ManagerOptions{
+		// Finally, create the publication. This is usually handled by the subscription, and
+		// we won't bother commenting a publication ID, as it's not relevant for these tests.
+		mustExec(`create publication %s;`, []interface{}{name}, "failed to create publication")
+
+		opts = &subscription.ManagerOptions{
 			Name:         name,
 			Schemas:      []string{"public"},
 			Excludes:     []string{ignoredTable},
+			Includes:     []string{},
 			PollInterval: 100 * time.Millisecond,
 		}
 	})
@@ -77,50 +85,14 @@ var _ = Describe("Manager", func() {
 		cancel()
 	})
 
-	Describe("CreateManager()", func() {
+	Describe("Manage()", func() {
 		JustBeforeEach(func() {
-			pubmgr, err = publication.CreateManager(ctx, logger, pool, *opts)
-		})
-
-		It("creates a publication of the given name", func() {
-			Expect(err).To(BeNil(), "failed to create publication")
-			Expect(pubmgr.GetPublicationID()).NotTo(Equal(""), "publication ID should be a uuid")
-
-			var foundName string
-			err := pool.QueryRow(ctx, `select pubname from pg_publication where pubname = $1;`, name).
-				Scan(&foundName)
-			Expect(err).To(BeNil(), "failed to find publication")
-			Expect(foundName).To(Equal(name))
-		})
-
-		Context("when publication already exists", func() {
-			BeforeEach(func() {
-				mustExec(`create publication %s`, []interface{}{name}, "failed to create publication")
-				mustExec(`comment on publication %s is 'la-la-la'`, []interface{}{name}, "failed to comment publication")
-			})
-
-			It("no-ops", func() {
-				Expect(err).To(BeNil(), "failed when calling create on existing publication")
-			})
-		})
-	})
-
-	Describe("Sync()", func() {
-		JustBeforeEach(func() {
-			// Call Create() as we need to initialise the manager with an identifier. It's a bit
-			// sad we need Create() to work in order to test Sync(), but there is a crucial
-			// dependency there.
-			pubmgr, err = publication.CreateManager(ctx, logger, pool, *opts)
-			Expect(err).NotTo(HaveOccurred(), "failed to create manager")
+			manager = subscription.NewManager(logger, pool, *opts)
 
 			go func() {
 				defer GinkgoRecover()
-				Expect(pubmgr.Sync(ctx)).To(Succeed(), "Sync() returned an error")
+				Expect(manager.Manage(ctx)).To(Succeed(), "Manage() returned an error")
 			}()
-		})
-
-		AfterEach(func() {
-			cancel()
 		})
 
 		It("adds tables to an existing publication", func() {
