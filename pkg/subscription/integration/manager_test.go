@@ -73,7 +73,6 @@ var _ = Describe("Manager", func() {
 		mustExec(`create publication %s;`, []interface{}{name}, "failed to create publication")
 
 		opts = &subscription.ManagerOptions{
-			Name:         name,
 			Schemas:      []string{"public"},
 			Excludes:     []string{ignoredTable},
 			Includes:     []string{},
@@ -91,7 +90,10 @@ var _ = Describe("Manager", func() {
 
 			go func() {
 				defer GinkgoRecover()
-				Expect(manager.Manage(ctx)).To(Succeed(), "Manage() returned an error")
+
+				Expect(
+					manager.Manage(ctx, &subscription.Publication{Name: name}),
+				).To(Succeed(), "Manage() returned an error")
 			}()
 		})
 

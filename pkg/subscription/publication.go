@@ -26,6 +26,11 @@ func (p Publication) GetReplicationSlotName() string {
 	return fmt.Sprintf("%s_%s", p.Name, p.ID)
 }
 
+// String provides an easy printer for anything using publications
+func (p Publication) String() string {
+	return fmt.Sprintf("%s[%s]", p.Name, p.ID)
+}
+
 // GetTables returns a slice of table names that are included on the publication.
 func (p Publication) GetTables(ctx context.Context, conn querier) ([]string, error) {
 	// Careful! This query has been constructed so that the scan will fail if there is no
