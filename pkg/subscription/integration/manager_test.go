@@ -2,13 +2,14 @@ package integration
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/lawrencejones/pg2sink/pkg/subscription"
 
-	"github.com/jackc/pgx/v4/pgxpool"
+	_ "github.com/jackc/pgx/v4/stdlib"
 	uuid "github.com/satori/go.uuid"
 
 	. "github.com/onsi/ginkgo"
@@ -27,7 +28,7 @@ var _ = Describe("Manager", func() {
 	var (
 		ctx     context.Context
 		cancel  func()
-		pool    *pgxpool.Pool
+		db      *sql.DB
 		manager *subscription.Manager
 		opts    *subscription.ManagerOptions
 		err     error
@@ -39,25 +40,25 @@ var _ = Describe("Manager", func() {
 	)
 
 	getPublishedTables := func() []string {
-		tables, err := subscription.Publication{Name: name}.GetTables(ctx, pool)
+		tables, err := subscription.Publication{Name: name}.GetTables(ctx, db)
 		Expect(err).NotTo(HaveOccurred(), "failed to find published tables")
 
 		return tables
 	}
 
 	mustExec := func(sql string, args []interface{}, message string) {
-		_, err := pool.Exec(ctx, fmt.Sprintf(sql, args...))
+		_, err := db.ExecContext(ctx, fmt.Sprintf(sql, args...))
 		Expect(err).To(BeNil(), message)
 	}
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 
-		pool, err = pgxpool.Connect(ctx, "")
+		db, err = sql.Open("pgx", "")
 		Expect(err).NotTo(HaveOccurred(), "failed to connect to database")
 
 		// If a publication exists from previous test runs, we should tear it down
-		pool.Exec(ctx, fmt.Sprintf(`drop publication if exists %s`, name))
+		db.ExecContext(ctx, fmt.Sprintf(`drop publication if exists %s`, name))
 
 		// Remove all tables from previous test runs
 		for _, table := range []string{existingTable, ignoredTable, newTable} {
@@ -86,7 +87,7 @@ var _ = Describe("Manager", func() {
 
 	Describe("Manage()", func() {
 		JustBeforeEach(func() {
-			manager = subscription.NewManager(logger, pool, *opts)
+			manager = subscription.NewManager(logger, db, *opts)
 
 			go func() {
 				defer GinkgoRecover()

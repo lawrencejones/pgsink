@@ -2,14 +2,13 @@ package subscription
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/google/uuid"
-	"github.com/jackc/pgconn"
 	"github.com/jackc/pgtype"
-	"github.com/jackc/pgx/v4"
 )
 
 // Publication represents a Postgres publication, the publishing component of a
@@ -32,7 +31,7 @@ func (p Publication) String() string {
 }
 
 // GetTables returns a slice of table names that are included on the publication.
-func (p Publication) GetTables(ctx context.Context, conn querier) ([]string, error) {
+func (p Publication) GetTables(ctx context.Context, db *sql.DB) (tables []string, err error) {
 	// Careful! This query has been constructed so that the scan will fail if there is no
 	// matching publication. It's important we do this so we can detect if a publication has
 	// disappeared under us, so change this without care.
@@ -44,8 +43,7 @@ func (p Publication) GetTables(ctx context.Context, conn querier) ([]string, err
 	`
 
 	tablesReceiver := pgtype.TextArray{}
-	var tables []string
-	if err := conn.QueryRow(ctx, query, p.Name).Scan(&tablesReceiver); err != nil {
+	if err := db.QueryRowContext(ctx, query, p.Name).Scan(&tablesReceiver); err != nil {
 		return nil, err
 	}
 
@@ -53,33 +51,25 @@ func (p Publication) GetTables(ctx context.Context, conn querier) ([]string, err
 }
 
 // SetTables resets the publication to include the given tables only
-func (p Publication) SetTables(ctx context.Context, conn querier, tables ...string) error {
+func (p Publication) SetTables(ctx context.Context, db *sql.DB, tables ...string) error {
 	query := fmt.Sprintf(`alter publication %s set table %s;`, p.Name, strings.Join(tables, ", "))
-	_, err := conn.Exec(ctx, query)
+	_, err := db.ExecContext(ctx, query)
 	return err
-}
-
-// querier allows use of various pgx constructs in place of a concrete type
-type querier interface {
-	Begin(ctx context.Context) (pgx.Tx, error)
-	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
-	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
-	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
 }
 
 // findOrCreatePublication will attempt to find an existing publication, or create from
 // scratch with a fresh publication ID.
-func findOrCreatePublication(ctx context.Context, logger kitlog.Logger, conn querier, name string) (*Publication, error) {
+func findOrCreatePublication(ctx context.Context, logger kitlog.Logger, db *sql.DB, name string) (*Publication, error) {
 	logger = kitlog.With(logger, "publication_name", name)
 
-	publication, err := getPublication(ctx, conn, name)
+	publication, err := getPublication(ctx, db, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find publication: %w", err)
 	}
 
 	if publication == nil {
 		logger.Log("event", "publication.create", "msg", "could not find publication, creating")
-		publication, err = createPublication(ctx, conn, name, newShortID())
+		publication, err = createPublication(ctx, db, name, newShortID())
 		if err != nil {
 			return nil, fmt.Errorf("failed to create publication: %w", err)
 		}
@@ -91,30 +81,30 @@ func findOrCreatePublication(ctx context.Context, logger kitlog.Logger, conn que
 
 // createPublication transactionally creates and comments on a new publication. The
 // comment will be the unique subscription identifier.
-func createPublication(ctx context.Context, conn querier, name, id string) (*Publication, error) {
-	txn, err := conn.Begin(ctx)
+func createPublication(ctx context.Context, db *sql.DB, name, id string) (*Publication, error) {
+	txn, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	createQuery := fmt.Sprintf(`create publication %s;`, name)
-	if _, err := txn.Exec(ctx, createQuery); err != nil {
+	if _, err := txn.ExecContext(ctx, createQuery); err != nil {
 		return nil, err
 	}
 
 	commentQuery := fmt.Sprintf(`comment on publication %s is '%s';`, name, id)
-	if _, err := txn.Exec(ctx, commentQuery); err != nil {
+	if _, err := txn.ExecContext(ctx, commentQuery); err != nil {
 		return nil, err
 	}
 
-	if err := txn.Commit(ctx); err != nil {
+	if err := txn.Commit(); err != nil {
 		return nil, err
 	}
 
 	return &Publication{Name: name, ID: id}, nil
 }
 
-func getPublication(ctx context.Context, conn querier, name string) (*Publication, error) {
+func getPublication(ctx context.Context, db *sql.DB, name string) (*Publication, error) {
 	query := `
 	select
 		pubname,
@@ -125,8 +115,8 @@ func getPublication(ctx context.Context, conn querier, name string) (*Publicatio
 	`
 
 	var pub Publication
-	err := conn.QueryRow(ctx, query, name).Scan(&pub.Name, &pub.ID)
-	if err == pgx.ErrNoRows {
+	err := db.QueryRowContext(ctx, query, name).Scan(&pub.Name, &pub.ID)
+	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 

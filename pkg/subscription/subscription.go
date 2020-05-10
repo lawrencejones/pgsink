@@ -2,6 +2,7 @@ package subscription
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pglogrepl"
 	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 type SubscriptionOptions struct {
@@ -37,8 +37,8 @@ var NonReplicationConnection = errors.New("connection has not been created with 
 // Create initialises a subscription once the publication and replication slot has been
 // created. This is the only way to create a subscription, to ensure a replication slot
 // exists before anyone can call Start().
-func Create(ctx context.Context, logger kitlog.Logger, pool *pgxpool.Pool, repconn *pgx.Conn, opts SubscriptionOptions) (*Subscription, error) {
-	publication, err := findOrCreatePublication(ctx, logger, pool, opts.Name)
+func Create(ctx context.Context, logger kitlog.Logger, db *sql.DB, repconn *pgx.Conn, opts SubscriptionOptions) (*Subscription, error) {
+	publication, err := findOrCreatePublication(ctx, logger, db, opts.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -93,6 +93,10 @@ func (s *Subscription) Start(ctx context.Context, logger kitlog.Logger, conn *pg
 	}
 
 	return stream(ctx, logger, conn, sysident, opts), nil
+}
+
+func (s *Subscription) GetID() string {
+	return s.publication.ID
 }
 
 func (s *Subscription) GetPublication() Publication {

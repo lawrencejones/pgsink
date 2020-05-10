@@ -2,15 +2,17 @@ package subscription
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/alecthomas/kingpin"
 	"github.com/lawrencejones/pg2sink/pkg/util"
 
+	"github.com/alecthomas/kingpin"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v4/stdlib"
 	"github.com/pkg/errors"
 )
 
@@ -34,14 +36,14 @@ func (opt *ManagerOptions) Bind(cmd *kingpin.CmdClause, prefix string) *ManagerO
 // according to the white/blacklist.
 type Manager struct {
 	logger kitlog.Logger
-	conn   querier
+	db     *sql.DB
 	opts   ManagerOptions
 }
 
-func NewManager(logger kitlog.Logger, conn querier, opts ManagerOptions) *Manager {
+func NewManager(logger kitlog.Logger, db *sql.DB, opts ManagerOptions) *Manager {
 	return &Manager{
 		logger: logger,
-		conn:   conn,
+		db:     db,
 		opts:   opts,
 	}
 }
@@ -57,7 +59,7 @@ func (m *Manager) Manage(ctx context.Context, publication Publication) (err erro
 			return errors.Wrap(err, "failed to discover watched tables")
 		}
 
-		published, err := publication.GetTables(ctx, m.conn)
+		published, err := publication.GetTables(ctx, m.db)
 		if err != nil {
 			return errors.Wrap(err, "failed to query published tables")
 		}
@@ -70,7 +72,7 @@ func (m *Manager) Manage(ctx context.Context, publication Publication) (err erro
 				"adding", strings.Join(watchedNotPublished, ","),
 				"removing", strings.Join(publishedNotWatched, ","))
 
-			if err := publication.SetTables(ctx, m.conn, watched...); err != nil {
+			if err := publication.SetTables(ctx, m.db, watched...); err != nil {
 				return fmt.Errorf("failed to alter publication: %w", err)
 			}
 		}
@@ -86,7 +88,7 @@ func (m *Manager) Manage(ctx context.Context, publication Publication) (err erro
 }
 
 // getWatchedTables scans the database for tables that match our watch conditions
-func (p *Manager) getWatchedTables(ctx context.Context) ([]string, error) {
+func (m *Manager) getWatchedTables(ctx context.Context) ([]string, error) {
 	query := `
 	select array_agg(table_schema || '.' || table_name)
 	from information_schema.tables
@@ -94,9 +96,16 @@ func (p *Manager) getWatchedTables(ctx context.Context) ([]string, error) {
 	and table_type = 'BASE TABLE';
 	`
 
+	// Drop into pgx to provide support for any, which is incompatible with db.SQL
+	conn, err := stdlib.AcquireConn(m.db)
+	if err != nil {
+		return nil, err
+	}
+	defer stdlib.ReleaseConn(m.db, conn)
+
 	tablesReceiver := pgtype.TextArray{}
 	var tables []string
-	if err := p.conn.QueryRow(ctx, query, p.opts.Schemas).Scan(&tablesReceiver); err != nil {
+	if err := conn.QueryRow(ctx, query, m.opts.Schemas).Scan(&tablesReceiver); err != nil {
 		return nil, err
 	}
 
@@ -107,13 +116,13 @@ func (p *Manager) getWatchedTables(ctx context.Context) ([]string, error) {
 	watchedTables := []string{}
 forEachRow:
 	for _, table := range tables {
-		if util.Includes(p.opts.Excludes, table) {
+		if util.Includes(m.opts.Excludes, table) {
 			continue forEachRow
 		}
 
 		// If we have an includes list, we only include our table if it appears in that list
-		isIncluded := len(p.opts.Includes) == 0
-		isIncluded = isIncluded || util.Includes(p.opts.Includes, table)
+		isIncluded := len(m.opts.Includes) == 0
+		isIncluded = isIncluded || util.Includes(m.opts.Includes, table)
 
 		if !isIncluded {
 			continue forEachRow
