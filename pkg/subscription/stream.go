@@ -99,9 +99,26 @@ func stream(ctx context.Context, logger kitlog.Logger, conn *pgconn.PgConn, sysi
 				logger.Log("event", "standby_status_update", "position", position)
 			}
 
-			ctx, cancel := context.WithCancel(ctx)
-			msg, err := conn.ReceiveMessage(ctx)
-			cancel()
+			var msg pgproto3.BackendMessage
+
+			{
+				ctx, cancel := context.WithDeadline(ctx, nextStandbyMessageDeadline)
+				msg, err = conn.ReceiveMessage(ctx)
+				cancel()
+
+				// If the heartbeat interval has exceeded while we're waiting for a message then
+				// we're due to send a keepalive. Failure to do so will cause Postgres to
+				// terminate the walsender process, resulting in a 'replication timeout' log. This
+				// timeout is configured by wal_sender_timeout and defaults to 60s, so take care
+				// to set the heartbeat interval to be more frequent that this.
+				//
+				// https://www.postgresql.org/docs/current/runtime-config-replication.html
+				if ctx.Err() == context.DeadlineExceeded {
+					level.Debug(logger).Log("event", "receive_message_timeout",
+						"msg", "timed out receiving message, heartbeating")
+					continue
+				}
+			}
 
 			if err != nil {
 				if pgconn.Timeout(err) {
