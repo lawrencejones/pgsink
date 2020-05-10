@@ -9,6 +9,7 @@ require (
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d // indirect
 	github.com/davecgh/go-spew v1.1.1
+	github.com/go-jet/jet v2.2.0+incompatible
 	github.com/go-kit/kit v0.10.0
 	github.com/google/uuid v1.1.1
 	github.com/jackc/pgconn v1.5.0
@@ -32,4 +33,5 @@ require (
 	google.golang.org/api v0.22.0
 	google.golang.org/appengine v1.6.5 // indirect
 	gopkg.in/yaml.v2 v2.2.7 // indirect
+	gotest.tools v2.2.0+incompatible // indirect
 )

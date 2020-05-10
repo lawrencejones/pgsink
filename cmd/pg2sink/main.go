@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	stdlog "log"
 	"net/http"
@@ -24,7 +25,7 @@ import (
 	level "github.com/go-kit/kit/log/level"
 	"github.com/jackc/pglogrepl"
 	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v4/stdlib"
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opencensus.io/trace"
@@ -63,12 +64,17 @@ var (
 	streamSinkBigQueryOptions = new(sinkbigquery.Options).Bind(stream, "sink.bigquery.")
 
 	// imports
-	streamImportManagerPollInterval = stream.Flag("import-manager-poll-interval", "Interval to poll for newly published tables").Default("10s").Duration()
-	streamImporterPollInterval      = stream.Flag("importer-poll-interval", "Interval to poll for new import jobs").Default("10s").Duration()
-	streamImporterWorkerCount       = stream.Flag("importer-worker-count", "Workers for processing imports").Default("0").Int()
-	streamImporterSnapshotTimeout   = stream.Flag("importer-snapshot-timeout", "Maximum time to hold Postgres snapshots").Default("1m").Duration()
-	streamImporterBatchLimit        = stream.Flag("importer-batch-limit", "Maximum rows to pull per import job pagination").Default("100000").Int()
-	streamImporterBufferSize        = stream.Flag("importer-buffer-size", "Buffer between pulling data from Postgres and sink").Default("100000").Int()
+	/*
+		streamImportManager        = stream.Flag("import-manager", "Enable subscription import manager").Default("true").Bool()
+		streamImportManagerOptions = new(imports.ManagerOptions).Bind(streamImportManager, "import-manager.")
+	*/
+
+	// streamImportManagerPollInterval = stream.Flag("import-manager-poll-interval", "Interval to poll for newly published tables").Default("10s").Duration()
+	// streamImporterPollInterval      = stream.Flag("importer-poll-interval", "Interval to poll for new import jobs").Default("10s").Duration()
+	// streamImporterWorkerCount       = stream.Flag("importer-worker-count", "Workers for processing imports").Default("0").Int()
+	// streamImporterSnapshotTimeout   = stream.Flag("importer-snapshot-timeout", "Maximum time to hold Postgres snapshots").Default("1m").Duration()
+	// streamImporterBatchLimit        = stream.Flag("importer-batch-limit", "Maximum rows to pull per import job pagination").Default("100000").Int()
+	// streamImporterBufferSize        = stream.Flag("importer-buffer-size", "Buffer between pulling data from Postgres and sink").Default("100000").Int()
 )
 
 func main() {
@@ -87,50 +93,17 @@ func main() {
 	ctx, cancel := setupSignalHandler()
 	defer cancel()
 
-	// pgx makes it difficult to use the raw pgconn.Config struct without going via the
-	// ParseConfig method. We compromise by rendering a connection string for our overrides
-	// and relying on ParseConfig to identify additional Postgres parameters from libpq
-	// compatible environment variables.
-	cfg, err := pgxpool.ParseConfig(fmt.Sprintf("host=%s port=%d database=%s user=%s", *host, *port, *database, *user))
+	db, cfg, repCfg, err := buildDBConfig(fmt.Sprintf("host=%s port=%d database=%s user=%s", *host, *port, *database, *user))
 	if err != nil {
 		kingpin.Fatalf("invalid postgres configuration: %v", err.Error())
 	}
 
 	logger.Log("event", "database_config",
-		"host", cfg.ConnConfig.Host,
-		"port", cfg.ConnConfig.Port,
-		"database", cfg.ConnConfig.Database,
-		"user", cfg.ConnConfig.User,
+		"host", cfg.Host,
+		"port", cfg.Port,
+		"database", cfg.Database,
+		"user", cfg.User,
 	)
-
-	mustReplicationConnection := func() *pgx.Conn {
-		params := map[string]string{"replication": "database"}
-		for key, value := range cfg.ConnConfig.RuntimeParams {
-			params[key] = value
-		}
-
-		replicationCfg := *cfg.ConnConfig
-		replicationCfg.RuntimeParams = params
-
-		conn, err := pgx.ConnectConfig(ctx, &replicationCfg)
-		if err != nil {
-			kingpin.Fatalf("failed to create replication connection: %v", err)
-		}
-
-		return conn
-	}
-
-	mustConnectionPool := func(size int) *pgxpool.Pool {
-		cfg := *cfg
-		cfg.MaxConns = int32(size)
-
-		pool, err := pgxpool.ConnectConfig(ctx, &cfg)
-		if err != nil {
-			kingpin.Fatalf("failed to create connection pool: %v", err)
-		}
-
-		return pool
-	}
 
 	handleError := func(logger kitlog.Logger) func(error) {
 		return func(err error) {
@@ -141,7 +114,7 @@ func main() {
 		}
 	}
 
-	if err := migration.Migrate(ctx, logger, *cfg); err != nil {
+	if err := migration.Migrate(ctx, logger, db); err != nil {
 		kingpin.Fatalf("failed to migrate database: %v", err)
 	}
 
@@ -195,22 +168,23 @@ func main() {
 		{
 			logger := kitlog.With(logger, "component", "subscription")
 
-			var err error
+			repconn, err := pgx.ConnectConfig(ctx, repCfg)
+			if err != nil {
+				kingpin.Fatalf("failed to open replication connection: %v", err)
+			}
+
+			// Initialise our subscription, a process that requires both a replication and a
+			// standard connection. We'll reuse the replication connection to power the stream.
 			sub, err = subscription.Create(
-				ctx,
-				logger,
-				mustConnectionPool(1),
-				mustReplicationConnection(),
-				subscription.SubscriptionOptions{
+				ctx, logger, db, repconn, subscription.SubscriptionOptions{
 					Name: *subscriptionName,
-				},
-			)
+				})
 
 			if err != nil {
 				kingpin.Fatalf("failed to create subscription: %v", err)
 			}
 
-			stream, err = sub.Start(ctx, logger, mustReplicationConnection().PgConn(), *streamOptions)
+			stream, err = sub.Start(ctx, logger, repconn.PgConn(), *streamOptions)
 			if err != nil {
 				kingpin.Fatalf("failed to start subscription: %v", err)
 			}
@@ -250,8 +224,7 @@ func main() {
 		if *streamSubscriptionManager {
 			logger := kitlog.With(logger, "component", "subscription_manager")
 
-			manager := subscription.
-				NewManager(logger, mustConnectionPool(1), *streamSubscriptionManagerOptions)
+			manager := subscription.NewManager(logger, db, *streamSubscriptionManagerOptions)
 
 			g.Add(
 				func() error {
@@ -262,28 +235,22 @@ func main() {
 		}
 
 		/*
-			{
+			if *streamImportManager {
 				logger := kitlog.With(logger, "component", "import_manager")
 
-				manager := imports.NewManager(
-					logger,
-					mustConnectionPool(1),
-					imports.ManagerOptions{
-						PublicationName:  *publicationName,
-						PublicationID:    pubmgr.GetPublicationID(),
-						SubscriptionName: *slotName,
-						PollInterval:     *streamImportManagerPollInterval,
-					},
-				)
+				manager := imports.
+					NewManager(logger, mustConnectionPool(1), *streamImportManagerOptions)
 
 				g.Add(
 					func() error {
-						return manager.Sync(ctx)
+						return manager.Manage(ctx, sub)
 					},
 					handleError(logger),
 				)
 			}
+		*/
 
+		/*
 			{
 				logger := kitlog.With(logger, "component", "importer")
 
@@ -321,6 +288,41 @@ func main() {
 	default:
 		panic("unsupported command")
 	}
+}
+
+func buildDBConfig(base string) (db *sql.DB, cfg *pgx.ConnConfig, repCfg *pgx.ConnConfig, err error) {
+	// pgx makes it difficult to use the raw pgconn.Config struct without going via the
+	// ParseConfig method. We compromise by rendering a connection string for our overrides
+	// and relying on ParseConfig to identify additional Postgres parameters from libpq
+	// compatible environment variables.
+	cfg, err = pgx.ParseConfig(base)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("invalid database configuration: %w", err)
+	}
+
+	// In addition to standard connections, we'll also need a replication connection.
+	repCfg, err = pgx.ParseConfig(fmt.Sprintf("%s replication=database", base))
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("invalid replication database configuration: %w", err)
+	}
+
+	// When interacting with standard database objects, it's easier to use sql.DB. This
+	// allows compatibility with a wide variety of other libraries, while allowing us to
+	// drop into a raw pgx connection when required like so:
+	//
+	//   var conn *pgx.Conn
+	//   conn, _ = stdlib.AcquireConn(db)
+	//   defer stdlib.ReleaseConn(db, conn)
+	//
+	// An exception is necessary for the replication connection, as this requires a
+	// different startup paramter (replication=database).
+	connStr := stdlib.RegisterConnConfig(cfg)
+	db, err = sql.Open("pgx", connStr)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to initialise db.SQL: %w", err)
+	}
+
+	return
 }
 
 // Set by goreleaser
