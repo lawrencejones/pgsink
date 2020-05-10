@@ -2,9 +2,11 @@ package subscription
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"time"
 
+	"github.com/alecthomas/kingpin"
 	"github.com/lawrencejones/pg2sink/pkg/logical"
 
 	kitlog "github.com/go-kit/kit/log"
@@ -16,6 +18,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
+
+type StreamOptions struct {
+	HeartbeatInterval time.Duration
+}
+
+func (opt *StreamOptions) Bind(cmd *kingpin.CmdClause, prefix string) *StreamOptions {
+	cmd.Flag(fmt.Sprintf("%sheartbeat-interval", prefix), "Interval at which to heartbeat Postgres, must be < wal_sender_timeout").Default("30s").DurationVar(&opt.HeartbeatInterval)
+
+	return opt
+}
 
 // Stream represents an on-going replication stream, managed by a subscription. Consumers
 // of the stream can acknowledge processing messages using the Confirm() method.
@@ -56,7 +68,7 @@ var (
 	)
 )
 
-func stream(ctx context.Context, logger kitlog.Logger, conn *pgconn.PgConn, sysident pglogrepl.IdentifySystemResult, heartbeatInterval time.Duration) *Stream {
+func stream(ctx context.Context, logger kitlog.Logger, conn *pgconn.PgConn, sysident pglogrepl.IdentifySystemResult, opts StreamOptions) *Stream {
 	stream := &Stream{
 		position: sysident.XLogPos,
 		messages: make(chan interface{}),
@@ -72,7 +84,7 @@ func stream(ctx context.Context, logger kitlog.Logger, conn *pgconn.PgConn, sysi
 		}()
 
 		logger := kitlog.With(logger, "stream_position", kitlog.Valuer(func() interface{} { return stream.position }))
-		nextStandbyMessageDeadline := time.Now().Add(heartbeatInterval)
+		nextStandbyMessageDeadline := time.Now().Add(opts.HeartbeatInterval)
 
 		for {
 			select {
@@ -85,7 +97,7 @@ func stream(ctx context.Context, logger kitlog.Logger, conn *pgconn.PgConn, sysi
 
 			if time.Now().After(nextStandbyMessageDeadline) {
 				// Reset the counter for another heartbeat interval
-				nextStandbyMessageDeadline = time.Now().Add(heartbeatInterval)
+				nextStandbyMessageDeadline = time.Now().Add(opts.HeartbeatInterval)
 
 				position := stream.position
 				err := pglogrepl.SendStandbyStatusUpdate(ctx, conn, pglogrepl.StandbyStatusUpdate{

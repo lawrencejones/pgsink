@@ -11,9 +11,7 @@ import (
 	"syscall"
 
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
-	"github.com/lawrencejones/pg2sink/pkg/imports"
 	"github.com/lawrencejones/pg2sink/pkg/migration"
-	"github.com/lawrencejones/pg2sink/pkg/publication"
 	sinkbigquery "github.com/lawrencejones/pg2sink/pkg/sinks/bigquery"
 	sinkfile "github.com/lawrencejones/pg2sink/pkg/sinks/file"
 	"github.com/lawrencejones/pg2sink/pkg/sinks/generic"
@@ -46,31 +44,31 @@ var (
 	database = app.Flag("database", "Postgres database name").Envar("PGDATABASE").Default("postgres").String()
 	user     = app.Flag("user", "Postgres user").Envar("PGUSER").Default("postgres").String()
 
-	// Each stream is uniquely identified by a (publication_name, subscription_name)
-	publicationName = app.Flag("publication-name", "Publication name").Default("pg2sink").String()
-	slotName        = app.Flag("slot-name", "Replication slot name").Default("pg2sink").String()
+	// Each subscription has a name and a unique identifier
+	subscriptionName = app.Flag("subscription-name", "Subscription name, matches Postgres publication").Default("pg2sink").String()
 
-	stream                          = app.Command("stream", "Stream changes into sink")
-	streamMetricsAddress            = stream.Flag("metrics-address", "Address to bind HTTP metrics listener").Default("127.0.0.1").String()
-	streamMetricsPort               = stream.Flag("metrics-port", "Port to bind HTTP metrics listener").Default("9525").Uint16()
-	streamJaegerAgentEndpoint       = stream.Flag("jaeger-agent-endpoint", "Endpoint for Jaeger agent").Default("localhost:6831").String()
-	streamManagePublication         = stream.Flag("manage-publication", "Auto-manage tables in publication").Default("false").Bool()
-	streamSchema                    = stream.Flag("schema", "Postgres schema to watch for changes").Default("public").String()
-	streamExcludes                  = stream.Flag("exclude", "Table name to exclude from changes").Strings()
-	streamIncludes                  = stream.Flag("include", "Table name to include from changes (activates whitelist)").Strings()
-	streamPollInterval              = stream.Flag("poll-interval", "Interval to poll for new tables").Default("10s").Duration()
-	streamStatusHeartbeat           = stream.Flag("status-heartbeat", "Interval to heartbeat replication primary").Default("10s").Duration()
-	streamDecodeOnly                = stream.Flag("decode-only", "Interval to heartbeat replication primary").Default("false").Bool()
+	stream                    = app.Command("stream", "Stream changes into sink")
+	streamMetricsAddress      = stream.Flag("metrics-address", "Address to bind HTTP metrics listener").Default("127.0.0.1").String()
+	streamMetricsPort         = stream.Flag("metrics-port", "Port to bind HTTP metrics listener").Default("9525").Uint16()
+	streamJaegerAgentEndpoint = stream.Flag("jaeger-agent-endpoint", "Endpoint for Jaeger agent").Default("localhost:6831").String()
+	streamDecodeOnly          = stream.Flag("decode-only", "Print messages only, ignoring sink").Default("false").Bool()
+
+	streamOptions = new(subscription.StreamOptions).Bind(stream, "")
+
+	streamSubscriptionManager        = stream.Flag("subscription-manager", "Auto-manage tables into the subscription, modifying the PG publication").Default("false").Bool()
+	streamSubscriptionManagerOptions = new(subscription.ManagerOptions).Bind(stream, "subscription-manager.")
+
+	streamSinkType            = stream.Flag("sink", "Type of sink target").Required().String()
+	streamSinkFileOptions     = new(sinkfile.Options).Bind(stream, "sink.file.")
+	streamSinkBigQueryOptions = new(sinkbigquery.Options).Bind(stream, "sink.bigquery.")
+
+	// imports
 	streamImportManagerPollInterval = stream.Flag("import-manager-poll-interval", "Interval to poll for newly published tables").Default("10s").Duration()
 	streamImporterPollInterval      = stream.Flag("importer-poll-interval", "Interval to poll for new import jobs").Default("10s").Duration()
 	streamImporterWorkerCount       = stream.Flag("importer-worker-count", "Workers for processing imports").Default("0").Int()
 	streamImporterSnapshotTimeout   = stream.Flag("importer-snapshot-timeout", "Maximum time to hold Postgres snapshots").Default("1m").Duration()
 	streamImporterBatchLimit        = stream.Flag("importer-batch-limit", "Maximum rows to pull per import job pagination").Default("100000").Int()
 	streamImporterBufferSize        = stream.Flag("importer-buffer-size", "Buffer between pulling data from Postgres and sink").Default("100000").Int()
-
-	streamSinkType            = stream.Flag("sink", "Type of sink target").Required().String()
-	streamSinkFileOptions     = new(sinkfile.Options).Bind(stream, "sink.file.")
-	streamSinkBigQueryOptions = new(sinkbigquery.Options).Bind(stream, "sink.bigquery.")
 )
 
 func main() {
@@ -105,12 +103,28 @@ func main() {
 		"user", cfg.ConnConfig.User,
 	)
 
+	mustReplicationConnection := func() *pgx.Conn {
+		params := map[string]string{"replication": "database"}
+		for key, value := range cfg.ConnConfig.RuntimeParams {
+			params[key] = value
+		}
+
+		replicationCfg := *cfg.ConnConfig
+		replicationCfg.RuntimeParams = params
+
+		conn, err := pgx.ConnectConfig(ctx, &replicationCfg)
+		if err != nil {
+			kingpin.Fatalf("failed to create replication connection: %v", err)
+		}
+
+		return conn
+	}
+
 	mustConnectionPool := func(size int) *pgxpool.Pool {
 		cfg := *cfg
 		cfg.MaxConns = int32(size)
 
 		pool, err := pgxpool.ConnectConfig(ctx, &cfg)
-
 		if err != nil {
 			kingpin.Fatalf("failed to create connection pool: %v", err)
 		}
@@ -134,9 +148,9 @@ func main() {
 	switch command {
 	case stream.FullCommand():
 		var (
-			sink   generic.Sink
+			sub    *subscription.Subscription
 			stream *subscription.Stream
-			pubmgr *publication.Manager
+			sink   generic.Sink
 		)
 
 		mustSink := func(sink generic.Sink, err error) generic.Sink {
@@ -158,9 +172,11 @@ func main() {
 
 		var g run.Group
 
-		logger.Log("event", "metrics.listen", "address", *streamMetricsAddress, "port", *streamMetricsPort)
 		http.Handle("/metrics", promhttp.Handler())
-		go http.ListenAndServe(fmt.Sprintf("%s:%v", *streamMetricsAddress, *streamMetricsPort), nil)
+		go func() {
+			logger.Log("event", "metrics.listen", "address", *streamMetricsAddress, "port", *streamMetricsPort)
+			http.ListenAndServe(fmt.Sprintf("%s:%v", *streamMetricsAddress, *streamMetricsPort), nil)
+		}()
 
 		jexporter, err := jaeger.NewExporter(jaeger.Options{
 			AgentEndpoint: *streamJaegerAgentEndpoint,
@@ -177,111 +193,16 @@ func main() {
 		trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
 
 		{
-			logger := kitlog.With(logger, "component", "publication")
-
-			var err error
-			pubmgr, err = publication.CreateManager(
-				ctx,
-				logger,
-				mustConnectionPool(2),
-				publication.ManagerOptions{
-					Name:         *publicationName,
-					Schemas:      []string{*streamSchema},
-					Excludes:     *streamExcludes,
-					Includes:     *streamIncludes,
-					PollInterval: *streamPollInterval,
-				},
-			)
-
-			if err != nil {
-				kingpin.Fatalf("failed to create publication: %v", err)
-			}
-
-			if *streamManagePublication {
-				g.Add(
-					func() error {
-						return pubmgr.Sync(ctx)
-					},
-					handleError(logger),
-				)
-			}
-		}
-
-		{
-			logger := kitlog.With(logger, "component", "import_manager")
-
-			manager := imports.NewManager(
-				logger,
-				mustConnectionPool(1),
-				imports.ManagerOptions{
-					PublicationName:  *publicationName,
-					PublicationID:    pubmgr.GetPublicationID(),
-					SubscriptionName: *slotName,
-					PollInterval:     *streamImportManagerPollInterval,
-				},
-			)
-
-			g.Add(
-				func() error {
-					return manager.Sync(ctx)
-				},
-				handleError(logger),
-			)
-		}
-
-		{
-			logger := kitlog.With(logger, "component", "importer")
-
-			if *streamImporterWorkerCount > 0 {
-				importer := imports.NewImporter(
-					logger,
-					mustConnectionPool(*streamImporterWorkerCount),
-					sink,
-					imports.ImporterOptions{
-						WorkerCount:      *streamImporterWorkerCount,
-						PublicationID:    pubmgr.GetPublicationID(),
-						SubscriptionName: *slotName,
-						PollInterval:     *streamImporterPollInterval,
-						SnapshotTimeout:  *streamImporterSnapshotTimeout,
-						BatchLimit:       *streamImporterBatchLimit,
-						BufferSize:       *streamImporterBufferSize,
-					},
-				)
-
-				g.Add(
-					func() error {
-						importer.Run(ctx)
-						return nil
-					},
-					handleError(logger),
-				)
-			}
-		}
-
-		{
 			logger := kitlog.With(logger, "component", "subscription")
 
-			params := map[string]string{"replication": "database"}
-			for key, value := range cfg.ConnConfig.RuntimeParams {
-				params[key] = value
-			}
-
-			replicationCfg := *cfg.ConnConfig
-			replicationCfg.RuntimeParams = params
-
-			conn, err := pgx.ConnectConfig(ctx, &replicationCfg)
-			if err != nil {
-				kingpin.Fatalf("failed to connect to Postgres: %v", err)
-			}
-
-			sub, err := subscription.Create(
+			var err error
+			sub, err = subscription.Create(
 				ctx,
 				logger,
-				conn.PgConn(),
+				mustConnectionPool(1),
+				mustReplicationConnection(),
 				subscription.SubscriptionOptions{
-					Name:            *slotName,
-					Publication:     *publicationName,
-					StatusHeartbeat: *streamStatusHeartbeat,
+					Name: *subscriptionName,
 				},
 			)
 
@@ -289,7 +210,7 @@ func main() {
 				kingpin.Fatalf("failed to create subscription: %v", err)
 			}
 
-			stream, err = sub.Start(ctx, logger)
+			stream, err = sub.Start(ctx, logger, mustReplicationConnection().PgConn(), *streamOptions)
 			if err != nil {
 				kingpin.Fatalf("failed to start subscription: %v", err)
 			}
@@ -303,7 +224,7 @@ func main() {
 		}
 
 		{
-			logger := kitlog.With(logger, "component", "consumer")
+			logger := kitlog.With(logger, "component", "subscription_consumer")
 
 			g.Add(
 				func() error {
@@ -315,7 +236,7 @@ func main() {
 						return nil
 					}
 
-					entries := subscription.BuildChangelog(logger, stream.Messages())
+					entries := subscription.BuildChangelog(logger, stream)
 					return sink.Consume(ctx, entries, func(entry changelog.Entry) {
 						if entry.Modification != nil && entry.Modification.LSN != nil {
 							stream.Confirm(pglogrepl.LSN(*entry.Modification.LSN))
@@ -325,6 +246,73 @@ func main() {
 				handleError(logger),
 			)
 		}
+
+		if *streamSubscriptionManager {
+			logger := kitlog.With(logger, "component", "subscription_manager")
+
+			manager := subscription.
+				NewManager(logger, mustConnectionPool(1), *streamSubscriptionManagerOptions)
+
+			g.Add(
+				func() error {
+					return manager.Manage(ctx, sub.GetPublication())
+				},
+				handleError(logger),
+			)
+		}
+
+		/*
+			{
+				logger := kitlog.With(logger, "component", "import_manager")
+
+				manager := imports.NewManager(
+					logger,
+					mustConnectionPool(1),
+					imports.ManagerOptions{
+						PublicationName:  *publicationName,
+						PublicationID:    pubmgr.GetPublicationID(),
+						SubscriptionName: *slotName,
+						PollInterval:     *streamImportManagerPollInterval,
+					},
+				)
+
+				g.Add(
+					func() error {
+						return manager.Sync(ctx)
+					},
+					handleError(logger),
+				)
+			}
+
+			{
+				logger := kitlog.With(logger, "component", "importer")
+
+				if *streamImporterWorkerCount > 0 {
+					importer := imports.NewImporter(
+						logger,
+						mustConnectionPool(*streamImporterWorkerCount),
+						sink,
+						imports.ImporterOptions{
+							WorkerCount:      *streamImporterWorkerCount,
+							PublicationID:    pubmgr.GetPublicationID(),
+							SubscriptionName: *slotName,
+							PollInterval:     *streamImporterPollInterval,
+							SnapshotTimeout:  *streamImporterSnapshotTimeout,
+							BatchLimit:       *streamImporterBatchLimit,
+							BufferSize:       *streamImporterBufferSize,
+						},
+					)
+
+					g.Add(
+						func() error {
+							importer.Run(ctx)
+							return nil
+						},
+						handleError(logger),
+					)
+				}
+			}
+		*/
 
 		if err := g.Run(); err != nil {
 			logger.Log("error", err.Error(), "msg", "exiting with error")

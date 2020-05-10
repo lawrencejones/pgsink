@@ -92,7 +92,7 @@ var _ = Describe("Manager", func() {
 				defer GinkgoRecover()
 
 				Expect(
-					manager.Manage(ctx, &subscription.Publication{Name: name}),
+					manager.Manage(ctx, subscription.Publication{Name: name}),
 				).To(Succeed(), "Manage() returned an error")
 			}()
 		})

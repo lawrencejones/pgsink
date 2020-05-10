@@ -10,10 +10,12 @@ require (
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-kit/kit v0.10.0
+	github.com/google/uuid v1.1.1
 	github.com/jackc/pgconn v1.5.0
 	github.com/jackc/pglogrepl v0.0.0-20200309144228-32ec418076b3
 	github.com/jackc/pgproto3/v2 v2.0.1
 	github.com/jackc/pgtype v1.3.0
+	github.com/jackc/pgx v3.6.2+incompatible
 	github.com/jackc/pgx/v4 v4.6.0
 	github.com/lib/pq v1.3.0 // indirect
 	github.com/linkedin/goavro/v2 v2.9.7

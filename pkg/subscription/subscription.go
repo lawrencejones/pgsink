@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgconn"
@@ -12,6 +11,10 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
+
+type SubscriptionOptions struct {
+	Name string // name of the publication, and prefix of replication slot
+}
 
 // Subscription is a wrapper around a Postgres publication and replication slot, coupled
 // together via a unique identifier. Both replication slot and publication must be created
@@ -27,11 +30,6 @@ type Subscription struct {
 	publication Publication
 	slot        ReplicationSlot
 	opts        SubscriptionOptions
-}
-
-type SubscriptionOptions struct {
-	Name              string        // name of the publication, and prefix of replication slot
-	HeartbeatInterval time.Duration // used to heartbeat replication connections
 }
 
 var NonReplicationConnection = errors.New("connection has not been created with replication=database")
@@ -70,7 +68,7 @@ func Create(ctx context.Context, logger kitlog.Logger, pool *pgxpool.Pool, repco
 // Start begins replicating from our remote. We set our WAL position to whatever the
 // server tells us our replication slot was last recorded at, then proceed to heartbeat
 // and replicate our remote.
-func (s *Subscription) Start(ctx context.Context, logger kitlog.Logger, conn *pgconn.PgConn) (*Stream, error) {
+func (s *Subscription) Start(ctx context.Context, logger kitlog.Logger, conn *pgconn.PgConn, opts StreamOptions) (*Stream, error) {
 	sysident, err := pglogrepl.IdentifySystem(ctx, conn)
 	if err != nil {
 		return nil, err
@@ -94,5 +92,13 @@ func (s *Subscription) Start(ctx context.Context, logger kitlog.Logger, conn *pg
 		return nil, err
 	}
 
-	return stream(ctx, logger, conn, sysident, s.opts.HeartbeatInterval), nil
+	return stream(ctx, logger, conn, sysident, opts), nil
+}
+
+func (s *Subscription) GetPublication() Publication {
+	return s.publication
+}
+
+func (s *Subscription) GetReplicationSlot() ReplicationSlot {
+	return s.slot
 }

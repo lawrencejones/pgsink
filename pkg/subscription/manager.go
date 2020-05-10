@@ -22,10 +22,10 @@ type ManagerOptions struct {
 }
 
 func (opt *ManagerOptions) Bind(cmd *kingpin.CmdClause, prefix string) *ManagerOptions {
-	cmd.Flag("schema", "Postgres schema to watch for changes").Default("public").StringsVar(&opt.Schemas)
-	cmd.Flag("exclude", "Table name to exclude from changes").StringsVar(&opt.Excludes)
-	cmd.Flag("include", "Table name to include from changes (activates whitelist)").StringsVar(&opt.Includes)
-	cmd.Flag("poll-interval", "Interval to poll for new tables").Default("10s").DurationVar(&opt.PollInterval)
+	cmd.Flag(fmt.Sprintf("%sschema", prefix), "Postgres schema to watch for changes").Default("public").StringsVar(&opt.Schemas)
+	cmd.Flag(fmt.Sprintf("%sexclude", prefix), "Table name to exclude from changes").StringsVar(&opt.Excludes)
+	cmd.Flag(fmt.Sprintf("%sinclude", prefix), "Table name to include from changes (activates whitelist)").StringsVar(&opt.Includes)
+	cmd.Flag(fmt.Sprintf("%spoll-interval", prefix), "Interval to poll for new tables").Default("10s").DurationVar(&opt.PollInterval)
 
 	return opt
 }
@@ -48,7 +48,7 @@ func NewManager(logger kitlog.Logger, conn querier, opts ManagerOptions) *Manage
 
 // Manage begins syncing tables into publication using the rules configured on the manager
 // options. It will run until the context expires.
-func (m *Manager) Manage(ctx context.Context, publication *Publication) (err error) {
+func (m *Manager) Manage(ctx context.Context, publication Publication) (err error) {
 	logger := kitlog.With(m.logger, "publication_name", publication.Name)
 	for {
 		logger.Log("event", "sync_published_tables")
