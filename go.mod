@@ -27,7 +27,7 @@ require (
 	github.com/shopspring/decimal v0.0.0-20191130220710-360f2bc03045 // indirect
 	go.opencensus.io v0.22.2
 	golang.org/x/net v0.0.0-20191209160850-c0dbc17a3553 // indirect
-	google.golang.org/api v0.22.0
+	google.golang.org/api v0.23.0
 	google.golang.org/appengine v1.6.5 // indirect
 	gopkg.in/yaml.v2 v2.2.7 // indirect
 )
