@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/lawrencejones/pg2sink/pkg/util"
@@ -13,7 +12,6 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4/stdlib"
-	"github.com/pkg/errors"
 )
 
 type ManagerOptions struct {
@@ -50,31 +48,21 @@ func NewManager(logger kitlog.Logger, db *sql.DB, opts ManagerOptions) *Manager 
 
 // Manage begins syncing tables into publication using the rules configured on the manager
 // options. It will run until the context expires.
-func (m *Manager) Manage(ctx context.Context, publication Publication) (err error) {
-	logger := kitlog.With(m.logger, "publication_name", publication.Name)
+func (m *Manager) Manage(ctx context.Context, sub Subscription) (err error) {
+	logger := kitlog.With(m.logger, "subscription_id", sub.GetID(), "publication_name", sub.Publication.Name)
 	for {
-		logger.Log("event", "sync_published_tables")
-		watched, err := m.getWatchedTables(ctx)
+		logger.Log("event", "reconcile_tables")
+		added, removed, err := m.Reconcile(ctx, sub)
 		if err != nil {
-			return errors.Wrap(err, "failed to discover watched tables")
+			return err
 		}
 
-		published, err := publication.GetTables(ctx, m.db)
-		if err != nil {
-			return errors.Wrap(err, "failed to query published tables")
+		for _, tableName := range added {
+			logger.Log("event", "alter_publication.add", "table", tableName)
 		}
 
-		watchedNotPublished := util.Diff(watched, published)
-		publishedNotWatched := util.Diff(published, watched)
-
-		if (len(watchedNotPublished) > 0) || (len(publishedNotWatched) > 0) {
-			logger.Log("event", "alter_publication",
-				"adding", strings.Join(watchedNotPublished, ","),
-				"removing", strings.Join(publishedNotWatched, ","))
-
-			if err := publication.SetTables(ctx, m.db, watched...); err != nil {
-				return fmt.Errorf("failed to alter publication: %w", err)
-			}
+		for _, tableName := range removed {
+			logger.Log("event", "alter_publication.remove", "table", tableName)
 		}
 
 		select {
@@ -85,6 +73,31 @@ func (m *Manager) Manage(ctx context.Context, publication Publication) (err erro
 			// continue
 		}
 	}
+}
+
+// Reconcile ensures all watched tables are added to the subscription, through the
+// Postgres publication.
+func (m *Manager) Reconcile(ctx context.Context, sub Subscription) (added []string, removed []string, err error) {
+	watched, err := m.getWatchedTables(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to discover watched tables: %w", err)
+	}
+
+	published, err := sub.GetTables(ctx, m.db)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to query published tables: %w", err)
+	}
+
+	watchedNotPublished := util.Diff(watched, published)
+	publishedNotWatched := util.Diff(published, watched)
+
+	if (len(watchedNotPublished) > 0) || (len(publishedNotWatched) > 0) {
+		if err := sub.SetTables(ctx, m.db, watched...); err != nil {
+			return nil, nil, fmt.Errorf("failed to alter publication: %w", err)
+		}
+	}
+
+	return watchedNotPublished, publishedNotWatched, nil
 }
 
 // getWatchedTables scans the database for tables that match our watch conditions

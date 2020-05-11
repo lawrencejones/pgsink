@@ -4,13 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/lawrencejones/pg2sink/pkg/subscription"
 
 	_ "github.com/jackc/pgx/v4/stdlib"
-	uuid "github.com/satori/go.uuid"
 
 	. "github.com/onsi/ginkgo"
 	_ "github.com/onsi/ginkgo/extensions/table"
@@ -18,38 +16,37 @@ import (
 	_ "github.com/onsi/gomega/gstruct"
 )
 
-// randomSuffix provides the first component of a uuid to help construct test-local random
-// identifiers. An example result is "9ed17482".
-func randomSuffix() string {
-	return strings.SplitN(uuid.NewV4().String(), "-", 2)[0]
-}
+const (
+	schemaName      = "subscription_manager_integration_test"
+	publicationName = "subscription_manager_integration_test"
+	subscriptionID  = "uniqueness"
+)
+
+var (
+	tableOneName   = fmt.Sprintf("%s.%s", schemaName, "one")
+	tableTwoName   = fmt.Sprintf("%s.%s", schemaName, "two")
+	tableThreeName = fmt.Sprintf("%s.%s", schemaName, "three")
+)
 
 var _ = Describe("Manager", func() {
 	var (
 		ctx     context.Context
 		cancel  func()
 		db      *sql.DB
-		manager *subscription.Manager
+		sub     subscription.Subscription
 		opts    *subscription.ManagerOptions
+		manager *subscription.Manager
 		err     error
-
-		name          = "manager_integration"
-		existingTable = "public.pubmgr_integration_test_existing"
-		newTable      = "public.pubmgr_integration_test_new"
-		ignoredTable  = "public.pubmgr_integration_test_ignored"
 	)
 
-	getPublishedTables := func() []string {
-		tables, err := subscription.Publication{Name: name}.GetTables(ctx, db)
-		Expect(err).NotTo(HaveOccurred(), "failed to find published tables")
-
-		return tables
-	}
-
-	mustExec := func(sql string, args []interface{}, message string) {
+	mustExec := func(sql string, args []interface{}, message ...interface{}) {
 		_, err := db.ExecContext(ctx, fmt.Sprintf(sql, args...))
-		Expect(err).To(BeNil(), message)
+		Expect(err).To(BeNil(), message...)
 	}
+
+	JustBeforeEach(func() {
+		manager = subscription.NewManager(logger, db, *opts)
+	})
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
@@ -57,27 +54,25 @@ var _ = Describe("Manager", func() {
 		db, err = sql.Open("pgx", "")
 		Expect(err).NotTo(HaveOccurred(), "failed to connect to database")
 
-		// If a publication exists from previous test runs, we should tear it down
-		db.ExecContext(ctx, fmt.Sprintf(`drop publication if exists %s`, name))
+		// Remove any artifacts from previous runs
+		db.ExecContext(ctx, fmt.Sprintf(`drop schema if exists %s cascade`, schemaName))
+		db.ExecContext(ctx, fmt.Sprintf(`drop publication if exists %s`, publicationName))
 
-		// Remove all tables from previous test runs
-		for _, table := range []string{existingTable, ignoredTable, newTable} {
-			mustExec(`drop table if exists %s;`, []interface{}{table}, "failed to drop pre-existing table")
+		// Recreate global state
+		db.ExecContext(ctx, fmt.Sprintf(`create schema %s`, schemaName))
+		db.ExecContext(ctx, fmt.Sprintf(`create publication %s`, publicationName))
+
+		sub = subscription.Subscription{
+			Publication: subscription.Publication{
+				ID:   subscriptionID,
+				Name: publicationName,
+			},
 		}
 
-		// Create tables that are meant to pre-date our sync run
-		mustExec(`create table %s (id bigserial primary key);`, []interface{}{existingTable}, "failed to create sync table")
-		mustExec(`create table %s (id bigserial primary key);`, []interface{}{ignoredTable}, "failed to create sync table")
-
-		// Finally, create the publication. This is usually handled by the subscription, and
-		// we won't bother commenting a publication ID, as it's not relevant for these tests.
-		mustExec(`create publication %s;`, []interface{}{name}, "failed to create publication")
-
 		opts = &subscription.ManagerOptions{
-			Schemas:      []string{"public"},
-			Excludes:     []string{ignoredTable},
-			Includes:     []string{},
-			PollInterval: 100 * time.Millisecond,
+			Schemas:  []string{schemaName},
+			Excludes: []string{},
+			Includes: []string{},
 		}
 	})
 
@@ -85,44 +80,45 @@ var _ = Describe("Manager", func() {
 		cancel()
 	})
 
-	Describe("Manage()", func() {
+	Describe("Reconcile()", func() {
+		var (
+			added   []string
+			removed []string
+			err     error
+		)
+
 		JustBeforeEach(func() {
-			manager = subscription.NewManager(logger, db, *opts)
-
-			go func() {
-				defer GinkgoRecover()
-
-				Expect(
-					manager.Manage(ctx, subscription.Publication{Name: name}),
-				).To(Succeed(), "Manage() returned an error")
-			}()
+			added, removed, err = manager.Reconcile(ctx, sub)
+			Expect(err).NotTo(HaveOccurred(), "reconcile isn't expected to error")
 		})
 
-		It("adds tables to an existing publication", func() {
-			Eventually(getPublishedTables, 5*time.Second).Should(ContainElement(existingTable))
+		BeforeEach(func() {
+			mustExec(fmt.Sprintf(`create table %s (id bigserial primary key);`, tableOneName), nil)
+			mustExec(fmt.Sprintf(`create table %s (id bigserial primary key);`, tableTwoName), nil)
 		})
 
-		Context("when tables should no longer be watched", func() {
-			JustBeforeEach(func() {
-				mustExec(`alter publication %s set table %s;`, []interface{}{name, ignoredTable}, "failed to add ignored table")
+		It("adds watched tables", func() {
+			Expect(added).To(ConsistOf(tableOneName, tableTwoName))
+		})
+
+		Context("when tables are already added", func() {
+			BeforeEach(func() {
+				Expect(sub.SetTables(ctx, db, tableOneName, tableTwoName)).To(Succeed())
 			})
 
-			It("removes them from the publication", func() {
-				Eventually(getPublishedTables, 5*time.Second).ShouldNot(ContainElement(ignoredTable))
+			It("adds and removes nothing", func() {
+				Expect(added).To(BeEmpty())
+				Expect(removed).To(BeEmpty())
 			})
-		})
 
-		Context("when new table is created", func() {
-			It("adds the table to the publication", func() {
-				// Wait for a full sync to add the existing table, so we know we're not just
-				// testing start-up logic
-				Eventually(getPublishedTables, 5*time.Second).Should(ContainElement(existingTable))
+			Context("but they should be ignored", func() {
+				BeforeEach(func() {
+					opts.Excludes = []string{tableOneName}
+				})
 
-				// Now create a new table
-				mustExec(`create table %s (id bigserial primary key);`, []interface{}{newTable}, "failed to create new table")
-
-				// Verify we eventually detect the new table and add it to the publication
-				Eventually(getPublishedTables, 5*time.Second).Should(ContainElement(newTable))
+				It("removes them", func() {
+					Expect(removed).To(ConsistOf(tableOneName))
+				})
 			})
 		})
 	})
