@@ -228,7 +228,7 @@ func main() {
 
 			g.Add(
 				func() error {
-					return manager.Manage(ctx, sub.GetPublication())
+					return manager.Manage(ctx, sub.Publication)
 				},
 				handleError(logger),
 			)

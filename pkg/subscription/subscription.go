@@ -27,9 +27,9 @@ type SubscriptionOptions struct {
 //
 // https://www.postgresql.org/docs/11/sql-createsubscription.html
 type Subscription struct {
-	publication Publication
-	slot        ReplicationSlot
-	opts        SubscriptionOptions
+	Publication
+	ReplicationSlot
+	SubscriptionOptions
 }
 
 var NonReplicationConnection = errors.New("connection has not been created with replication=database")
@@ -51,18 +51,25 @@ func Create(ctx context.Context, logger kitlog.Logger, db *sql.DB, repconn *pgx.
 		return nil, NonReplicationConnection
 	}
 
-	slot, err := findOrCreateReplicationSlot(ctx, logger, repconn.PgConn(), *publication)
+	replicationSlot, err := findOrCreateReplicationSlot(ctx, logger, repconn.PgConn(), *publication)
 	if err != nil {
 		return nil, err
 	}
 
 	sub := &Subscription{
-		publication: *publication,
-		slot:        *slot,
-		opts:        opts,
+		Publication:         *publication,
+		ReplicationSlot:     *replicationSlot,
+		SubscriptionOptions: opts,
 	}
 
 	return sub, nil
+}
+
+// GetID is an easy accessor for code that needs the subscription ID. As we track and
+// store the ID on the publication, it makes sense for the Publication struct to include
+// it, but this is also the subscription ID.
+func (s *Subscription) GetID() string {
+	return s.Publication.ID
 }
 
 // Start begins replicating from our remote. We set our WAL position to whatever the
@@ -83,26 +90,14 @@ func (s *Subscription) Start(ctx context.Context, logger kitlog.Logger, conn *pg
 		Timeline: 0, // current server timeline
 		Mode:     pglogrepl.LogicalReplication,
 		PluginArgs: []string{
-			`"proto_version" '1'`, fmt.Sprintf(`"publication_names" '%s'`, s.publication.Name),
+			`"proto_version" '1'`, fmt.Sprintf(`"publication_names" '%s'`, s.Publication.Name),
 		},
 	}
 
-	logger.Log("event", "start_replication", "publication", s.publication.Name, "slot", s.slot.Name)
-	if err := pglogrepl.StartReplication(ctx, conn, s.slot.Name, sysident.XLogPos, options); err != nil {
+	logger.Log("event", "start_replication", "publication", s.Publication.Name, "slot", s.ReplicationSlot.Name)
+	if err := pglogrepl.StartReplication(ctx, conn, s.ReplicationSlot.Name, sysident.XLogPos, options); err != nil {
 		return nil, err
 	}
 
 	return stream(ctx, logger, conn, sysident, opts), nil
-}
-
-func (s *Subscription) GetID() string {
-	return s.publication.ID
-}
-
-func (s *Subscription) GetPublication() Publication {
-	return s.publication
-}
-
-func (s *Subscription) GetReplicationSlot() ReplicationSlot {
-	return s.slot
 }
