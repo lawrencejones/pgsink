@@ -16,18 +16,6 @@ import (
 	_ "github.com/onsi/gomega/gstruct"
 )
 
-const (
-	schemaName      = "subscription_manager_integration_test"
-	publicationName = "subscription_manager_integration_test"
-	subscriptionID  = "uniqueness"
-)
-
-var (
-	tableOneName   = fmt.Sprintf("%s.%s", schemaName, "one")
-	tableTwoName   = fmt.Sprintf("%s.%s", schemaName, "two")
-	tableThreeName = fmt.Sprintf("%s.%s", schemaName, "three")
-)
-
 var _ = Describe("Manager", func() {
 	var (
 		ctx     context.Context
@@ -37,6 +25,15 @@ var _ = Describe("Manager", func() {
 		opts    *subscription.ManagerOptions
 		manager *subscription.Manager
 		err     error
+	)
+
+	var (
+		schemaName      = "subscription_manager_integration_test"
+		publicationName = "subscription_manager_integration_test"
+		subscriptionID  = "uniqueness"
+
+		tableOneName = fmt.Sprintf("%s.%s", schemaName, "one")
+		tableTwoName = fmt.Sprintf("%s.%s", schemaName, "two")
 	)
 
 	mustExec := func(sql string, args []interface{}, message ...interface{}) {
