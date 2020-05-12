@@ -3,12 +3,17 @@ package subscription
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
+	_ "github.com/lawrencejones/pg2sink/pkg/dbschema/pg_catalog/model"
+	. "github.com/lawrencejones/pg2sink/pkg/dbschema/pg_catalog/table"
+	. "github.com/lawrencejones/pg2sink/pkg/dbschema/pg_catalog/view"
+
+	. "github.com/go-jet/jet/postgres"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/google/uuid"
-	"github.com/jackc/pgtype"
 )
 
 // Publication represents a Postgres publication, the publishing component of a
@@ -32,22 +37,28 @@ func (p Publication) String() string {
 
 // GetTables returns a slice of table names that are included on the publication.
 func (p Publication) GetTables(ctx context.Context, db *sql.DB) (tables []string, err error) {
-	// Careful! This query has been constructed so that the scan will fail if there is no
-	// matching publication. It's important we do this so we can detect if a publication has
-	// disappeared under us, so change this without care.
-	query := `
-	select array_remove(array_agg(schemaname || '.' || tablename), NULL)
-	from pg_publication left join pg_publication_tables on pg_publication.pubname=pg_publication_tables.pubname
-	where pg_publication.pubname = $1
-	group by pg_publication.pubname;
-	`
+	stmt := PgPublication.
+		INNER_JOIN(PgPublicationTables, PgPublicationTables.Pubname.EQ(PgPublication.Pubname)).
+		SELECT(
+			PgPublicationTables.Schemaname.AS("schemaname"),
+			PgPublicationTables.Tablename.AS("tablename"),
+		).
+		WHERE(PgPublication.Pubname.EQ(String(p.Name)))
 
-	tablesReceiver := pgtype.TextArray{}
-	if err := db.QueryRowContext(ctx, query, p.Name).Scan(&tablesReceiver); err != nil {
+	var rows []struct {
+		Schemaname string
+		Tablename  string
+	}
+
+	if err := stmt.QueryContext(ctx, db, &rows); err != nil {
 		return nil, err
 	}
 
-	return tables, tablesReceiver.AssignTo(&tables)
+	for _, row := range rows {
+		tables = append(tables, fmt.Sprintf("%s.%s", row.Schemaname, row.Tablename))
+	}
+
+	return tables, nil
 }
 
 // SetTables resets the publication to include the given tables only
@@ -105,19 +116,22 @@ func createPublication(ctx context.Context, db *sql.DB, name, id string) (*Publi
 }
 
 func getPublication(ctx context.Context, db *sql.DB, name string) (*Publication, error) {
-	query := `
-	select
-		pubname,
-		obj_description(oid, 'pg_publication')
-	from pg_publication
-	where pubname=$1
-	limit 1
-	`
+	query, args := PgPublication.
+		SELECT(
+			PgPublication.Pubname.AS("name"),
+			Raw("obj_description(oid, 'pg_publication')").AS("id"),
+		).
+		WHERE(PgPublication.Pubname.EQ(String(name))).
+		LIMIT(1).
+		Sql()
 
 	var pub Publication
-	err := db.QueryRowContext(ctx, query, name).Scan(&pub.Name, &pub.ID)
-	if err == sql.ErrNoRows {
-		return nil, nil
+	if err := db.QueryRowContext(ctx, query, args...).Scan(&pub.Name, &pub.ID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			err = nil
+		}
+
+		return nil, err
 	}
 
 	return &pub, nil

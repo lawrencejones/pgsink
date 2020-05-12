@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"time"
 
+	_ "github.com/lawrencejones/pg2sink/pkg/dbschema/information_schema/model"
+	isv "github.com/lawrencejones/pg2sink/pkg/dbschema/information_schema/view"
 	"github.com/lawrencejones/pg2sink/pkg/util"
 
 	"github.com/alecthomas/kingpin"
+	. "github.com/go-jet/jet/postgres"
 	kitlog "github.com/go-kit/kit/log"
-	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4/stdlib"
 )
 
@@ -102,12 +104,14 @@ func (m *Manager) Reconcile(ctx context.Context, sub Subscription) (added []stri
 
 // getWatchedTables scans the database for tables that match our watch conditions
 func (m *Manager) getWatchedTables(ctx context.Context) ([]string, error) {
-	query := `
-	select array_agg(table_schema || '.' || table_name)
-	from information_schema.tables
-	where table_schema = any($1::text[])
-	and table_type = 'BASE TABLE';
-	`
+	query, _ := isv.Tables.
+		SELECT(
+			isv.Tables.TableSchema.AS("schema"),
+			isv.Tables.TableName.AS("name"),
+		).
+		WHERE(isv.Tables.TableType.EQ(String("BASE TABLE"))).
+		WHERE(CAST(Raw("table_schema = any($1::text[])")).AS_BOOL()).
+		Sql()
 
 	// Drop into pgx to provide support for any, which is incompatible with db.SQL
 	conn, err := stdlib.AcquireConn(m.db)
@@ -116,14 +120,23 @@ func (m *Manager) getWatchedTables(ctx context.Context) ([]string, error) {
 	}
 	defer stdlib.ReleaseConn(m.db, conn)
 
-	tablesReceiver := pgtype.TextArray{}
-	var tables []string
-	if err := conn.QueryRow(ctx, query, m.opts.Schemas).Scan(&tablesReceiver); err != nil {
+	rows, err := conn.Query(ctx, query, m.opts.Schemas)
+	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
-	if err := tablesReceiver.AssignTo(&tables); err != nil {
-		return nil, err
+	var (
+		table  struct{ Schema, Name string }
+		tables []string
+	)
+
+	for rows.Next() {
+		if err := rows.Scan(&table.Schema, &table.Name); err != nil {
+			return nil, err
+		}
+
+		tables = append(tables, fmt.Sprintf("%s.%s", table.Schema, table.Name))
 	}
 
 	watchedTables := []string{}

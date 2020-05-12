@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lawrencejones/pg2sink/pkg/dbschema/model"
-	. "github.com/lawrencejones/pg2sink/pkg/dbschema/table"
+	"github.com/lawrencejones/pg2sink/pkg/dbschema/pg2sink/model"
+	. "github.com/lawrencejones/pg2sink/pkg/dbschema/pg2sink/table"
 	"github.com/lawrencejones/pg2sink/pkg/imports"
 	"github.com/lawrencejones/pg2sink/pkg/subscription"
 
