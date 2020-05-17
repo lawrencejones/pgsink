@@ -16,7 +16,6 @@ require (
 	github.com/jackc/pglogrepl v0.0.0-20200309144228-32ec418076b3
 	github.com/jackc/pgproto3/v2 v2.0.1
 	github.com/jackc/pgtype v1.3.0
-	github.com/jackc/pgx v3.6.2+incompatible
 	github.com/jackc/pgx/v4 v4.6.0
 	github.com/lib/pq v1.3.0 // indirect
 	github.com/linkedin/goavro/v2 v2.9.7
@@ -26,12 +25,10 @@ require (
 	github.com/pkg/errors v0.8.1
 	github.com/pressly/goose v2.6.0+incompatible
 	github.com/prometheus/client_golang v1.6.0
-	github.com/satori/go.uuid v1.2.0
 	github.com/shopspring/decimal v0.0.0-20191130220710-360f2bc03045 // indirect
 	go.opencensus.io v0.22.2
-	golang.org/x/net v0.0.0-20191209160850-c0dbc17a3553 // indirect
+	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b // indirect
 	google.golang.org/api v0.22.0
 	google.golang.org/appengine v1.6.5 // indirect
 	gopkg.in/yaml.v2 v2.2.7 // indirect
-	gotest.tools v2.2.0+incompatible // indirect
 )
