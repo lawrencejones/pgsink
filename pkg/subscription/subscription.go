@@ -38,7 +38,7 @@ var NonReplicationConnection = errors.New("connection has not been created with 
 // created. This is the only way to create a subscription, to ensure a replication slot
 // exists before anyone can call Start().
 func Create(ctx context.Context, logger kitlog.Logger, db *sql.DB, repconn *pgx.Conn, opts SubscriptionOptions) (*Subscription, error) {
-	publication, err := findOrCreatePublication(ctx, logger, db, opts.Name)
+	publication, err := FindOrCreatePublication(ctx, logger, db, opts.Name)
 	if err != nil {
 		return nil, err
 	}

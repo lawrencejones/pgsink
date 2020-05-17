@@ -16,6 +16,76 @@ import (
 	"github.com/google/uuid"
 )
 
+// FindOrCreatePublication will attempt to find an existing publication, or create from
+// scratch with a fresh publication ID.
+func FindOrCreatePublication(ctx context.Context, logger kitlog.Logger, db *sql.DB, name string) (*Publication, error) {
+	logger = kitlog.With(logger, "publication_name", name)
+
+	publication, err := FindPublication(ctx, db, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find publication: %w", err)
+	}
+
+	if publication == nil {
+		logger.Log("event", "publication.create", "msg", "could not find publication, creating")
+		publication, err = CreatePublication(ctx, db, name, newShortID())
+		if err != nil {
+			return nil, fmt.Errorf("failed to create publication: %w", err)
+		}
+	}
+
+	logger.Log("event", "publication.found", "publication_id", publication.ID)
+	return publication, err
+}
+
+// CreatePublication transactionally creates and comments on a new publication. The
+// comment will be the unique subscription identifier.
+func CreatePublication(ctx context.Context, db *sql.DB, name, id string) (*Publication, error) {
+	txn, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	createQuery := fmt.Sprintf(`create publication %s;`, name)
+	if _, err := txn.ExecContext(ctx, createQuery); err != nil {
+		return nil, err
+	}
+
+	commentQuery := fmt.Sprintf(`comment on publication %s is '%s';`, name, id)
+	if _, err := txn.ExecContext(ctx, commentQuery); err != nil {
+		return nil, err
+	}
+
+	if err := txn.Commit(); err != nil {
+		return nil, err
+	}
+
+	return &Publication{Name: name, ID: id}, nil
+}
+
+// FindPublication attempts to find an existing publication by the given name.
+func FindPublication(ctx context.Context, db *sql.DB, name string) (*Publication, error) {
+	query, args := PgPublication.
+		SELECT(
+			PgPublication.Pubname.AS("name"),
+			Raw("obj_description(oid, 'pg_publication')").AS("id"),
+		).
+		WHERE(PgPublication.Pubname.EQ(String(name))).
+		LIMIT(1).
+		Sql()
+
+	var pub Publication
+	if err := db.QueryRowContext(ctx, query, args...).Scan(&pub.Name, &pub.ID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			err = nil
+		}
+
+		return nil, err
+	}
+
+	return &pub, nil
+}
+
 // Publication represents a Postgres publication, the publishing component of a
 // subscription. It is coupled with a ReplicationSlot as a component of a Subscription.
 type Publication struct {
@@ -66,75 +136,6 @@ func (p Publication) SetTables(ctx context.Context, db *sql.DB, tables ...string
 	query := fmt.Sprintf(`alter publication %s set table %s;`, p.Name, strings.Join(tables, ", "))
 	_, err := db.ExecContext(ctx, query)
 	return err
-}
-
-// findOrCreatePublication will attempt to find an existing publication, or create from
-// scratch with a fresh publication ID.
-func findOrCreatePublication(ctx context.Context, logger kitlog.Logger, db *sql.DB, name string) (*Publication, error) {
-	logger = kitlog.With(logger, "publication_name", name)
-
-	publication, err := getPublication(ctx, db, name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find publication: %w", err)
-	}
-
-	if publication == nil {
-		logger.Log("event", "publication.create", "msg", "could not find publication, creating")
-		publication, err = createPublication(ctx, db, name, newShortID())
-		if err != nil {
-			return nil, fmt.Errorf("failed to create publication: %w", err)
-		}
-	}
-
-	logger.Log("event", "publication.found", "publication_id", publication.ID)
-	return publication, err
-}
-
-// createPublication transactionally creates and comments on a new publication. The
-// comment will be the unique subscription identifier.
-func createPublication(ctx context.Context, db *sql.DB, name, id string) (*Publication, error) {
-	txn, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	createQuery := fmt.Sprintf(`create publication %s;`, name)
-	if _, err := txn.ExecContext(ctx, createQuery); err != nil {
-		return nil, err
-	}
-
-	commentQuery := fmt.Sprintf(`comment on publication %s is '%s';`, name, id)
-	if _, err := txn.ExecContext(ctx, commentQuery); err != nil {
-		return nil, err
-	}
-
-	if err := txn.Commit(); err != nil {
-		return nil, err
-	}
-
-	return &Publication{Name: name, ID: id}, nil
-}
-
-func getPublication(ctx context.Context, db *sql.DB, name string) (*Publication, error) {
-	query, args := PgPublication.
-		SELECT(
-			PgPublication.Pubname.AS("name"),
-			Raw("obj_description(oid, 'pg_publication')").AS("id"),
-		).
-		WHERE(PgPublication.Pubname.EQ(String(name))).
-		LIMIT(1).
-		Sql()
-
-	var pub Publication
-	if err := db.QueryRowContext(ctx, query, args...).Scan(&pub.Name, &pub.ID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			err = nil
-		}
-
-		return nil, err
-	}
-
-	return &pub, nil
 }
 
 // newShortID creates an abbreviated ID from a uuid, preferring the first component which
