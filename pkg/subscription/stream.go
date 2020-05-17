@@ -32,21 +32,30 @@ func (opt *StreamOptions) Bind(cmd *kingpin.CmdClause, prefix string) *StreamOpt
 // Stream represents an on-going replication stream, managed by a subscription. Consumers
 // of the stream can acknowledge processing messages using the Confirm() method.
 type Stream struct {
-	position pglogrepl.LSN
-	messages chan interface{}
-	done     chan error
+	position   pglogrepl.LSN
+	messages   chan interface{}
+	heartbeats chan pglogrepl.LSN
+	shutdown   chan struct{}
+	done       chan error
 }
 
 func (s *Stream) Messages() <-chan interface{} {
 	return s.messages
 }
 
-func (s *Stream) Confirm(pos pglogrepl.LSN) {
+func (s *Stream) Confirm(pos pglogrepl.LSN) <-chan pglogrepl.LSN {
 	if pos < s.position {
 		panic("cannot confirm received position in the past")
 	}
 
 	s.position = pos
+
+	return s.heartbeats
+}
+
+func (s *Stream) Shutdown(ctx context.Context) error {
+	close(s.shutdown)
+	return s.Wait(ctx)
 }
 
 func (s *Stream) Wait(ctx context.Context) error {
@@ -70,15 +79,18 @@ var (
 
 func stream(ctx context.Context, logger kitlog.Logger, conn *pgconn.PgConn, sysident pglogrepl.IdentifySystemResult, opts StreamOptions) *Stream {
 	stream := &Stream{
-		position: sysident.XLogPos,
-		messages: make(chan interface{}),
-		done:     make(chan error, 1), // buffered by 1, to ensure progress when reporting an error
+		position:   sysident.XLogPos,
+		messages:   make(chan interface{}),
+		heartbeats: make(chan pglogrepl.LSN, 1),
+		shutdown:   make(chan struct{}),
+		done:       make(chan error, 1), // buffered by 1, to ensure progress when reporting an error
 	}
 
 	go func() (err error) {
 		defer func() {
 			logger.Log("event", "closing_stream", "msg", "closing messages channel")
 			close(stream.messages)
+			close(stream.heartbeats)
 			stream.done <- err
 			close(stream.done)
 		}()
@@ -90,7 +102,10 @@ func stream(ctx context.Context, logger kitlog.Logger, conn *pgconn.PgConn, sysi
 			select {
 			case <-ctx.Done():
 				logger.Log("event", "context_expired", "msg", "exiting")
-				return
+				return ctx.Err()
+			case <-stream.shutdown:
+				logger.Log("event", "shutdown", "msg", "shutdown requested, exiting")
+				return nil
 			default:
 				// continue
 			}
@@ -109,6 +124,15 @@ func stream(ctx context.Context, logger kitlog.Logger, conn *pgconn.PgConn, sysi
 				}
 
 				logger.Log("event", "standby_status_update", "position", position)
+
+				// If someone is listening for heartbeats, let them know. It's unlikely anyone is,
+				// as we don't use this functionality in anything other than tests. I'm making an
+				// assumption that non-blocking sends are fast, and we call this infrequently,
+				// though this reasoning is based on a hunch.
+				select {
+				case stream.heartbeats <- position:
+				default: // non-blocking send
+				}
 			}
 
 			var msg pgproto3.BackendMessage
