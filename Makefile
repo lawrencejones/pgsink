@@ -24,6 +24,7 @@ bin/%:
 createdb:
 	$(PSQL) postgres -U postgres -c "DROP ROLE IF EXISTS $(DATABASE); CREATE ROLE $(DATABASE) WITH LOGIN CREATEDB REPLICATION;"
 	$(PSQL) postgres -U $(DATABASE) -c "CREATE DATABASE $(DATABASE);"
+	$(PSQL) $(DATABASE) -U postgres -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";'
 
 dropdb:
 	$(PSQL) -U postgres postgres -c "DROP DATABASE IF EXISTS $(DATABASE);"
