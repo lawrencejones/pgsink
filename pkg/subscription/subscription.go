@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	kitlog "github.com/go-kit/kit/log"
-	"github.com/jackc/pgconn"
 	"github.com/jackc/pglogrepl"
 	"github.com/jackc/pgx/v4"
 )
@@ -75,8 +74,13 @@ func (s *Subscription) GetID() string {
 // Start begins replicating from our remote. We set our WAL position to whatever the
 // server tells us our replication slot was last recorded at, then proceed to heartbeat
 // and replicate our remote.
-func (s *Subscription) Start(ctx context.Context, logger kitlog.Logger, conn *pgconn.PgConn, opts StreamOptions) (*Stream, error) {
-	sysident, err := pglogrepl.IdentifySystem(ctx, conn)
+func (s *Subscription) Start(ctx context.Context, logger kitlog.Logger, conn *pgx.Conn, opts StreamOptions) (*Stream, error) {
+	sysident, err := pglogrepl.IdentifySystem(ctx, conn.PgConn())
+	if err != nil {
+		return nil, err
+	}
+
+	confirmedFlushLSN, err := s.GetConfirmedFlushLSN(ctx, conn)
 	if err != nil {
 		return nil, err
 	}
@@ -84,6 +88,7 @@ func (s *Subscription) Start(ctx context.Context, logger kitlog.Logger, conn *pg
 	logger.Log("event", "system_identification",
 		"system_id", sysident.SystemID, "timeline", sysident.Timeline,
 		"position", sysident.XLogPos, "database", sysident.DBName,
+		"confirmed_flush_lsn", confirmedFlushLSN,
 	)
 
 	options := pglogrepl.StartReplicationOptions{
@@ -95,9 +100,9 @@ func (s *Subscription) Start(ctx context.Context, logger kitlog.Logger, conn *pg
 	}
 
 	logger.Log("event", "start_replication", "publication", s.Publication.Name, "slot", s.ReplicationSlot.Name)
-	if err := pglogrepl.StartReplication(ctx, conn, s.ReplicationSlot.Name, sysident.XLogPos, options); err != nil {
+	if err := pglogrepl.StartReplication(ctx, conn.PgConn(), s.ReplicationSlot.Name, confirmedFlushLSN, options); err != nil {
 		return nil, err
 	}
 
-	return stream(ctx, logger, conn, sysident, opts), nil
+	return stream(ctx, logger, conn.PgConn(), sysident, opts), nil
 }

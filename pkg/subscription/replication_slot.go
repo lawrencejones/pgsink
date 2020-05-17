@@ -5,9 +5,15 @@ import (
 
 	"github.com/lawrencejones/pg2sink/pkg/logical"
 
+	_ "github.com/lawrencejones/pg2sink/pkg/dbschema/pg_catalog/model"
+	_ "github.com/lawrencejones/pg2sink/pkg/dbschema/pg_catalog/table"
+	. "github.com/lawrencejones/pg2sink/pkg/dbschema/pg_catalog/view"
+
+	. "github.com/go-jet/jet/postgres"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pglogrepl"
+	"github.com/jackc/pgx/v4"
 )
 
 // ReplicationSlot represents a replication slot inside of Postgres, helping track changes
@@ -15,6 +21,32 @@ import (
 // pg_output. They are permanent, not temporary.
 type ReplicationSlot struct {
 	Name string
+}
+
+func (s ReplicationSlot) GetConfirmedFlushLSN(ctx context.Context, conn *pgx.Conn) (lsn pglogrepl.LSN, err error) {
+	query, queryArgs := PgReplicationSlots.
+		SELECT(
+			// The connection this method receives will often be a replication connection. If
+			// so, it's unlikely to have performed the standard start-up procedure where oids
+			// are shared, so the pg_lsn type will be unrecognised. Cast to text as this will
+			// almost always work.
+			CAST(PgReplicationSlots.ConfirmedFlushLsn).AS_TEXT(),
+		).
+		WHERE(PgReplicationSlots.SlotName.EQ(String(s.Name))).
+		Sql()
+
+	// The replication protocol does not support the extended protocol. Provide the sentinel
+	// QuerySimpleProtocol setting to tell pgx to go simple for this query only, allowing
+	// this method to be called regardless of whether replication is enabled.
+	args := []interface{}{pgx.QuerySimpleProtocol(true)}
+	args = append(args, queryArgs...)
+
+	var lsnText string
+	if err := conn.QueryRow(ctx, query, args...).Scan(&lsnText); err != nil {
+		return lsn, err
+	}
+
+	return pglogrepl.ParseLSN(lsnText)
 }
 
 // findOrCreateReplicationSlot generates a replication slot for a publication. All we need

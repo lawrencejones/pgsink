@@ -184,7 +184,7 @@ func main() {
 				kingpin.Fatalf("failed to create subscription: %v", err)
 			}
 
-			stream, err = sub.Start(ctx, logger, repconn.PgConn(), *streamOptions)
+			stream, err = sub.Start(ctx, logger, repconn, *streamOptions)
 			if err != nil {
 				kingpin.Fatalf("failed to start subscription: %v", err)
 			}
@@ -228,7 +228,7 @@ func main() {
 
 			g.Add(
 				func() error {
-					return manager.Manage(ctx, sub.Publication)
+					return manager.Manage(ctx, *sub)
 				},
 				handleError(logger),
 			)
