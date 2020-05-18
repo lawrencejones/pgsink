@@ -3,7 +3,7 @@ module github.com/lawrencejones/pg2sink
 go 1.13
 
 require (
-	cloud.google.com/go v0.38.0
+	cloud.google.com/go v0.56.0
 	contrib.go.opencensus.io/exporter/jaeger v0.2.0
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
@@ -25,9 +25,7 @@ require (
 	github.com/prometheus/client_golang v1.6.0
 	github.com/satori/go.uuid v1.2.0
 	github.com/shopspring/decimal v0.0.0-20191130220710-360f2bc03045 // indirect
-	go.opencensus.io v0.22.2
-	golang.org/x/net v0.0.0-20191209160850-c0dbc17a3553 // indirect
-	google.golang.org/api v0.22.0
-	google.golang.org/appengine v1.6.5 // indirect
+	go.opencensus.io v0.22.3
+	google.golang.org/api v0.24.0
 	gopkg.in/yaml.v2 v2.2.7 // indirect
 )
