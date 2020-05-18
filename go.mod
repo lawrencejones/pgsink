@@ -18,7 +18,7 @@ require (
 	github.com/lib/pq v1.3.0 // indirect
 	github.com/linkedin/goavro/v2 v2.9.7
 	github.com/oklog/run v1.1.0
-	github.com/onsi/ginkgo v1.12.0
+	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.0
 	github.com/pkg/errors v0.8.1
 	github.com/pressly/goose v2.6.0+incompatible
