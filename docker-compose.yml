@@ -4,7 +4,7 @@ version: "3.7"
 services:
   postgres:
     hostname: postgres
-    image: postgres:12.1
+    image: postgres:12.3
     restart: on-failure
     command:
       - postgres

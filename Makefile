@@ -33,7 +33,7 @@ recreatedb: dropdb createdb
 
 # go get -u github.com/onsi/ginkgo/ginkgo
 test:
-	PGUSER=pg2sink_test PGDATABASE=pg2sink_test ginkgo -v -r pkg
+	PGUSER=pg2sink_test PGDATABASE=pg2sink_test ginkgo -r pkg
 
 clean:
 	rm -rvf $(PROG) $(PROG:%=%.darwin_amd64) $(PROG:%=%.linux_amd64)

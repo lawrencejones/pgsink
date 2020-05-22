@@ -4,15 +4,19 @@ version: 2
 references:
   docker_golang: &docker_golang
     docker:
-      - image: golang:1.13
+      - image: golang:1.14.3
         environment:
           PGHOST: "127.0.0.1"
-          PGUSER: "postgres"
-      - image: postgres:12.1
+          PGUSER: "pg2sink"
+          PGDATABASE: "pg2sink_test"
+      - image: postgres:12.3
+        command: |
+          docker-entrypoint.sh postgres -c 'wal_level=logical'
         environment:
-          POSTGRES_USER: postgres
-          POSTGRES_DB: pg2sink_test
+          POSTGRES_USER: "postgres"
+          POSTGRES_DB: "pg2sink_test"
           POSTGRES_PASSWORD: ""
+          POSTGRES_HOST_AUTH_METHOD: "trust"
     working_directory: /pg2sink
 
 jobs:
