@@ -62,19 +62,6 @@ var (
 	streamSinkType            = stream.Flag("sink", "Type of sink target").Required().String()
 	streamSinkFileOptions     = new(sinkfile.Options).Bind(stream, "sink.file.")
 	streamSinkBigQueryOptions = new(sinkbigquery.Options).Bind(stream, "sink.bigquery.")
-
-	// imports
-	/*
-		streamImportManager        = stream.Flag("import-manager", "Enable subscription import manager").Default("true").Bool()
-		streamImportManagerOptions = new(imports.ManagerOptions).Bind(streamImportManager, "import-manager.")
-	*/
-
-	// streamImportManagerPollInterval = stream.Flag("import-manager-poll-interval", "Interval to poll for newly published tables").Default("10s").Duration()
-	// streamImporterPollInterval      = stream.Flag("importer-poll-interval", "Interval to poll for new import jobs").Default("10s").Duration()
-	// streamImporterWorkerCount       = stream.Flag("importer-worker-count", "Workers for processing imports").Default("0").Int()
-	// streamImporterSnapshotTimeout   = stream.Flag("importer-snapshot-timeout", "Maximum time to hold Postgres snapshots").Default("1m").Duration()
-	// streamImporterBatchLimit        = stream.Flag("importer-batch-limit", "Maximum rows to pull per import job pagination").Default("100000").Int()
-	// streamImporterBufferSize        = stream.Flag("importer-buffer-size", "Buffer between pulling data from Postgres and sink").Default("100000").Int()
 )
 
 func main() {
@@ -233,53 +220,6 @@ func main() {
 				handleError(logger),
 			)
 		}
-
-		/*
-			if *streamImportManager {
-				logger := kitlog.With(logger, "component", "import_manager")
-
-				manager := imports.
-					NewManager(logger, mustConnectionPool(1), *streamImportManagerOptions)
-
-				g.Add(
-					func() error {
-						return manager.Manage(ctx, sub)
-					},
-					handleError(logger),
-				)
-			}
-		*/
-
-		/*
-			{
-				logger := kitlog.With(logger, "component", "importer")
-
-				if *streamImporterWorkerCount > 0 {
-					importer := imports.NewImporter(
-						logger,
-						mustConnectionPool(*streamImporterWorkerCount),
-						sink,
-						imports.ImporterOptions{
-							WorkerCount:      *streamImporterWorkerCount,
-							PublicationID:    pubmgr.GetPublicationID(),
-							SubscriptionName: *slotName,
-							PollInterval:     *streamImporterPollInterval,
-							SnapshotTimeout:  *streamImporterSnapshotTimeout,
-							BatchLimit:       *streamImporterBatchLimit,
-							BufferSize:       *streamImporterBufferSize,
-						},
-					)
-
-					g.Add(
-						func() error {
-							importer.Run(ctx)
-							return nil
-						},
-						handleError(logger),
-					)
-				}
-			}
-		*/
 
 		if err := g.Run(); err != nil {
 			logger.Log("error", err.Error(), "msg", "exiting with error")
