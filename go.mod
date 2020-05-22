@@ -22,7 +22,7 @@ require (
 	github.com/oklog/run v1.1.0
 	github.com/onsi/ginkgo v1.12.0
 	github.com/onsi/gomega v1.10.0
-	github.com/pkg/errors v0.8.1
+	github.com/pkg/errors v0.9.1
 	github.com/pressly/goose v2.6.0+incompatible
 	github.com/prometheus/client_golang v1.6.0
 	github.com/shopspring/decimal v0.0.0-20191130220710-360f2bc03045 // indirect
