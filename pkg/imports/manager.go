@@ -2,77 +2,119 @@ package imports
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"time"
 
-	kitlog "github.com/go-kit/kit/log"
-	"github.com/lawrencejones/pg2sink/pkg/models"
-	"github.com/lawrencejones/pg2sink/pkg/publication"
+	"github.com/lawrencejones/pg2sink/pkg/dbschema/pg2sink/model"
+	. "github.com/lawrencejones/pg2sink/pkg/dbschema/pg2sink/table"
+	"github.com/lawrencejones/pg2sink/pkg/subscription"
 	"github.com/lawrencejones/pg2sink/pkg/util"
-	"github.com/pkg/errors"
+
+	"github.com/alecthomas/kingpin"
+	. "github.com/go-jet/jet/postgres"
+	kitlog "github.com/go-kit/kit/log"
 )
 
 type ManagerOptions struct {
-	PublicationName  string        // name of the current publication
-	PublicationID    string        // identifier of the current publication
-	SubscriptionName string        // name of subscription (should be the replication slot name)
-	PollInterval     time.Duration // interval to poll for new import jobs
+	PollInterval time.Duration
 }
 
-func NewManager(logger kitlog.Logger, conn models.Connection, opts ManagerOptions) *Manager {
+func (opt *ManagerOptions) Bind(cmd *kingpin.CmdClause, prefix string) *ManagerOptions {
+	cmd.Flag(fmt.Sprintf("%spoll-interval", prefix), "Interval to poll for newly subscribed tables").
+		Default("30s").DurationVar(&opt.PollInterval)
+
+	return opt
+}
+
+type Manager struct {
+	logger kitlog.Logger
+	db     *sql.DB
+	opts   ManagerOptions
+}
+
+func NewManager(logger kitlog.Logger, db *sql.DB, opts ManagerOptions) *Manager {
 	return &Manager{
 		logger: logger,
-		conn:   conn,
+		db:     db,
 		opts:   opts,
 	}
 }
 
-// Manager ensures we create import jobs for all tables that have not yet been imported.
-type Manager struct {
-	logger kitlog.Logger
-	conn   models.Connection
-	opts   ManagerOptions
-}
-
-// Work starts WorkerCount workers to process jobs in the import jobs table. It returns a
-// channel of Committed structs, generated from the on-going imports. It will track
-// progress in the import jobs table.
-
-// Sync watches the publication to identify tables which have not yet been imported, and
-// adds import jobs for those tables.
-func (i Manager) Sync(ctx context.Context) error {
-	logger := kitlog.With(i.logger, "publication_id", i.opts.PublicationID)
-	jobStore := models.ImportJobStore{i.conn}
-	pub := publication.Publication(i.opts.PublicationName)
-
+func (m *Manager) Manage(ctx context.Context, sub subscription.Subscription) error {
+	logger := kitlog.With(m.logger, "subscription_id", sub.GetID(), "publication_name", sub.Publication.Name)
 	for {
-		logger.Log("event", "sync.poll")
-		publishedTables, err := pub.GetPublishedTables(ctx, i.conn, i.opts.PublicationID)
+		logger.Log("event", "reconcile_imports")
+		jobs, err := m.Reconcile(ctx, sub)
 		if err != nil {
-			return errors.Wrap(err, "failed to query published tables")
+			return err
 		}
 
-		importedTables, err := jobStore.GetImportedTables(ctx, i.opts.PublicationID, i.opts.SubscriptionName)
-		if err != nil {
-			return errors.Wrap(err, "failed to query imported tables")
-		}
-
-		notImportedTables := util.Diff(publishedTables, importedTables)
-		for _, table := range notImportedTables {
-			logger.Log("event", "import_job.create", "table", table)
-			job, err := jobStore.Create(ctx, i.opts.PublicationID, i.opts.SubscriptionName, table)
-			if err != nil {
-				return errors.Wrap(err, "failed to create import job")
-			}
-
-			logger.Log("event", "import_job.created", "table", table, "job_id", job.ID)
+		for _, job := range jobs {
+			logger.Log("event", "import_job.created",
+				"import_job_id", job.ID,
+				"import_job_table_name", job.TableName)
 		}
 
 		select {
 		case <-ctx.Done():
-			logger.Log("event", "sync.finish", "msg", "context expired, finishing sync")
+			logger.Log("event", "finish", "msg", "context expired, finishing sync")
 			return nil
-		case <-time.After(i.opts.PollInterval):
+		case <-time.After(m.opts.PollInterval):
 			// continue
 		}
 	}
+}
+
+// Reconcile creates import jobs for tables registered in the subscription that have not
+// yet been imported.
+func (m *Manager) Reconcile(ctx context.Context, sub subscription.Subscription) ([]model.ImportJobs, error) {
+	publishedTables, err := sub.GetTables(ctx, m.db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find already published tables: %w", err)
+	}
+
+	importedTables, err := m.getImportedTables(ctx, sub)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find already imported tables: %w", err)
+	}
+
+	notImportedTables := util.Diff(publishedTables, importedTables)
+
+	return m.create(ctx, sub, notImportedTables...)
+}
+
+func (m *Manager) getImportedTables(ctx context.Context, sub subscription.Subscription) ([]string, error) {
+	stmt := SELECT(ImportJobs.TableName).
+		FROM(ImportJobs).
+		WHERE(
+			ImportJobs.SubscriptionID.EQ(String(sub.GetID())).AND(
+				// Filter out any jobs that have an expiry, as these imports are no longer valid
+				ImportJobs.ExpiredAt.IS_NULL(),
+			),
+		)
+
+	var tableNames []string
+	if err := stmt.QueryContext(ctx, m.db, &tableNames); err != nil {
+		return nil, err
+	}
+
+	return tableNames, nil
+}
+
+func (m *Manager) create(ctx context.Context, sub subscription.Subscription, tableNames ...string) ([]model.ImportJobs, error) {
+	var jobs []model.ImportJobs
+	if len(tableNames) == 0 {
+		return jobs, nil
+	}
+
+	stmt := ImportJobs.
+		INSERT(ImportJobs.SubscriptionID, ImportJobs.TableName).
+		RETURNING(ImportJobs.AllColumns)
+
+	for _, tableName := range tableNames {
+		stmt = stmt.VALUES(sub.GetID(), tableName)
+	}
+
+	return jobs, stmt.QueryContext(ctx, m.db, &jobs)
 }

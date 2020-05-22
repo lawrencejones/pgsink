@@ -9,7 +9,9 @@ require (
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d // indirect
 	github.com/davecgh/go-spew v1.1.1
+	github.com/go-jet/jet v2.2.0+incompatible
 	github.com/go-kit/kit v0.10.0
+	github.com/google/uuid v1.1.1
 	github.com/jackc/pgconn v1.5.0
 	github.com/jackc/pglogrepl v0.0.0-20200309144228-32ec418076b3
 	github.com/jackc/pgproto3/v2 v2.0.1
@@ -23,10 +25,9 @@ require (
 	github.com/pkg/errors v0.8.1
 	github.com/pressly/goose v2.6.0+incompatible
 	github.com/prometheus/client_golang v1.6.0
-	github.com/satori/go.uuid v1.2.0
 	github.com/shopspring/decimal v0.0.0-20191130220710-360f2bc03045 // indirect
 	go.opencensus.io v0.22.2
-	golang.org/x/net v0.0.0-20191209160850-c0dbc17a3553 // indirect
+	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b // indirect
 	google.golang.org/api v0.22.0
 	google.golang.org/appengine v1.6.5 // indirect
 	gopkg.in/yaml.v2 v2.2.7 // indirect

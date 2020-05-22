@@ -16,5 +16,5 @@ var logger = kitlog.NewLogfmtLogger(GinkgoWriter)
 
 func TestSuite(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "pkg/publication/integration")
+	RunSpecs(t, "pkg/subscription/integration")
 }
