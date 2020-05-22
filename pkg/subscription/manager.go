@@ -35,22 +35,41 @@ func (opt *ManagerOptions) Bind(cmd *kingpin.CmdClause, prefix string) *ManagerO
 // Manager supervises a subscription, adding and removing tables into the publication
 // according to the white/blacklist.
 type Manager struct {
-	logger kitlog.Logger
-	db     *sql.DB
-	opts   ManagerOptions
+	logger   kitlog.Logger
+	db       *sql.DB
+	shutdown chan struct{}
+	done     chan error
+	opts     ManagerOptions
 }
 
 func NewManager(logger kitlog.Logger, db *sql.DB, opts ManagerOptions) *Manager {
 	return &Manager{
-		logger: logger,
-		db:     db,
-		opts:   opts,
+		logger:   logger,
+		db:       db,
+		shutdown: make(chan struct{}),
+		done:     make(chan error, 1), // buffered by 1, to ensure progress when reporting an error
+		opts:     opts,
+	}
+}
+
+func (m *Manager) Shutdown(ctx context.Context) error {
+	close(m.shutdown)
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-m.done:
+		return err
 	}
 }
 
 // Manage begins syncing tables into publication using the rules configured on the manager
 // options. It will run until the context expires.
 func (m *Manager) Manage(ctx context.Context, sub Subscription) (err error) {
+	defer func() {
+		close(m.done)
+	}()
+
 	logger := kitlog.With(m.logger, "subscription_id", sub.GetID(), "publication_name", sub.Publication.Name)
 	for {
 		logger.Log("event", "reconcile_tables")
@@ -70,6 +89,9 @@ func (m *Manager) Manage(ctx context.Context, sub Subscription) (err error) {
 		select {
 		case <-ctx.Done():
 			logger.Log("event", "finish", "msg", "context expired, finishing sync")
+			return ctx.Err()
+		case <-m.done:
+			logger.Log("event", "shutdown", "msg", "shutdown requested, exiting")
 			return nil
 		case <-time.After(m.opts.PollInterval):
 			// continue

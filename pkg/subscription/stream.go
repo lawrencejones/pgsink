@@ -55,10 +55,7 @@ func (s *Stream) Confirm(pos pglogrepl.LSN) <-chan pglogrepl.LSN {
 
 func (s *Stream) Shutdown(ctx context.Context) error {
 	close(s.shutdown)
-	return s.Wait(ctx)
-}
 
-func (s *Stream) Wait(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -138,7 +135,18 @@ func stream(ctx context.Context, logger kitlog.Logger, conn *pgconn.PgConn, sysi
 			var msg pgproto3.BackendMessage
 
 			{
+				// Wait to receive a message, but only until we've received a shutdown request or
+				// the next heartbeat is due
 				ctx, cancel := context.WithDeadline(ctx, nextStandbyMessageDeadline)
+				go func() {
+					select {
+					case <-stream.shutdown:
+					case <-ctx.Done(): // no-op
+					}
+
+					cancel()
+				}()
+
 				msg, err = conn.ReceiveMessage(ctx)
 				cancel()
 

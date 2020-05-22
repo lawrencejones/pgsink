@@ -13,9 +13,9 @@ builds:
     goarch:
       - amd64
     ldflags: >
-      -X main.Version={{.Version}}
-      -X main.Commit={{.Commit}}
-      -X main.Date={{.Date}}
+      -X github.com/lawrencejones/pg2sink/cmd/pg2sink/cmd.Version={{.Version}}
+      -X github.com/lawrencejones/pg2sink/cmd/pg2sink/cmd.Commit={{.Commit}}
+      -X github.com/lawrencejones/pg2sink/cmd/pg2sink/cmd.Date={{.Date}}
       -a
       -installsuffix cgo
     env:
