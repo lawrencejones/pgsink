@@ -2,17 +2,16 @@ package integration
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"time"
 
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
 	. "github.com/lawrencejones/pg2sink/pkg/changelog/matchers"
+	"github.com/lawrencejones/pg2sink/pkg/dbtest"
 	"github.com/lawrencejones/pg2sink/pkg/subscription"
 
 	"github.com/jackc/pglogrepl"
 	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/stdlib"
 
 	. "github.com/onsi/ginkgo"
 	_ "github.com/onsi/ginkgo/extensions/table"
@@ -22,62 +21,27 @@ import (
 
 var _ = Describe("Subscription", func() {
 	var (
-		ctx     context.Context
-		cancel  func()
-		db      *sql.DB
-		repconn *pgx.Conn
-		err     error
+		ctx    context.Context
+		cancel func()
+		err    error
 	)
 
 	var (
-		schemaName      = "subscription_integration_test"
-		publicationName = "subscription_integration_test"
-
-		tableOneName   = fmt.Sprintf("%s.%s", schemaName, "one")
-		tableOneSchema = `
-(
-	id bigserial primary key,
-	number int,
-	message text,
-	truthy boolean
-)
-`
-		tableTwoName   = fmt.Sprintf("%s.%s", schemaName, "two")
-		tableTwoSchema = `
-(
-	id bigserial primary key,
-	message text
-)
-`
+		schema       = "subscription_integration_test"
+		tableOneName = fmt.Sprintf("%s.one", schema)
+		tableTwoName = fmt.Sprintf("%s.two", schema)
 	)
 
-	mustExec := func(sql string, args []interface{}, message ...interface{}) {
-		_, err := db.ExecContext(ctx, fmt.Sprintf(sql, args...))
-		Expect(err).To(BeNil(), message...)
-	}
+	db := dbtest.Configure(
+		dbtest.WithSchema(schema),
+		dbtest.WithPublicationClean(schema),
+		dbtest.WithReplicationSlotClean(schema),
+		dbtest.WithTable(tableOneName, "id bigserial primary key", "message text"),
+		dbtest.WithTable(tableTwoName, "id bigserial primary key", "message text"),
+	)
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
-
-		db, err = sql.Open("pgx", "")
-		Expect(err).NotTo(HaveOccurred(), "failed to connect to database")
-
-		repconn, err = pgx.Connect(ctx, "replication=database")
-		Expect(err).NotTo(HaveOccurred(), "failed to create replication connection")
-
-		// Remove any artifacts from previous runs
-		db.ExecContext(ctx, fmt.Sprintf(`drop schema if exists %s cascade`, schemaName))
-		db.ExecContext(ctx, fmt.Sprintf(`drop publication if exists %s`, publicationName))
-		db.ExecContext(ctx, fmt.Sprintf(`
-		select pg_drop_replication_slot(slot_name)
-		from pg_replication_slots
-		where slot_name like '%s%%';
-		`, publicationName))
-
-		// Recreate global state
-		mustExec(`create schema %s`, []interface{}{schemaName})
-		mustExec(`create table %s %s`, []interface{}{tableOneName, tableOneSchema}, tableOneName)
-		mustExec(`create table %s %s`, []interface{}{tableTwoName, tableTwoSchema}, tableTwoName)
+		ctx, cancel = db.Setup(context.Background(), 10*time.Second)
 	})
 
 	AfterEach(func() {
@@ -85,10 +49,8 @@ var _ = Describe("Subscription", func() {
 	})
 
 	createSubscription := func(opts subscription.SubscriptionOptions) (*subscription.Subscription, *pgx.Conn) {
-		repconn, err = pgx.Connect(ctx, "replication=database")
-		Expect(err).NotTo(HaveOccurred(), "failed to create replication connection")
-
-		sub, err := subscription.Create(ctx, logger, db, repconn, opts)
+		repconn := db.GetReplicationConnection(ctx)
+		sub, err := subscription.Create(ctx, logger, db.GetDB(), repconn, opts)
 		Expect(err).NotTo(HaveOccurred())
 
 		return sub, repconn
@@ -101,30 +63,28 @@ var _ = Describe("Subscription", func() {
 		)
 
 		JustBeforeEach(func() {
-			sub, repconn = createSubscription(*opts)
+			sub, _ = createSubscription(*opts)
 		})
 
 		BeforeEach(func() {
-			opts = &subscription.SubscriptionOptions{
-				Name: publicationName,
-			}
+			opts = &subscription.SubscriptionOptions{Name: schema}
 		})
 
 		It("creates publication", func() {
 			query := `select pubname from pg_publication where pubname = $1`
 
 			var match string
-			err := db.QueryRowContext(ctx, query, publicationName).Scan(&match)
+			err := db.GetDB().QueryRowContext(ctx, query, schema).Scan(&match)
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(match).To(Equal(publicationName))
+			Expect(match).To(Equal(schema))
 		})
 
 		It("creates replication slot", func() {
 			query := `select slot_name from pg_replication_slots where slot_name like $1`
 
 			var match string
-			err := db.QueryRowContext(ctx, query, fmt.Sprintf("%s%%", publicationName)).Scan(&match)
+			err := db.GetDB().QueryRowContext(ctx, query, fmt.Sprintf("%s%%", schema)).Scan(&match)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(match).To(Equal(sub.ReplicationSlot.Name))
@@ -136,6 +96,7 @@ var _ = Describe("Subscription", func() {
 	Describe("Start()", func() {
 		var (
 			sub     *subscription.Subscription
+			repconn *pgx.Conn
 			stream  *subscription.Stream
 			entries changelog.Changelog
 		)
@@ -149,16 +110,15 @@ var _ = Describe("Subscription", func() {
 		}
 
 		BeforeEach(func() {
-			sub, repconn = createSubscription(subscription.SubscriptionOptions{Name: publicationName})
+			sub, repconn = createSubscription(subscription.SubscriptionOptions{Name: schema})
 			stream, entries = createStream(sub, repconn)
 
-			err = sub.SetTables(ctx, db, tableOneName)
+			err = sub.SetTables(ctx, db.GetDB(), "one")
 			Expect(err).NotTo(HaveOccurred(), "adding table one to publication should succeed")
 
 			// We need to perform an insert to trigger changes down the replication link.
 			// Without this, we'll receive no schema or modifications.
-			insertQuery := `insert into %s (number, message, truthy) values (1, 'hello', true);`
-			mustExec(insertQuery, []interface{}{tableOneName}, "inserting to table one should succeed")
+			db.MustExec(ctx, `insert into one (message) values ('hello');`)
 		})
 
 		It("receives schema for published tables", func() {
@@ -171,16 +131,8 @@ var _ = Describe("Subscription", func() {
 							Key:  true,
 						},
 						changelog.SchemaField{
-							Name: "number",
-							Type: []string{"null", "int"},
-						},
-						changelog.SchemaField{
 							Name: "message",
 							Type: []string{"null", "string"},
-						},
-						changelog.SchemaField{
-							Name: "truthy",
-							Type: []string{"null", "boolean"},
 						},
 					),
 			)))
@@ -194,8 +146,6 @@ var _ = Describe("Subscription", func() {
 						MatchAllKeys(Keys{
 							"id":      BeAssignableToTypeOf(int64(0)),
 							"message": Equal("hello"),
-							"number":  BeEquivalentTo(1),
-							"truthy":  BeTrue(),
 						}),
 					),
 			)))
@@ -203,8 +153,7 @@ var _ = Describe("Subscription", func() {
 
 		Context("with inserts to unwatched tables", func() {
 			BeforeEach(func() {
-				insertQuery := `insert into %s (message) values ('world');`
-				mustExec(insertQuery, []interface{}{tableTwoName}, "inserting to table two should succeed")
+				db.MustExec(ctx, `insert into two (message) values ('world');`)
 			})
 
 			It("does not receive entries for non-published tables", func() {
@@ -243,7 +192,7 @@ var _ = Describe("Subscription", func() {
 
 			getCurrentWalLSN := func() pglogrepl.LSN {
 				var lsnText string
-				err := db.QueryRowContext(ctx, "select pg_current_wal_lsn()").Scan(&lsnText)
+				err := db.GetDB().QueryRowContext(ctx, "select pg_current_wal_lsn()").Scan(&lsnText)
 				Expect(err).NotTo(HaveOccurred())
 
 				lsn, err := pglogrepl.ParseLSN(lsnText)
@@ -267,9 +216,7 @@ var _ = Describe("Subscription", func() {
 				// confirm receipt up-to the new LSN. If we respect the confirmed flush position,
 				// we expect Postgres won't send us the original insert.
 				By("make many changes to advance the wal position")
-				mustExec("insert into %s (message) (select uuid_generate_v4() from generate_series(0, 1000, 1))", []interface{}{
-					tableTwoName,
-				})
+				db.MustExec(ctx, `insert into two (message) (select uuid_generate_v4() from generate_series(0, 1000, 1))`)
 
 				By("wait for a confirmed heartbeat")
 				Eventually(stream.Confirm(getCurrentWalLSN())).Should(Receive())
@@ -279,11 +226,10 @@ var _ = Describe("Subscription", func() {
 				Expect(repconn.Close(ctx)).To(Succeed(), "failed to close original stream connection")
 
 				By("make new published changes")
-				insertQuery := `insert into %s (message) values ('this should be streamed');`
-				mustExec(insertQuery, []interface{}{tableOneName}, "inserting to table one should succeed")
+				db.MustExec(ctx, `insert into one (message) values ('this should be streamed');`)
 
 				By("recreate stream")
-				sub, repconn = createSubscription(subscription.SubscriptionOptions{Name: publicationName})
+				sub, repconn = createSubscription(subscription.SubscriptionOptions{Name: schema})
 				stream, entries = createStream(sub, repconn)
 
 				By("check only the new change arrives")
@@ -330,9 +276,7 @@ var _ = Describe("Subscription", func() {
 			It("does not receive then committed changes", func() {
 				// Use a pgx connection for this, as the way it handles transactions is more
 				// friendly to timeouts
-				conn, err := stdlib.AcquireConn(db)
-				Expect(err).NotTo(HaveOccurred())
-
+				conn := db.GetConnection(ctx)
 				tx, err := conn.Begin(ctx)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -342,7 +286,7 @@ var _ = Describe("Subscription", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				By("add table two to the subscription, alongside table one")
-				err = sub.SetTables(ctx, db, tableOneName, tableTwoName)
+				err = sub.SetTables(ctx, db.GetDB(), tableOneName, tableTwoName)
 				Expect(err).NotTo(HaveOccurred())
 
 				By("commit insert into table two")

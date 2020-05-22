@@ -2,10 +2,10 @@ package integration
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"time"
 
+	"github.com/lawrencejones/pg2sink/pkg/dbtest"
 	"github.com/lawrencejones/pg2sink/pkg/subscription"
 
 	_ "github.com/jackc/pgx/v4/stdlib"
@@ -20,54 +20,41 @@ var _ = Describe("Manager", func() {
 	var (
 		ctx     context.Context
 		cancel  func()
-		db      *sql.DB
 		sub     subscription.Subscription
 		opts    *subscription.ManagerOptions
 		manager *subscription.Manager
-		err     error
 	)
 
 	var (
-		schemaName      = "subscription_manager_integration_test"
-		publicationName = "subscription_manager_integration_test"
-		subscriptionID  = "uniqueness"
-
-		tableOneName = fmt.Sprintf("%s.%s", schemaName, "one")
-		tableTwoName = fmt.Sprintf("%s.%s", schemaName, "two")
+		schema         = "subscription_manager_integration_test"
+		subscriptionID = "uniqueness"
+		tableOneName   = fmt.Sprintf("%s.one", schema)
+		tableTwoName   = fmt.Sprintf("%s.two", schema)
 	)
 
-	mustExec := func(sql string, args []interface{}, message ...interface{}) {
-		_, err := db.ExecContext(ctx, fmt.Sprintf(sql, args...))
-		Expect(err).To(BeNil(), message...)
-	}
+	db := dbtest.Configure(
+		dbtest.WithSchema(schema),
+		dbtest.WithPublication(schema),
+		dbtest.WithTable(tableOneName, "id bigserial primary key", "message text"),
+		dbtest.WithTable(tableTwoName, "id bigserial primary key", "message text"),
+	)
 
 	JustBeforeEach(func() {
-		manager = subscription.NewManager(logger, db, *opts)
+		manager = subscription.NewManager(logger, db.GetDB(), *opts)
 	})
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
-
-		db, err = sql.Open("pgx", "")
-		Expect(err).NotTo(HaveOccurred(), "failed to connect to database")
-
-		// Remove any artifacts from previous runs
-		db.ExecContext(ctx, fmt.Sprintf(`drop schema if exists %s cascade`, schemaName))
-		db.ExecContext(ctx, fmt.Sprintf(`drop publication if exists %s`, publicationName))
-
-		// Recreate global state
-		db.ExecContext(ctx, fmt.Sprintf(`create schema %s`, schemaName))
-		db.ExecContext(ctx, fmt.Sprintf(`create publication %s`, publicationName))
+		ctx, cancel = db.Setup(context.Background(), 10*time.Second)
 
 		sub = subscription.Subscription{
 			Publication: subscription.Publication{
+				Name: schema,
 				ID:   subscriptionID,
-				Name: publicationName,
 			},
 		}
 
 		opts = &subscription.ManagerOptions{
-			Schemas:  []string{schemaName},
+			Schemas:  []string{schema},
 			Excludes: []string{},
 			Includes: []string{},
 		}
@@ -89,18 +76,13 @@ var _ = Describe("Manager", func() {
 			Expect(err).NotTo(HaveOccurred(), "reconcile isn't expected to error")
 		})
 
-		BeforeEach(func() {
-			mustExec(fmt.Sprintf(`create table %s (id bigserial primary key);`, tableOneName), nil)
-			mustExec(fmt.Sprintf(`create table %s (id bigserial primary key);`, tableTwoName), nil)
-		})
-
 		It("adds watched tables", func() {
 			Expect(added).To(ConsistOf(tableOneName, tableTwoName))
 		})
 
 		Context("when tables are already added", func() {
 			BeforeEach(func() {
-				Expect(sub.SetTables(ctx, db, tableOneName, tableTwoName)).To(Succeed())
+				Expect(sub.SetTables(ctx, db.GetDB(), tableOneName, tableTwoName)).To(Succeed())
 			})
 
 			It("adds and removes nothing", func() {
