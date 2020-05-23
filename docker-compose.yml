@@ -6,6 +6,8 @@ services:
     hostname: postgres
     image: postgres:12.3
     restart: on-failure
+    environment:
+      - POSTGRES_HOST_AUTH_METHOD=trust
     command:
       - postgres
       - -c
