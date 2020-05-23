@@ -2,21 +2,38 @@
 
 > **Path to v1.0.0: https://github.com/lawrencejones/pg2sink/projects/1**
 
-This tool connects to a Postgres database via logical replication, creating the
-plumbing required to subscribe to changes on tables within a specific schema.
-These changes are then pushed into one of the supported sink destinations.
+> **Draft docs can be seen at: [docs](https://github.com/lawrencejones/pg2sink/tree/docs/docs)**
 
-```
-pkg/changelog     // Schema & Modification types, the public output types
-pkg/models        // Internal database models, such as ImportJob
-pkg/imports       // manages imports for subscribed tables
-pkg/logical       // all logical decoding helpers
-pkg/migration     // database migrations for internal pg2sink tables
-pkg/publication   // creates and manages table membership for a Postgres publication
-pkg/sinks         // output destinations, all implementing a Sink interface
-pkg/subscription  // subscribes to publication, streaming Schema/Modification
-pkg/util          // utilities that should be in Go's stdlib
-```
+[debezium]: https://github.com/debezium/debezium
+[dblog]: https://netflixtechblog.com/dblog-a-generic-change-data-capture-framework-69351fb9099b
+
+pg2sink is a Postgres change-capture device that supports high-throughput and
+low-latency capture to a variety of sinks.
+
+You'd use this project if your primary data-store is Postgres and you want a
+stress-free, quick-to-setup and easy-to-operate way of replicating your data to
+other stores such as BigQuery or Elasticsearch, that will work with any size
+Postgres database.
+
+## Similar projects
+
+There are a lot of change-capture projects available, and many support
+Postgres.
+
+As an example, we are similar to [debezium][debezium] in performance and
+durability goals, but have a much simpler setup (no Kafka required). We also
+bear similarity to Netflix's [dblog][dblog], with the benefit of being
+open-source and available for use.
+
+In these comparisons, pg2sink wins with a much simpler setup- there's no Kafka
+involved, or any secondary data-sources. We also benefit from the sole focus on
+Postgres over many upstream sources, as we can optimise our data-access pattern
+for large, high-transaction volume databases. Examples of this are keeping
+transactions short to aid vacuums, and traversing tables using efficient
+indexes.
+
+This makes pg2sink a much safer bet for people managing production critical
+Postgres databases.
 
 ## Developing
 
