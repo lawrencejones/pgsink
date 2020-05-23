@@ -68,6 +68,9 @@ var (
 
 	streamImportManager        = stream.Flag("import-manager", "Schedule imports for subscribed tables that aren't yet imported").Default("true").Bool()
 	streamImportManagerOptions = new(imports.ManagerOptions).Bind(stream, "import-manager.")
+
+	streamImportWorkerCount   = stream.Flag("import-worker-count", "Number of concurrent import workers").Default("1").Int()
+	streamImportWorkerOptions = new(imports.WorkerOptions).Bind(stream, "import-worker.")
 )
 
 // SilentError should be returned when the command wants to skip all logging of the error
@@ -318,6 +321,21 @@ func Run() (err error) {
 				},
 				func(error) {
 					manager.Shutdown(ctx)
+				},
+			)
+		}
+
+		for idx := 0; idx < *streamImportWorkerCount; idx++ {
+			logger := kitlog.With(logger, "component", "import_worker", "worker_id", idx)
+
+			worker := imports.NewWorker(logger, db, sink, *streamImportWorkerOptions)
+
+			g.Add(
+				func() error {
+					return worker.Start(ctx)
+				},
+				func(error) {
+					worker.Shutdown(ctx)
 				},
 			)
 		}
