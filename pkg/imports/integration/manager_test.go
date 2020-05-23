@@ -8,6 +8,7 @@ import (
 
 	"github.com/lawrencejones/pg2sink/pkg/dbschema/pg2sink/model"
 	. "github.com/lawrencejones/pg2sink/pkg/dbschema/pg2sink/table"
+	"github.com/lawrencejones/pg2sink/pkg/dbtest"
 	"github.com/lawrencejones/pg2sink/pkg/imports"
 	"github.com/lawrencejones/pg2sink/pkg/subscription"
 
@@ -24,48 +25,41 @@ var _ = Describe("Manager", func() {
 	var (
 		ctx     context.Context
 		cancel  func()
-		db      *sql.DB
 		sub     subscription.Subscription
 		manager *imports.Manager
-		err     error
 	)
 
 	var (
-		schemaName      = "imports_manager_integration_test"
-		publicationName = "imports_manager_integration_test"
-		subscriptionID  = "uniqueness"
-
-		tableOneName = fmt.Sprintf("%s.%s", schemaName, "one")
-		tableTwoName = fmt.Sprintf("%s.%s", schemaName, "two")
+		schema         = "imports_manager_integration_test"
+		subscriptionID = "uniqueness"
+		tableOneName   = fmt.Sprintf("%s.one", schema)
+		tableTwoName   = fmt.Sprintf("%s.two", schema)
 	)
 
-	mustExec := func(sql string, args []interface{}, message ...interface{}) {
-		_, err := db.ExecContext(ctx, fmt.Sprintf(sql, args...))
-		Expect(err).To(BeNil(), message...)
-	}
+	db := dbtest.Configure(
+		dbtest.WithSchema(schema),
+		dbtest.WithPublication(schema),
+		dbtest.WithTable(tableOneName, "id bigserial primary key", "message text"),
+		dbtest.WithTable(tableTwoName, "id bigserial primary key", "message text"),
+		dbtest.WithLifecycle(
+			nil, // no creation, this table should already be here
+			func(ctx context.Context, db, _ *sql.DB) (sql.Result, error) {
+				return db.ExecContext(ctx, "truncate pg2sink.import_jobs;")
+			},
+		),
+	)
 
 	JustBeforeEach(func() {
-		manager = imports.NewManager(logger, db, imports.ManagerOptions{})
+		manager = imports.NewManager(logger, db.GetDB(), imports.ManagerOptions{})
 	})
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
-
-		db, err = sql.Open("pgx", "")
-		Expect(err).NotTo(HaveOccurred(), "failed to connect to database")
-
-		// Remove any artifacts from previous runs
-		db.ExecContext(ctx, fmt.Sprintf(`drop schema if exists %s cascade`, schemaName))
-		db.ExecContext(ctx, fmt.Sprintf(`drop publication if exists %s`, publicationName))
-
-		// Recreate global state
-		db.ExecContext(ctx, fmt.Sprintf(`create schema %s`, schemaName))
-		db.ExecContext(ctx, fmt.Sprintf(`create publication %s`, publicationName))
+		ctx, cancel = db.Setup(context.Background(), 10*time.Second)
 
 		sub = subscription.Subscription{
 			Publication: subscription.Publication{
+				Name: schema,
 				ID:   subscriptionID,
-				Name: publicationName,
 			},
 		}
 	})
@@ -84,14 +78,9 @@ var _ = Describe("Manager", func() {
 			jobs, err = manager.Reconcile(ctx, sub)
 		})
 
-		BeforeEach(func() {
-			mustExec(fmt.Sprintf(`create table %s (id bigserial primary key);`, tableOneName), nil)
-			mustExec(fmt.Sprintf(`create table %s (id bigserial primary key);`, tableTwoName), nil)
-		})
-
 		Context("for published table", func() {
 			BeforeEach(func() {
-				Expect(sub.SetTables(ctx, db, tableOneName)).To(Succeed())
+				Expect(sub.SetTables(ctx, db.GetDB(), tableOneName)).To(Succeed())
 			})
 
 			Context("with no previous import", func() {
@@ -105,12 +94,12 @@ var _ = Describe("Manager", func() {
 
 			Context("with previous import", func() {
 				BeforeEach(func() {
-					stmt := ImportJobs.
+					query, args := ImportJobs.
 						INSERT(ImportJobs.SubscriptionID, ImportJobs.TableName).
-						VALUES(sub.GetID(), tableOneName)
+						VALUES(sub.GetID(), tableOneName).
+						Sql()
 
-					_, err := stmt.ExecContext(ctx, db)
-					Expect(err).NotTo(HaveOccurred())
+					db.MustExec(ctx, query, args...)
 				})
 
 				It("does not create an additional import", func() {
@@ -121,12 +110,12 @@ var _ = Describe("Manager", func() {
 
 			Context("with previous expired import", func() {
 				BeforeEach(func() {
-					stmt := ImportJobs.
+					query, args := ImportJobs.
 						INSERT(ImportJobs.SubscriptionID, ImportJobs.TableName, ImportJobs.ExpiredAt).
-						VALUES(sub.GetID(), tableOneName, Raw("now()"))
+						VALUES(sub.GetID(), tableOneName, Raw("now()")).
+						Sql()
 
-					_, err := stmt.ExecContext(ctx, db)
-					Expect(err).NotTo(HaveOccurred())
+					db.MustExec(ctx, query, args...)
 				})
 
 				It("creates import job", func() {
