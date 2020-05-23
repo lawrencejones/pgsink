@@ -113,7 +113,9 @@ func Run() (err error) {
 		}
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// This is the root context for the application. Once terminated, everything we have
+	// started should also finish.
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Stage our shutdown to first request termination, then cancel contexts if downstream
@@ -148,39 +150,79 @@ func Run() (err error) {
 		return fmt.Errorf("failed to migrate database: %w", err)
 	}
 
-	// Metrics and debug endpoints
-	mux := http.NewServeMux()
+	var g run.Group
 
-	mux.Handle("/metrics", promhttp.Handler())
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	{
+		logger := kitlog.With(logger, "component", "shutdown_handler")
 
-	srv := &http.Server{Addr: fmt.Sprintf("%s:%d", *metricsAddress, *metricsPort)}
+		ctx, cancel := context.WithCancel(ctx)
 
-	// Don't bother handling nice shutdown for metrics, whether they get killed abruptly or
-	// nicely makes little difference to us.
-	go func() {
-		logger.Log("event", "metrics.listen", "address", *metricsAddress, "port", *metricsPort)
-		srv.ListenAndServe()
-	}()
+		// If we're asked to shutdown, we use the rungroup to trigger interrupts for every
+		// component
+		g.Add(
+			func() error {
+				select {
+				case <-shutdown:
+					logger.Log("event", "requesting_shutdown", "msg", "received signal, requesting shutdown")
+				case <-ctx.Done():
+				}
 
-	// Tracing with jaeger
-	jexporter, err := jaeger.NewExporter(jaeger.Options{
-		AgentEndpoint: *jaegerAgentEndpoint,
-		Process: jaeger.Process{
-			ServiceName: "pg2sink",
-		},
-	})
-
-	if err != nil {
-		return UsageError{err}
+				return nil
+			},
+			func(error) {
+				cancel() // end the shutdown select
+			},
+		)
 	}
 
-	trace.RegisterExporter(jexporter)
-	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
+	{
+		logger := kitlog.With(logger, "component", "metrics")
+
+		// Metrics and debug endpoints
+		mux := http.NewServeMux()
+
+		mux.Handle("/metrics", promhttp.Handler())
+		mux.HandleFunc("/debug/pprof/", pprof.Index)
+		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+		srv := &http.Server{Addr: fmt.Sprintf("%s:%d", *metricsAddress, *metricsPort)}
+
+		g.Add(
+			func() error {
+				logger.Log("event", "listen", "address", *metricsAddress, "port", *metricsPort)
+				if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					return err
+				}
+
+				return nil
+			},
+			func(error) {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				srv.Shutdown(ctx)
+			},
+		)
+	}
+
+	{
+		// Tracing with jaeger
+		jexporter, err := jaeger.NewExporter(jaeger.Options{
+			AgentEndpoint: *jaegerAgentEndpoint,
+			Process: jaeger.Process{
+				ServiceName: "pg2sink",
+			},
+		})
+
+		if err != nil {
+			return UsageError{err}
+		}
+
+		trace.RegisterExporter(jexporter)
+		trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
+	}
 
 	switch command {
 	case stream.FullCommand():
@@ -202,19 +244,6 @@ func Run() (err error) {
 		if err != nil {
 			return err
 		}
-
-		var g run.Group
-
-		// If we're asked to shutdown, we use the rungroup to trigger interrupts for every
-		// component
-		g.Add(
-			func() error {
-				<-shutdown
-				logger.Log("event", "requesting_shutdown", "msg", "received signal, requesting shutdown")
-				return nil
-			},
-			func(error) {},
-		)
 
 		{
 			logger := kitlog.With(logger, "component", "subscription")
