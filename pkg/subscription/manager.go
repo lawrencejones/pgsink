@@ -90,7 +90,7 @@ func (m *Manager) Manage(ctx context.Context, sub Subscription) (err error) {
 		case <-ctx.Done():
 			logger.Log("event", "finish", "msg", "context expired, finishing sync")
 			return ctx.Err()
-		case <-m.done:
+		case <-m.shutdown:
 			logger.Log("event", "shutdown", "msg", "shutdown requested, exiting")
 			return nil
 		case <-time.After(m.opts.PollInterval):

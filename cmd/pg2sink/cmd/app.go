@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lawrencejones/pg2sink/pkg/changelog"
+	"github.com/lawrencejones/pg2sink/pkg/imports"
 	"github.com/lawrencejones/pg2sink/pkg/migration"
 	sinkbigquery "github.com/lawrencejones/pg2sink/pkg/sinks/bigquery"
 	sinkfile "github.com/lawrencejones/pg2sink/pkg/sinks/file"
@@ -64,6 +65,9 @@ var (
 	streamSinkType            = stream.Flag("sink", "Type of sink target").Required().String()
 	streamSinkFileOptions     = new(sinkfile.Options).Bind(stream, "sink.file.")
 	streamSinkBigQueryOptions = new(sinkbigquery.Options).Bind(stream, "sink.bigquery.")
+
+	streamImportManager        = stream.Flag("import-manager", "Schedule imports for subscribed tables that aren't yet imported").Default("true").Bool()
+	streamImportManagerOptions = new(imports.ManagerOptions).Bind(stream, "import-manager.")
 )
 
 // SilentError should be returned when the command wants to skip all logging of the error
@@ -263,6 +267,21 @@ func Run() (err error) {
 			logger := kitlog.With(logger, "component", "subscription_manager")
 
 			manager := subscription.NewManager(logger, db, *streamSubscriptionManagerOptions)
+
+			g.Add(
+				func() error {
+					return manager.Manage(ctx, *sub)
+				},
+				func(error) {
+					manager.Shutdown(ctx)
+				},
+			)
+		}
+
+		if *streamImportManager {
+			logger := kitlog.With(logger, "component", "import_manager")
+
+			manager := imports.NewManager(logger, db, *streamImportManagerOptions)
 
 			g.Add(
 				func() error {
