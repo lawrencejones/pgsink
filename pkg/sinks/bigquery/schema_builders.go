@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 
 	bq "cloud.google.com/go/bigquery"
 	"github.com/alecthomas/template"

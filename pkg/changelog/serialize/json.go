@@ -3,7 +3,7 @@ package serialize
 import (
 	"encoding/json"
 
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 )
 
 var _ Serializer = &JSON{}

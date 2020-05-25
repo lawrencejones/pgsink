@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lawrencejones/pg2sink/pkg/sinks/generic"
+	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
 	bq "cloud.google.com/go/bigquery"
 	"github.com/alecthomas/kingpin"
@@ -52,7 +52,7 @@ func New(ctx context.Context, logger kitlog.Logger, opts Options) (generic.Sink,
 		md = &bq.DatasetMetadata{
 			Name:        opts.Dataset,
 			Location:    opts.Location,
-			Description: "Dataset created by pg2sink",
+			Description: "Dataset created by pgsink",
 		}
 
 		if err := dataset.Create(ctx, md); err != nil {

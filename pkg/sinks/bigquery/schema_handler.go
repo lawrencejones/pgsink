@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
-	"github.com/lawrencejones/pg2sink/pkg/sinks/generic"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
 	bq "cloud.google.com/go/bigquery"
 	kitlog "github.com/go-kit/kit/log"

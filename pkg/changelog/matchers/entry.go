@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 
 	"github.com/davecgh/go-spew/spew"
 

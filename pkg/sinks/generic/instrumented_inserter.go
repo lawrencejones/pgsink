@@ -4,7 +4,7 @@ import (
 	"context"
 
 	kitlog "github.com/go-kit/kit/log"
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.opencensus.io/trace"
@@ -13,7 +13,7 @@ import (
 var (
 	sinkInsertDurationSeconds = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "pg2sink_sink_insert_duration_seconds",
+			Name:    "pgsink_sink_insert_duration_seconds",
 			Help:    "Distribution of time spent issuing inserts, by route (if applicable)",
 			Buckets: prometheus.ExponentialBuckets(0.125, 2, 12), // 0.125 -> 512s
 		},
@@ -21,7 +21,7 @@ var (
 	)
 	sinkInsertBatchSize = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "pg2sink_sink_insert_batch_size",
+			Name:    "pgsink_sink_insert_batch_size",
 			Help:    "Distribution of insert batch sizes",
 			Buckets: prometheus.ExponentialBuckets(1, 2, 13), // 1 -> 8192
 		},

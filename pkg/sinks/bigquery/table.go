@@ -4,7 +4,7 @@ import (
 	"context"
 
 	bq "cloud.google.com/go/bigquery"
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 )
 
 // Table is a cached BigQuery table entry, associated with a schema. This is the table we

@@ -1,7 +1,7 @@
 package serialize
 
 import (
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 )
 
 // DefaultSerializer is the serializer of choice, unless it has been overriden

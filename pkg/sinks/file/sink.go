@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/alecthomas/kingpin"
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
-	"github.com/lawrencejones/pg2sink/pkg/changelog/serialize"
-	"github.com/lawrencejones/pg2sink/pkg/sinks/generic"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/changelog/serialize"
+	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/pkg/errors"

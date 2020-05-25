@@ -2,20 +2,20 @@
 # https://goreleaser.com
 
 ---
-project_name: pg2sink
+project_name: pgsink
 
 builds:
-  - binary: pg2sink
-    main: cmd/pg2sink/main.go
+  - binary: pgsink
+    main: cmd/pgsink/main.go
     goos:
       - darwin
       - linux
     goarch:
       - amd64
     ldflags: >
-      -X github.com/lawrencejones/pg2sink/cmd/pg2sink/cmd.Version={{.Version}}
-      -X github.com/lawrencejones/pg2sink/cmd/pg2sink/cmd.Commit={{.Commit}}
-      -X github.com/lawrencejones/pg2sink/cmd/pg2sink/cmd.Date={{.Date}}
+      -X github.com/lawrencejones/pgsink/cmd/pgsink/cmd.Version={{.Version}}
+      -X github.com/lawrencejones/pgsink/cmd/pgsink/cmd.Commit={{.Commit}}
+      -X github.com/lawrencejones/pgsink/cmd/pgsink/cmd.Date={{.Date}}
       -a
       -installsuffix cgo
     env:
@@ -23,7 +23,7 @@ builds:
 
 nfpm:
   vendor: lawrencejones.dev
-  homepage: https://github.com/lawrencejones/pg2sink
+  homepage: https://github.com/lawrencejones/pgsink
   maintainer: Lawrence Jones me@lawrencejones.dev
   description: Logically replicate data out of Postgres into sinks (files, Google BigQuery, etc)
   formats:

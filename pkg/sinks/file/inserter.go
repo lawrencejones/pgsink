@@ -7,8 +7,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
-	"github.com/lawrencejones/pg2sink/pkg/changelog/serialize"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/changelog/serialize"
 	"github.com/pkg/errors"
 )
 

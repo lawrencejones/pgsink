@@ -71,7 +71,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (type) (rate(pg2sink_subscription_receive_message_total[$interval]))",
+          "expr": "sum by (type) (rate(pgsink_subscription_receive_message_total[$interval]))",
           "legendFormat": "{{ type }}",
           "refId": "A"
         }
@@ -173,7 +173,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (table) (rate(pg2sink_importer_work_postgres_rows_read_total[$interval]))",
+          "expr": "sum by (table) (rate(pgsink_importer_work_postgres_rows_read_total[$interval]))",
           "legendFormat": "{{ table }}",
           "refId": "A"
         }
@@ -261,7 +261,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (table) (rate(pg2sink_importer_work_sink_flush_duration_seconds_count[$interval]))",
+          "expr": "sum by (table) (rate(pgsink_importer_work_sink_flush_duration_seconds_count[$interval]))",
           "legendFormat": "{{ table }}",
           "refId": "A"
         }
@@ -339,7 +339,7 @@
       "reverseYBuckets": false,
       "targets": [
         {
-          "expr": "sum by (table) (rate(pg2sink_importer_work_sink_flush_duration_seconds_bucket[$interval]))",
+          "expr": "sum by (table) (rate(pgsink_importer_work_sink_flush_duration_seconds_bucket[$interval]))",
           "legendFormat": "{{ table }}",
           "refId": "A"
         }
@@ -425,7 +425,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (route) (rate(pg2sink_sink_insert_duration_seconds_count[$interval]))",
+          "expr": "sum by (route) (rate(pgsink_sink_insert_duration_seconds_count[$interval]))",
           "legendFormat": "{{ route }}",
           "refId": "A"
         }
@@ -513,12 +513,12 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.5, sum by (le)(rate(pg2sink_sink_insert_duration_seconds_bucket[$interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le)(rate(pgsink_sink_insert_duration_seconds_bucket[$interval])))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le)(rate(pg2sink_sink_insert_duration_seconds_bucket[$interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le)(rate(pgsink_sink_insert_duration_seconds_bucket[$interval])))",
           "legendFormat": "p95",
           "refId": "B"
         }
@@ -596,7 +596,7 @@
       "reverseYBuckets": false,
       "targets": [
         {
-          "expr": "sum by (le)(rate(pg2sink_sink_insert_duration_seconds_bucket[$interval]))",
+          "expr": "sum by (le)(rate(pgsink_sink_insert_duration_seconds_bucket[$interval]))",
           "format": "heatmap",
           "legendFormat": "{{ le }}",
           "refId": "A"
@@ -712,7 +712,7 @@
     ]
   },
   "timezone": "",
-  "title": "pg2sink",
+  "title": "pgsink",
   "uid": "unImxmPZk",
   "version": 5
 }

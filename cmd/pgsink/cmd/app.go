@@ -13,13 +13,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
-	"github.com/lawrencejones/pg2sink/pkg/imports"
-	"github.com/lawrencejones/pg2sink/pkg/migration"
-	sinkbigquery "github.com/lawrencejones/pg2sink/pkg/sinks/bigquery"
-	sinkfile "github.com/lawrencejones/pg2sink/pkg/sinks/file"
-	"github.com/lawrencejones/pg2sink/pkg/sinks/generic"
-	"github.com/lawrencejones/pg2sink/pkg/subscription"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/imports"
+	"github.com/lawrencejones/pgsink/pkg/migration"
+	sinkbigquery "github.com/lawrencejones/pgsink/pkg/sinks/bigquery"
+	sinkfile "github.com/lawrencejones/pgsink/pkg/sinks/file"
+	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
+	"github.com/lawrencejones/pgsink/pkg/subscription"
 
 	"contrib.go.opencensus.io/exporter/jaeger"
 	"github.com/alecthomas/kingpin"
@@ -37,7 +37,7 @@ import (
 var logger kitlog.Logger
 
 var (
-	app = kingpin.New("pg2sink", "Publish Postgres changes to pubsub").Version(versionStanza())
+	app = kingpin.New("pgsink", "Publish Postgres changes to pubsub").Version(versionStanza())
 
 	// Global flags
 	debug               = app.Flag("debug", "Enable debug logging").Default("false").Bool()
@@ -52,7 +52,7 @@ var (
 	user     = app.Flag("user", "Postgres user").Envar("PGUSER").Default("postgres").String()
 
 	// Each subscription has a name and a unique identifier
-	subscriptionName = app.Flag("subscription-name", "Subscription name, matches Postgres publication").Default("pg2sink").String()
+	subscriptionName = app.Flag("subscription-name", "Subscription name, matches Postgres publication").Default("pgsink").String()
 
 	stream           = app.Command("stream", "Stream changes into sink")
 	streamDecodeOnly = stream.Flag("decode-only", "Print messages only, ignoring sink").Default("false").Bool()
@@ -212,7 +212,7 @@ func Run() (err error) {
 		jexporter, err := jaeger.NewExporter(jaeger.Options{
 			AgentEndpoint: *jaegerAgentEndpoint,
 			Process: jaeger.Process{
-				ServiceName: "pg2sink",
+				ServiceName: "pgsink",
 			},
 		})
 

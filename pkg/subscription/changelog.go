@@ -1,8 +1,8 @@
 package subscription
 
 import (
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
-	"github.com/lawrencejones/pg2sink/pkg/logical"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/logical"
 
 	kitlog "github.com/go-kit/kit/log"
 )

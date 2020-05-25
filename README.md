@@ -1,13 +1,13 @@
-# pg2sink [![CircleCI](https://circleci.com/gh/lawrencejones/pg2sink.svg?style=svg)](https://circleci.com/gh/lawrencejones/pg2sink)
+# pgsink [![CircleCI](https://circleci.com/gh/lawrencejones/pgsink.svg?style=svg)](https://circleci.com/gh/lawrencejones/pgsink)
 
-> **Path to v1.0.0: https://github.com/lawrencejones/pg2sink/projects/1**
+> **Path to v1.0.0: https://github.com/lawrencejones/pgsink/projects/1**
 
-> **Draft docs can be seen at: [docs](https://github.com/lawrencejones/pg2sink/tree/docs/docs)**
+> **Draft docs can be seen at: [docs](https://github.com/lawrencejones/pgsink/tree/docs/docs)**
 
 [debezium]: https://github.com/debezium/debezium
 [dblog]: https://netflixtechblog.com/dblog-a-generic-change-data-capture-framework-69351fb9099b
 
-pg2sink is a Postgres change-capture device that supports high-throughput and
+pgsink is a Postgres change-capture device that supports high-throughput and
 low-latency capture to a variety of sinks.
 
 You'd use this project if your primary data-store is Postgres and you want a
@@ -25,14 +25,14 @@ durability goals, but have a much simpler setup (no Kafka required). We also
 bear similarity to Netflix's [dblog][dblog], with the benefit of being
 open-source and available for use.
 
-In these comparisons, pg2sink wins with a much simpler setup- there's no Kafka
+In these comparisons, pgsink wins with a much simpler setup- there's no Kafka
 involved, or any secondary data-sources. We also benefit from the sole focus on
 Postgres over many upstream sources, as we can optimise our data-access pattern
 for large, high-transaction volume databases. Examples of this are keeping
 transactions short to aid vacuums, and traversing tables using efficient
 indexes.
 
-This makes pg2sink a much safer bet for people managing production critical
+This makes pgsink a much safer bet for people managing production critical
 Postgres databases.
 
 ## Developing
@@ -43,20 +43,20 @@ environment like so:
 ```console
 $ docker-compose up -d
 docker-compose up -d
-pg2sink_prometheus_1 is up-to-date
-pg2sink_postgres_1 is up-to-date
-pg2sink_grafana_1 is up-to-date
+pgsink_prometheus_1 is up-to-date
+pgsink_postgres_1 is up-to-date
+pgsink_grafana_1 is up-to-date
 ```
 
-Then run `make recreatedb` to create a `pg2sink` database. You can now access
+Then run `make recreatedb` to create a `pgsink` database. You can now access
 your database like so:
 
 ```console
-$ psql --host localhost --user pg2sink pg2sink
-pg2sink=> \q
+$ psql --host localhost --user pgsink pgsink
+pgsink=> \q
 ```
 
-pg2sink will work with this database: try `pg2sink --sink=file --decode-only`.
+pgsink will work with this database: try `pgsink --sink=file --decode-only`.
 
 ### Database migrations
 
@@ -73,19 +73,19 @@ $ goose -dir pkg/migration create create_import_jobs_table go
 Boot a Postgres database, then create an example table.
 
 ```console
-$ createdb pg2sink
-$ psql pg2sink
+$ createdb pgsink
+$ psql pgsink
 psql (11.5)
 Type "help" for help.
 
-pg2sink=# create table public.example (id bigserial primary key, msg text);
+pgsink=# create table public.example (id bigserial primary key, msg text);
 CREATE TABLE
 
-pg2sink=# insert into public.example (msg) values ('hello world');
+pgsink=# insert into public.example (msg) values ('hello world');
 INSERT 1
 ```
 
-pg2sink will stream these changes from the database and send it to the
+pgsink will stream these changes from the database and send it to the
 configured sink. Changes are expressed as a stream of messages, either a
 `Schema` that describes the structure of a Postgres table, or a `Modification`
 corresponding to an insert/update/delete of a row in Postgres.

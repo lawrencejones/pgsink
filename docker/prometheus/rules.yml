@@ -1,4 +1,4 @@
 ---
 groups:
-  - name: pg2sink.rules
+  - name: pgsink.rules
     rules: []  # TODO

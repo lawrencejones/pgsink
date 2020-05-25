@@ -53,7 +53,7 @@ func newImportJobsTable() *ImportJobsTable {
 	)
 
 	return &ImportJobsTable{
-		Table: postgres.NewTable("pg2sink", "import_jobs", IDColumn, SubscriptionIDColumn, TableNameColumn, CursorColumn, CompletedAtColumn, ExpiredAtColumn, UpdatedAtColumn, CreatedAtColumn),
+		Table: postgres.NewTable("pgsink", "import_jobs", IDColumn, SubscriptionIDColumn, TableNameColumn, CursorColumn, CompletedAtColumn, ExpiredAtColumn, UpdatedAtColumn, CreatedAtColumn),
 
 		//Columns
 		ID:             IDColumn,

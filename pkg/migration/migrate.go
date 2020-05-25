@@ -30,10 +30,10 @@ var _ = BeforeSuite(func() {
 	)
 })
 
-// tableNames contains all the tables managed by pg2sink, so we can truncate them
+// tableNames contains all the tables managed by pgsink, so we can truncate them
 // automatically in our test suites.
 var tableNames = []string{
-	"pg2sink.import_jobs",
+	"pgsink.import_jobs",
 }
 
 // Truncate all tables before the start of each test, ensuring we start from a blank slate
@@ -52,12 +52,12 @@ var _ = BeforeEach(func() {
 })
 
 func Migrate(ctx context.Context, logger kitlog.Logger, db *sql.DB) error {
-	logger.Log("event", "schema.create", "schema", "pg2sink")
-	if _, err := db.ExecContext(ctx, `create schema if not exists pg2sink;`); err != nil {
+	logger.Log("event", "schema.create", "schema", "pgsink")
+	if _, err := db.ExecContext(ctx, `create schema if not exists pgsink;`); err != nil {
 		return errors.Wrap(err, "failed to create internal schema")
 	}
 
-	goose.SetTableName("pg2sink.schema_migrations")
+	goose.SetTableName("pgsink.schema_migrations")
 	if err := goose.Up(db, "."); err != nil {
 		return errors.Wrap(err, "failed to migrate database")
 	}

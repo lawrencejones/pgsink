@@ -15,7 +15,7 @@ func init() {
 // need to maintain compatibility.
 func Up20200510142436(tx *sql.Tx) error {
 	_, err := tx.Exec(`
-	drop table pg2sink.import_jobs;
+	drop table pgsink.import_jobs;
 	`)
 
 	return err

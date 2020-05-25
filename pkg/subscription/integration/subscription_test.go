@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
-	. "github.com/lawrencejones/pg2sink/pkg/changelog/matchers"
-	"github.com/lawrencejones/pg2sink/pkg/dbtest"
-	"github.com/lawrencejones/pg2sink/pkg/subscription"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
+	. "github.com/lawrencejones/pgsink/pkg/changelog/matchers"
+	"github.com/lawrencejones/pgsink/pkg/dbtest"
+	"github.com/lawrencejones/pgsink/pkg/subscription"
 
 	"github.com/jackc/pglogrepl"
 	"github.com/jackc/pgx/v4"
@@ -272,7 +272,7 @@ var _ = Describe("Subscription", func() {
 			// takes locks against the old transactions before initiating the existing index
 			// data sweep.
 			//
-			// https://github.com/lawrencejones/pg2sink/issues/2
+			// https://github.com/lawrencejones/pgsink/issues/2
 			It("does not receive then committed changes", func() {
 				// Use a pgx connection for this, as the way it handles transactions is more
 				// friendly to timeouts

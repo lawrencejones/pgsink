@@ -1,4 +1,4 @@
-module github.com/lawrencejones/pg2sink
+module github.com/lawrencejones/pgsink
 
 go 1.13
 

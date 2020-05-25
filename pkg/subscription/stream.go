@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/alecthomas/kingpin"
-	"github.com/lawrencejones/pg2sink/pkg/logical"
+	"github.com/lawrencejones/pgsink/pkg/logical"
 
 	kitlog "github.com/go-kit/kit/log"
 	level "github.com/go-kit/kit/log/level"
@@ -67,7 +67,7 @@ func (s *Stream) Shutdown(ctx context.Context) error {
 var (
 	receiveMessageTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "pg2sink_subscription_receive_message_total",
+			Name: "pgsink_subscription_receive_message_total",
 			Help: "Total number of logical messages received",
 		},
 		[]string{"type"},

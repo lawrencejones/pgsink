@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lawrencejones/pg2sink/pkg/dbschema/pg2sink/model"
-	. "github.com/lawrencejones/pg2sink/pkg/dbschema/pg2sink/table"
-	"github.com/lawrencejones/pg2sink/pkg/dbtest"
-	"github.com/lawrencejones/pg2sink/pkg/imports"
-	"github.com/lawrencejones/pg2sink/pkg/subscription"
+	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
+	. "github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/table"
+	"github.com/lawrencejones/pgsink/pkg/dbtest"
+	"github.com/lawrencejones/pgsink/pkg/imports"
+	"github.com/lawrencejones/pgsink/pkg/subscription"
 
 	. "github.com/go-jet/jet/postgres"
 	_ "github.com/jackc/pgx/v4/stdlib"
@@ -44,7 +44,7 @@ var _ = Describe("Manager", func() {
 		dbtest.WithLifecycle(
 			nil, // no creation, this table should already be here
 			func(ctx context.Context, db, _ *sql.DB) (sql.Result, error) {
-				return db.ExecContext(ctx, "truncate pg2sink.import_jobs;")
+				return db.ExecContext(ctx, "truncate pgsink.import_jobs;")
 			},
 		),
 	)

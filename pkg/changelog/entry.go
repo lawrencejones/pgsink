@@ -2,7 +2,7 @@ package changelog
 
 import "fmt"
 
-// Changelog is the goal of pg2sink, a channel of schema and modification messages. Any
+// Changelog is the goal of pgsink, a channel of schema and modification messages. Any
 // source of these changes, be it a logical replication subscription or an import job,
 // must produce this channel.
 type Changelog chan Entry

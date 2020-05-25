@@ -1,10 +1,10 @@
-PROG=bin/pg2sink
-PROJECT=github.com/lawrencejones/pg2sink
+PROG=bin/pgsink
+PROJECT=github.com/lawrencejones/pgsink
 VERSION=$(shell git rev-parse --short HEAD)-dev
 BUILD_COMMAND=go build -ldflags "-s -w -X main.Version=$(VERSION)"
 PSQL=docker-compose exec -T postgres psql
 PGDUMP=docker-compose exec -T postgres pg_dump
-DATABASE=pg2sink
+DATABASE=pgsink
 
 .PHONY: prog darwin linux createdb test clean
 
@@ -33,7 +33,7 @@ recreatedb: dropdb createdb
 
 # go get -u github.com/onsi/ginkgo/ginkgo
 test:
-	PGUSER=pg2sink_test PGDATABASE=pg2sink_test ginkgo -r pkg
+	PGUSER=pgsink_test PGDATABASE=pgsink_test ginkgo -r pkg
 
 clean:
 	rm -rvf $(PROG) $(PROG:%=%.darwin_amd64) $(PROG:%=%.linux_amd64)

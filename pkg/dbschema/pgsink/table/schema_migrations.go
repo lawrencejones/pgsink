@@ -45,7 +45,7 @@ func newSchemaMigrationsTable() *SchemaMigrationsTable {
 	)
 
 	return &SchemaMigrationsTable{
-		Table: postgres.NewTable("pg2sink", "schema_migrations", IDColumn, VersionIDColumn, IsAppliedColumn, TstampColumn),
+		Table: postgres.NewTable("pgsink", "schema_migrations", IDColumn, VersionIDColumn, IsAppliedColumn, TstampColumn),
 
 		//Columns
 		ID:        IDColumn,

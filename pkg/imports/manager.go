@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lawrencejones/pg2sink/pkg/dbschema/pg2sink/model"
-	. "github.com/lawrencejones/pg2sink/pkg/dbschema/pg2sink/table"
-	"github.com/lawrencejones/pg2sink/pkg/subscription"
-	"github.com/lawrencejones/pg2sink/pkg/util"
+	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
+	. "github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/table"
+	"github.com/lawrencejones/pgsink/pkg/subscription"
+	"github.com/lawrencejones/pgsink/pkg/util"
 
 	"github.com/alecthomas/kingpin"
 	. "github.com/go-jet/jet/postgres"

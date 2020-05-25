@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	kitlog "github.com/go-kit/kit/log"
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 )
 
 // Route is a string representing a routing key for incoming modifications. Inserters are

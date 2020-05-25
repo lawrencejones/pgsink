@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/lawrencejones/pg2sink/pkg/dbschema/information_schema/model"
-	isv "github.com/lawrencejones/pg2sink/pkg/dbschema/information_schema/view"
-	"github.com/lawrencejones/pg2sink/pkg/util"
+	_ "github.com/lawrencejones/pgsink/pkg/dbschema/information_schema/model"
+	isv "github.com/lawrencejones/pgsink/pkg/dbschema/information_schema/view"
+	"github.com/lawrencejones/pgsink/pkg/util"
 
 	"github.com/alecthomas/kingpin"
 	. "github.com/go-jet/jet/postgres"

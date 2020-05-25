@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
-	"github.com/lawrencejones/pg2sink/pkg/sinks/generic"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
 	. "github.com/onsi/ginkgo"
 	_ "github.com/onsi/ginkgo/extensions/table"

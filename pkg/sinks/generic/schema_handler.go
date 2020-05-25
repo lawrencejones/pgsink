@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 
 	kitlog "github.com/go-kit/kit/log"
 )

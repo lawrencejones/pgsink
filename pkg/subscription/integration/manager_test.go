@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lawrencejones/pg2sink/pkg/dbtest"
-	"github.com/lawrencejones/pg2sink/pkg/subscription"
+	"github.com/lawrencejones/pgsink/pkg/dbtest"
+	"github.com/lawrencejones/pgsink/pkg/subscription"
 
 	_ "github.com/jackc/pgx/v4/stdlib"
 

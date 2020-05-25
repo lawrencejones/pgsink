@@ -6,7 +6,7 @@ import (
 
 	bq "cloud.google.com/go/bigquery"
 
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 	. "github.com/onsi/ginkgo"
 	_ "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"

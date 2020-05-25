@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/lawrencejones/pg2sink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 )
 
 // Inserter provides a synchronous interface around inserting data into a sink

@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/lawrencejones/pg2sink/cmd/pg2sink/cmd"
+	"github.com/lawrencejones/pgsink/cmd/pgsink/cmd"
 )
 
 func main() {
