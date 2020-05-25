@@ -6,33 +6,29 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
+	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
+	. "github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/table"
 
 	"github.com/alecthomas/kingpin"
+	. "github.com/go-jet/jet/postgres"
 	kitlog "github.com/go-kit/kit/log"
 )
 
 type WorkerOptions struct {
-	PollInterval    time.Duration
-	SnapshotTimeout time.Duration
-	BatchLimit      int
-	BufferSize      int
+	SubscriptionID string // provided by other flags
+	PollInterval   time.Duration
 }
 
 func (opt *WorkerOptions) Bind(cmd *kingpin.CmdClause, prefix string) *WorkerOptions {
 	cmd.Flag(fmt.Sprintf("%spoll-interval", prefix), "Interval to check for new import jobs").Default("15s").DurationVar(&opt.PollInterval)
-	cmd.Flag(fmt.Sprintf("%ssnapshot-timeout", prefix), "Hold snapshots for no longer than this").Default("1m").DurationVar(&opt.SnapshotTimeout)
-	cmd.Flag(fmt.Sprintf("%sbatch-limit", prefix), "Max rows to pull from database per import iteration").Default("5000").IntVar(&opt.BatchLimit)
-	cmd.Flag(fmt.Sprintf("%sbuffer-size", prefix), "Channel buffer between Postgres and the sink").Default("5000").IntVar(&opt.BufferSize)
 
 	return opt
 }
 
-func NewWorker(logger kitlog.Logger, db *sql.DB, sink generic.Sink, opts WorkerOptions) *Worker {
+func NewWorker(logger kitlog.Logger, db *sql.DB, opts WorkerOptions) *Worker {
 	return &Worker{
 		logger:   logger,
 		db:       db,
-		sink:     sink,
 		shutdown: make(chan struct{}),
 		done:     make(chan error, 1), // buffered by 1, to ensure progress when reporting an error
 		opts:     opts,
@@ -42,20 +38,47 @@ func NewWorker(logger kitlog.Logger, db *sql.DB, sink generic.Sink, opts WorkerO
 type Worker struct {
 	logger   kitlog.Logger
 	db       *sql.DB
-	sink     generic.Sink
 	shutdown chan struct{}
 	done     chan error
 	opts     WorkerOptions
 }
 
-func (w Worker) Start(ctx context.Context) error {
+// Start begin working the queue, using the given Importer to process jobs
+func (w Worker) Start(ctx context.Context, importer Importer) error {
 	defer func() {
 		close(w.done)
 	}()
 
 	w.logger.Log("event", "start", "msg", "starting worker loop")
 	for {
-		// work
+		job, err := w.AcquireAndWork(ctx, importer)
+
+		// Each combination of job and err being nil should be handled differently. Use a
+		// switch to visually warn readers to pay attention to those differences.
+		switch {
+		case err == nil && job == nil:
+			w.logger.Log("event", "job_not_found", "msg", "no jobs available for working, pausing")
+
+		case err == nil && job != nil:
+			w.logger.Log("event", "job_worked", "msg", "job worked, checking for more work")
+
+		// Log whenever we receive an error, but also activate the next case
+		case err != nil:
+			w.logger.Log("event", "job_worked_error", "error", err, "msg", "failed to work job")
+			if job != nil {
+				if err := w.setError(ctx, *job, err); err != nil {
+					w.logger.Log("event", "job_set_error", "error", err,
+						"msg", "found job and failed to work it, then failed to record error on job row. perhaps the database is down?")
+				}
+			}
+		}
+
+		// By default, wait our poll interval. But if we just successfully processed a job, we
+		// should try again immediately.
+		nextWorkLoopDelay := w.opts.PollInterval
+		if job != nil && err != nil {
+			nextWorkLoopDelay = time.Duration(0)
+		}
 
 		select {
 		case <-ctx.Done():
@@ -64,10 +87,68 @@ func (w Worker) Start(ctx context.Context) error {
 		case <-w.shutdown:
 			w.logger.Log("event", "shutdown", "msg", "shutdown requested, exiting")
 			return nil
-		case <-time.After(w.opts.PollInterval):
+		case <-time.After(nextWorkLoopDelay):
 			// continue
 		}
 	}
+}
+
+// AcquireAndWork finds a job and works it. The method is public to make testing easy, and
+// it should normally be called indirectly via a worker's Start method.
+func (w Worker) AcquireAndWork(ctx context.Context, importer Importer) (*model.ImportJobs, error) {
+	tx, err := w.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	defer tx.Rollback() // no-op if committed
+
+	job, err := w.acquire(ctx, tx)
+	if job == nil || err != nil {
+		return job, err
+	}
+
+	if err := importer.Do(ctx, w.logger, tx, *job); err != nil {
+		return job, err
+	}
+
+	return job, tx.Commit()
+}
+
+func (w Worker) acquire(ctx context.Context, tx *sql.Tx) (*model.ImportJobs, error) {
+	// Each import worker locks an import_jobs row while that job is being processed. This
+	// allows running concurrent workers without doubly running the jobs.
+	stmt := ImportJobs.
+		SELECT(ImportJobs.AllColumns).
+		FOR(UPDATE().SKIP_LOCKED()). // conflict against any other workers
+		WHERE(
+			ImportJobs.SubscriptionID.EQ(String(w.opts.SubscriptionID)).
+				AND(ImportJobs.CompletedAt.IS_NULL()). // incomplete
+				AND(ImportJobs.ExpiredAt.IS_NULL()),   // still active
+		).
+		ORDER_BY(ImportJobs.Error.IS_NULL().DESC()).
+		LIMIT(1)
+
+	var jobs []model.ImportJobs
+	if err := stmt.QueryContext(ctx, tx, &jobs); err != nil {
+		return nil, err
+	}
+
+	if len(jobs) == 0 {
+		return nil, nil
+	}
+
+	return &jobs[0], nil
+}
+
+func (w Worker) setError(ctx context.Context, job model.ImportJobs, workErr error) error {
+	stmt := ImportJobs.
+		UPDATE(ImportJobs.Error).
+		SET(workErr.Error()).
+		WHERE(ImportJobs.ID.EQ(Int(job.ID)))
+
+	_, err := stmt.ExecContext(ctx, w.db)
+	return err
 }
 
 func (w Worker) Shutdown(ctx context.Context) error {
