@@ -46,12 +46,24 @@ func Configure(opts ...func(*DB)) *DB {
 	return dbtest
 }
 
+// tryClose attempts to close a pgx connection. Tests might race our clean-up, so protect
+// against any panics that come from doubly closing the connection.
+func tryClose(ctx context.Context, conn *pgx.Conn) {
+	defer func() {
+		recover()
+	}()
+
+	conn.Close(ctx)
+}
+
 func (d *DB) Setup(ctx context.Context, timeout time.Duration) (context.Context, func()) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 
 	// Close any connections that we explicitly acquired
-	for _, conn := range d.connections {
-		Expect(conn.Close(ctx)).To(Succeed())
+	for len(d.connections) > 0 {
+		var conn *pgx.Conn
+		conn, d.connections = d.connections[0], d.connections[1:]
+		tryClose(ctx, conn)
 	}
 
 	// Force close the connection pools, which shouldn't have any connections still open
