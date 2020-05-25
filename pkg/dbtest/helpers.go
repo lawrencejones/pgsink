@@ -32,9 +32,14 @@ type DB struct {
 	cleanFuncs  []func(context.Context, *sql.DB, *sql.DB) (sql.Result, error)
 }
 
+// defaultOptions is appended to all user supplied options
+var defaultOptions = []func(*DB){
+	WithTruncate("pgsink.import_jobs"),
+}
+
 func Configure(opts ...func(*DB)) *DB {
 	dbtest := &DB{}
-	for _, opt := range opts {
+	for _, opt := range append(defaultOptions, opts...) {
 		opt(dbtest)
 	}
 
@@ -169,6 +174,15 @@ func WithSchema(name string) func(*DB) {
 			},
 		)(db)
 	}
+}
+
+func WithTruncate(name string) func(*DB) {
+	return WithLifecycle(
+		nil, // allow the test to create data
+		func(ctx context.Context, db, _ *sql.DB) (sql.Result, error) {
+			return db.ExecContext(ctx, fmt.Sprintf(`truncate %s;`, name))
+		},
+	)
 }
 
 func WithTable(name string, fieldDefinitions ...string) func(*DB) {
