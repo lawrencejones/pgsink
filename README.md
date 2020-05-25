@@ -4,33 +4,31 @@
 
 > **Draft docs can be seen at: [docs](https://github.com/lawrencejones/pgsink/tree/docs/docs)**
 
-[debezium]: https://github.com/debezium/debezium
-[dblog]: https://netflixtechblog.com/dblog-a-generic-change-data-capture-framework-69351fb9099b
-
 pgsink is a Postgres change-capture device that supports high-throughput and
 low-latency capture to a variety of sinks.
 
-You'd use this project if your primary data-store is Postgres and you want a
-stress-free, quick-to-setup and easy-to-operate way of replicating your data to
-other stores such as BigQuery or Elasticsearch, that will work with any size
+You'd use this project if your primary database is Postgres and you want a
+stress-free, quick-to-setup and easy-to-operate tool to replicate your data to
+other stores such as BigQuery or Elasticsearch, which works with any size
 Postgres database.
 
 ## Similar projects
 
-There are a lot of change-capture projects available, and many support
-Postgres.
+[debezium]: https://github.com/debezium/debezium
+[dblog]: https://netflixtechblog.com/dblog-a-generic-change-data-capture-framework-69351fb9099b
 
-As an example, we are similar to [debezium][debezium] in performance and
-durability goals, but have a much simpler setup (no Kafka required). We also
+There are many change-capture projects out there, and several support Postgres.
+
+As an example, pgsink is similar to [debezium][debezium] in performance and
+durability goals, but with a much simpler setup (no Kafka required). We also
 bear similarity to Netflix's [dblog][dblog], with the benefit of being
 open-source and available for use.
 
-In these comparisons, pgsink wins with a much simpler setup- there's no Kafka
-involved, or any secondary data-sources. We also benefit from the sole focus on
-Postgres over many upstream sources, as we can optimise our data-access pattern
-for large, high-transaction volume databases. Examples of this are keeping
-transactions short to aid vacuums, and traversing tables using efficient
-indexes.
+We win in these comparisons when you want a simple, no additional dependencies
+setup. We also benefit from the sole focus on Postgres instead of many upstream
+sources, as we can optimise our data-access pattern for large, high-transaction
+volume Postgres databases. Examples of this are keeping transactions short to
+help vacuums, and traversing tables using efficient indexes.
 
 This makes pgsink a much safer bet for people managing production critical
 Postgres databases.
