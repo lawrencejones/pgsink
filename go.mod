@@ -20,15 +20,13 @@ require (
 	github.com/lib/pq v1.3.0 // indirect
 	github.com/linkedin/goavro/v2 v2.9.7
 	github.com/oklog/run v1.1.0
-	github.com/onsi/ginkgo v1.12.0
-	github.com/onsi/gomega v1.10.0
+	github.com/onsi/ginkgo v1.12.3
+	github.com/onsi/gomega v1.10.1
 	github.com/pkg/errors v0.8.1
 	github.com/pressly/goose v2.6.0+incompatible
 	github.com/prometheus/client_golang v1.6.0
 	github.com/shopspring/decimal v0.0.0-20191130220710-360f2bc03045 // indirect
 	go.opencensus.io v0.22.2
-	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b // indirect
 	google.golang.org/api v0.22.0
 	google.golang.org/appengine v1.6.5 // indirect
-	gopkg.in/yaml.v2 v2.2.7 // indirect
 )
