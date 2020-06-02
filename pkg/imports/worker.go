@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/stdlib"
 	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
 	. "github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/table"
 
@@ -96,12 +98,21 @@ func (w Worker) Start(ctx context.Context, importer Importer) error {
 // AcquireAndWork finds a job and works it. The method is public to make testing easy, and
 // it should normally be called indirectly via a worker's Start method.
 func (w Worker) AcquireAndWork(ctx context.Context, importer Importer) (*model.ImportJobs, error) {
-	tx, err := w.db.BeginTx(ctx, nil)
+	// Imports pull a lot of data from the database and want to do it quickly. pgx is much
+	// more efficient than the standard driver, and allow for more complex manipulation of
+	// types. For this reason, we use pgx connections for import work.
+	var conn *pgx.Conn
+	conn, err := stdlib.AcquireConn(w.db)
 	if err != nil {
 		return nil, err
 	}
+	defer stdlib.ReleaseConn(w.db, conn)
 
-	defer tx.Rollback() // no-op if committed
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx) // no-op if committed
 
 	job, err := w.acquire(ctx, tx)
 	if job == nil || err != nil {
@@ -112,14 +123,14 @@ func (w Worker) AcquireAndWork(ctx context.Context, importer Importer) (*model.I
 		return job, err
 	}
 
-	return job, tx.Commit()
+	return job, tx.Commit(ctx)
 }
 
-func (w Worker) acquire(ctx context.Context, tx *sql.Tx) (*model.ImportJobs, error) {
+func (w Worker) acquire(ctx context.Context, tx pgx.Tx) (*model.ImportJobs, error) {
 	// Each import worker locks an import_jobs row while that job is being processed. This
 	// allows running concurrent workers without doubly running the jobs.
-	stmt := ImportJobs.
-		SELECT(ImportJobs.AllColumns).
+	query, args := ImportJobs.
+		SELECT(ImportJobs.ID, ImportJobs.SubscriptionID, ImportJobs.TableName, ImportJobs.Cursor).
 		FOR(UPDATE().SKIP_LOCKED()). // conflict against any other workers
 		WHERE(
 			ImportJobs.SubscriptionID.EQ(String(w.opts.SubscriptionID)).
@@ -127,18 +138,20 @@ func (w Worker) acquire(ctx context.Context, tx *sql.Tx) (*model.ImportJobs, err
 				AND(ImportJobs.ExpiredAt.IS_NULL()),   // still active
 		).
 		ORDER_BY(ImportJobs.Error.IS_NULL().DESC()).
-		LIMIT(1)
+		LIMIT(1).
+		Sql()
 
-	var jobs []model.ImportJobs
-	if err := stmt.QueryContext(ctx, tx, &jobs); err != nil {
+	var job model.ImportJobs
+	if err := tx.QueryRow(ctx, query, args...).Scan(&job.ID, &job.SubscriptionID, &job.TableName, &job.Cursor); err != nil {
+		// It's expected that sometimes we'll have worked everything, and no job will remain
+		if err == pgx.ErrNoRows {
+			err = nil
+		}
+
 		return nil, err
 	}
 
-	if len(jobs) == 0 {
-		return nil, nil
-	}
-
-	return &jobs[0], nil
+	return &job, nil
 }
 
 func (w Worker) setError(ctx context.Context, job model.ImportJobs, workErr error) error {

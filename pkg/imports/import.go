@@ -2,10 +2,10 @@ package imports
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v4"
 	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
@@ -28,7 +28,7 @@ func (opt *ImporterOptions) Bind(cmd *kingpin.CmdClause, prefix string) *Importe
 }
 
 type Importer interface {
-	Do(ctx context.Context, logger kitlog.Logger, tx *sql.Tx, job model.ImportJobs) error
+	Do(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, job model.ImportJobs) error
 }
 
 func NewImporter(sink generic.Sink, opts ImporterOptions) Importer {
@@ -44,6 +44,17 @@ type importer struct {
 }
 
 // Import works an import job.
-func (i importer) Do(ctx context.Context, logger kitlog.Logger, tx *sql.Tx, job model.ImportJobs) error {
+func (i importer) Do(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, job model.ImportJobs) error {
 	return nil // TODO
+}
+
+// Import is built for each job in the database, having resolved contextual information
+// that can help run the job from the database whenever the job was enqueued.
+type Import struct {
+	TableName  string
+	PrimaryKey string
+	// PrimaryKeyScanner logical.ValueScanner
+	// Relation          *logical.Relation
+	Scanners []interface{}
+	Cursor   interface{}
 }
