@@ -11,8 +11,6 @@ import (
 	"github.com/lawrencejones/pgsink/pkg/imports"
 
 	. "github.com/go-jet/jet/postgres"
-	kitlog "github.com/go-kit/kit/log"
-	"github.com/jackc/pgx/v4"
 	_ "github.com/jackc/pgx/v4/stdlib"
 
 	. "github.com/onsi/ginkgo"
@@ -20,33 +18,6 @@ import (
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
 )
-
-type importerFunc func(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, job model.ImportJobs) error
-
-func (f importerFunc) Do(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, job model.ImportJobs) error {
-	return f(ctx, logger, tx, job)
-}
-
-func noopImporter(err error) importerFunc {
-	return importerFunc(func(_ context.Context, _ kitlog.Logger, _ pgx.Tx, _ model.ImportJobs) error {
-		return err
-	})
-}
-
-func waitImporter(ctx context.Context, done chan struct{}, err error) (chan model.ImportJobs, importerFunc) {
-	acquired := make(chan model.ImportJobs, 1)
-	return acquired, importerFunc(func(_ context.Context, _ kitlog.Logger, _ pgx.Tx, job model.ImportJobs) error {
-		acquired <- job
-		close(acquired)
-
-		select {
-		case <-ctx.Done():
-		case <-done:
-		}
-
-		return err
-	})
-}
 
 var _ = Describe("Worker", func() {
 	var (
