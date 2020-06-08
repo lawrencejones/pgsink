@@ -181,6 +181,8 @@ github.com/jackc/pgconn v0.0.0-20190831204454-2fabfa3c18b7/go.mod h1:ZJKsE/KZfsU
 github.com/jackc/pgconn v1.1.0/go.mod h1:GgY/Lbj1VonNaVdNUHs9AwWom3yP2eymFQ1C8z9r/Lk=
 github.com/jackc/pgconn v1.5.0 h1:oFSOilzIZkyg787M1fEmyMfOUUvwj0daqYMfaWwNL4o=
 github.com/jackc/pgconn v1.5.0/go.mod h1:QeD3lBfpTFe8WUnPZWN5KY/mB8FGMIYRdd8P8Jr0fAI=
+github.com/jackc/pgconn v1.6.0 h1:8FiBxMxS/Z0eQ9BeE1HhL6pzPL1R5x+ZuQ+T86WgZ4I=
+github.com/jackc/pgconn v1.6.0/go.mod h1:yeseQo4xhQbgyJs2c87RAXOH2i624N0Fh1KSPJya7qo=
 github.com/jackc/pgio v1.0.0 h1:g12B9UwVnzGhueNavwioyEEpAmqMe1E/BN9ES+8ovkE=
 github.com/jackc/pgio v1.0.0/go.mod h1:oP+2QK2wFfUWgr+gxjoBH9KGBb31Eio69xUb0w5bYf8=
 github.com/jackc/pglogrepl v0.0.0-20200309144228-32ec418076b3 h1:sbdZjCTMORmMnnkTGIWk1MG8u9C4AIQFvungKciPdJM=
