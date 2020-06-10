@@ -58,8 +58,8 @@ pgsink will work with this database: try `pgsink --sink=file --decode-only`.
 
 ### Database migrations
 
-We use [goose](github.com/pressly/goose) to run database migrations. Create new
-migrations like so:
+We use [goose](https://github.com/pressly/goose) to run database migrations. Create
+new migrations like so:
 
 ```console
 $ goose -dir pkg/migration create create_import_jobs_table go
