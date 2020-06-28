@@ -55,6 +55,7 @@ var (
 	subscriptionName = app.Flag("subscription-name", "Subscription name, matches Postgres publication").Default("pgsink").String()
 
 	stream           = app.Command("stream", "Stream changes into sink")
+	streamConsume    = stream.Flag("consume", "Consume messages from the subscription").Default("true").Bool()
 	streamDecodeOnly = stream.Flag("decode-only", "Print messages only, ignoring sink").Default("false").Bool()
 
 	streamOptions = new(subscription.StreamOptions).Bind(stream, "")
@@ -249,24 +250,24 @@ func Run() (err error) {
 			return err
 		}
 
-		{
+		repconn, err := pgx.ConnectConfig(ctx, repCfg)
+		if err != nil {
+			kingpin.Fatalf("failed to open replication connection: %v", err)
+		}
+
+		// Initialise our subscription, a process that requires both a replication and a
+		// standard connection. We'll reuse the replication connection to power the stream.
+		sub, err = subscription.Create(
+			ctx, logger, db, repconn, subscription.SubscriptionOptions{
+				Name: *subscriptionName,
+			})
+
+		if err != nil {
+			return fmt.Errorf("failed to create subscription: %w", err)
+		}
+
+		if *streamConsume {
 			logger := kitlog.With(logger, "component", "subscription")
-
-			repconn, err := pgx.ConnectConfig(ctx, repCfg)
-			if err != nil {
-				kingpin.Fatalf("failed to open replication connection: %v", err)
-			}
-
-			// Initialise our subscription, a process that requires both a replication and a
-			// standard connection. We'll reuse the replication connection to power the stream.
-			sub, err = subscription.Create(
-				ctx, logger, db, repconn, subscription.SubscriptionOptions{
-					Name: *subscriptionName,
-				})
-
-			if err != nil {
-				return fmt.Errorf("failed to create subscription: %w", err)
-			}
 
 			stream, err = sub.Start(ctx, logger, repconn, *streamOptions)
 			if err != nil {
