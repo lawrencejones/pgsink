@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/stdlib"
 	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
 	. "github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/table"
 
 	"github.com/alecthomas/kingpin"
 	. "github.com/go-jet/jet/postgres"
 	kitlog "github.com/go-kit/kit/log"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/stdlib"
 )
 
 type WorkerOptions struct {
