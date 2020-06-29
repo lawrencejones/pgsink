@@ -31,4 +31,5 @@ require (
 	google.golang.org/api v0.22.0
 	google.golang.org/appengine v1.6.5 // indirect
 	gopkg.in/yaml.v2 v2.2.7 // indirect
+	pgregory.net/rapid v0.3.8 // indirect
 )

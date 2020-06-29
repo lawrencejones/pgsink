@@ -15,6 +15,13 @@ type Inserter interface {
 	Insert(context.Context, []*changelog.Modification) (count int, lsn *uint64, err error)
 }
 
+// InserterFunc can create an Inserter from an anonymous function.
+type InserterFunc func(context.Context, []*changelog.Modification) (count int, lsn *uint64, err error)
+
+func (i InserterFunc) Insert(ctx context.Context, modifications []*changelog.Modification) (count int, lsn *uint64, err error) {
+	return i(ctx, modifications)
+}
+
 // MemoryInserter is a reference implementation of an inserter, storing modifications in
 // an in-memory buffer. It satisfies all requirements of an inserter, including
 // race-safety.

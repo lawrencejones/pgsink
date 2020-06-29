@@ -32,21 +32,38 @@ type DB struct {
 	cleanFuncs  []func(context.Context, *sql.DB, *sql.DB) (sql.Result, error)
 }
 
+// defaultOptions is appended to all user supplied options
+var defaultOptions = []func(*DB){
+	WithTruncate("pgsink.import_jobs"),
+}
+
 func Configure(opts ...func(*DB)) *DB {
 	dbtest := &DB{}
-	for _, opt := range opts {
+	for _, opt := range append(defaultOptions, opts...) {
 		opt(dbtest)
 	}
 
 	return dbtest
 }
 
+// tryClose attempts to close a pgx connection. Tests might race our clean-up, so protect
+// against any panics that come from doubly closing the connection.
+func tryClose(ctx context.Context, conn *pgx.Conn) {
+	defer func() {
+		recover()
+	}()
+
+	conn.Close(ctx)
+}
+
 func (d *DB) Setup(ctx context.Context, timeout time.Duration) (context.Context, func()) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 
 	// Close any connections that we explicitly acquired
-	for _, conn := range d.connections {
-		Expect(conn.Close(ctx)).To(Succeed())
+	for len(d.connections) > 0 {
+		var conn *pgx.Conn
+		conn, d.connections = d.connections[0], d.connections[1:]
+		tryClose(ctx, conn)
 	}
 
 	// Force close the connection pools, which shouldn't have any connections still open
@@ -169,6 +186,15 @@ func WithSchema(name string) func(*DB) {
 			},
 		)(db)
 	}
+}
+
+func WithTruncate(name string) func(*DB) {
+	return WithLifecycle(
+		nil, // allow the test to create data
+		func(ctx context.Context, db, _ *sql.DB) (sql.Result, error) {
+			return db.ExecContext(ctx, fmt.Sprintf(`truncate %s;`, name))
+		},
+	)
 }
 
 func WithTable(name string, fieldDefinitions ...string) func(*DB) {

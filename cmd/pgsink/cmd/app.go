@@ -55,6 +55,7 @@ var (
 	subscriptionName = app.Flag("subscription-name", "Subscription name, matches Postgres publication").Default("pgsink").String()
 
 	stream           = app.Command("stream", "Stream changes into sink")
+	streamConsume    = stream.Flag("consume", "Consume messages from the subscription").Default("true").Bool()
 	streamDecodeOnly = stream.Flag("decode-only", "Print messages only, ignoring sink").Default("false").Bool()
 
 	streamOptions = new(subscription.StreamOptions).Bind(stream, "")
@@ -68,6 +69,10 @@ var (
 
 	streamImportManager        = stream.Flag("import-manager", "Schedule imports for subscribed tables that aren't yet imported").Default("true").Bool()
 	streamImportManagerOptions = new(imports.ManagerOptions).Bind(stream, "import-manager.")
+
+	streamImportWorkerCount   = stream.Flag("import-worker-count", "Number of concurrent import workers").Default("1").Int()
+	streamImportWorkerOptions = new(imports.WorkerOptions).Bind(stream, "import-worker.")
+	streamImporterOptions     = new(imports.ImporterOptions).Bind(stream, "import-worker.")
 )
 
 // SilentError should be returned when the command wants to skip all logging of the error
@@ -245,24 +250,24 @@ func Run() (err error) {
 			return err
 		}
 
-		{
+		repconn, err := pgx.ConnectConfig(ctx, repCfg)
+		if err != nil {
+			kingpin.Fatalf("failed to open replication connection: %v", err)
+		}
+
+		// Initialise our subscription, a process that requires both a replication and a
+		// standard connection. We'll reuse the replication connection to power the stream.
+		sub, err = subscription.Create(
+			ctx, logger, db, repconn, subscription.SubscriptionOptions{
+				Name: *subscriptionName,
+			})
+
+		if err != nil {
+			return fmt.Errorf("failed to create subscription: %w", err)
+		}
+
+		if *streamConsume {
 			logger := kitlog.With(logger, "component", "subscription")
-
-			repconn, err := pgx.ConnectConfig(ctx, repCfg)
-			if err != nil {
-				kingpin.Fatalf("failed to open replication connection: %v", err)
-			}
-
-			// Initialise our subscription, a process that requires both a replication and a
-			// standard connection. We'll reuse the replication connection to power the stream.
-			sub, err = subscription.Create(
-				ctx, logger, db, repconn, subscription.SubscriptionOptions{
-					Name: *subscriptionName,
-				})
-
-			if err != nil {
-				return fmt.Errorf("failed to create subscription: %w", err)
-			}
 
 			stream, err = sub.Start(ctx, logger, repconn, *streamOptions)
 			if err != nil {
@@ -318,6 +323,25 @@ func Run() (err error) {
 				},
 				func(error) {
 					manager.Shutdown(ctx)
+				},
+			)
+		}
+
+		for idx := 0; idx < *streamImportWorkerCount; idx++ {
+			logger := kitlog.With(logger, "component", "import_worker", "worker_id", idx)
+
+			// Assign the subscription ID from what we generated on boot
+			streamImportWorkerOptions.SubscriptionID = sub.ID
+
+			importer := imports.NewImporter(sink, *streamImporterOptions)
+			worker := imports.NewWorker(logger, db, *streamImportWorkerOptions)
+
+			g.Add(
+				func() error {
+					return worker.Start(ctx, importer)
+				},
+				func(error) {
+					worker.Shutdown(ctx)
 				},
 			)
 		}
