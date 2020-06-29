@@ -330,6 +330,9 @@ func Run() (err error) {
 		for idx := 0; idx < *streamImportWorkerCount; idx++ {
 			logger := kitlog.With(logger, "component", "import_worker", "worker_id", idx)
 
+			// Assign the subscription ID from what we generated on boot
+			streamImportWorkerOptions.SubscriptionID = sub.ID
+
 			importer := imports.NewImporter(sink, *streamImporterOptions)
 			worker := imports.NewWorker(logger, db, *streamImportWorkerOptions)
 
