@@ -24,7 +24,7 @@ require (
 	github.com/onsi/gomega v1.10.0
 	github.com/pkg/errors v0.8.1
 	github.com/pressly/goose v2.6.0+incompatible
-	github.com/prometheus/client_golang v1.6.0
+	github.com/prometheus/client_golang v1.7.1
 	go.opencensus.io v0.22.2
 	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b // indirect
 	google.golang.org/api v0.22.0
