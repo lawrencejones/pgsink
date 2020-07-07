@@ -20,6 +20,6 @@ RUN set -x \
 # release
 ################################################################################
 
-FROM ubuntu:bionic-20200403 AS release
+FROM ubuntu:bionic-20200630 AS release
 COPY --from=build /project/bin/* /usr/local/bin/
 CMD ["/bin/bash"]
