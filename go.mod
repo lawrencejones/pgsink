@@ -15,7 +15,7 @@ require (
 	github.com/jackc/pgconn v1.6.2
 	github.com/jackc/pglogrepl v0.0.0-20200309144228-32ec418076b3
 	github.com/jackc/pgproto3/v2 v2.0.2
-	github.com/jackc/pgtype v1.4.1
+	github.com/jackc/pgtype v1.4.2
 	github.com/jackc/pgx v3.6.2+incompatible // indirect
 	github.com/jackc/pgx/v4 v4.7.2
 	github.com/linkedin/goavro/v2 v2.9.8
