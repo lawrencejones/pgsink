@@ -12,7 +12,7 @@ require (
 	github.com/go-jet/jet v2.2.0+incompatible
 	github.com/go-kit/kit v0.10.0
 	github.com/google/uuid v1.1.1
-	github.com/jackc/pgconn v1.6.3
+	github.com/jackc/pgconn v1.6.4
 	github.com/jackc/pglogrepl v0.0.0-20200309144228-32ec418076b3
 	github.com/jackc/pgproto3/v2 v2.0.2
 	github.com/jackc/pgtype v1.4.2
