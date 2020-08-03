@@ -17,7 +17,7 @@ require (
 	github.com/jackc/pgproto3/v2 v2.0.2
 	github.com/jackc/pgtype v1.4.2
 	github.com/jackc/pgx v3.6.2+incompatible // indirect
-	github.com/jackc/pgx/v4 v4.8.0
+	github.com/jackc/pgx/v4 v4.8.1
 	github.com/linkedin/goavro/v2 v2.9.8
 	github.com/oklog/run v1.1.0
 	github.com/onsi/ginkgo v1.12.0
