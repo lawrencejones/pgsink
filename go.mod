@@ -14,7 +14,7 @@ require (
 	github.com/google/uuid v1.1.2
 	github.com/jackc/pgconn v1.6.4
 	github.com/jackc/pglogrepl v0.0.0-20200309144228-32ec418076b3
-	github.com/jackc/pgproto3/v2 v2.0.4
+	github.com/jackc/pgproto3/v2 v2.0.5
 	github.com/jackc/pgtype v1.4.2
 	github.com/jackc/pgx v3.6.2+incompatible // indirect
 	github.com/jackc/pgx/v4 v4.8.1
