@@ -12,12 +12,12 @@ require (
 	github.com/go-jet/jet v2.3.0+incompatible
 	github.com/go-kit/kit v0.10.0
 	github.com/google/uuid v1.1.2
-	github.com/jackc/pgconn v1.7.0
+	github.com/jackc/pgconn v1.7.1
 	github.com/jackc/pglogrepl v0.0.0-20200309144228-32ec418076b3
 	github.com/jackc/pgproto3/v2 v2.0.5
-	github.com/jackc/pgtype v1.5.0
+	github.com/jackc/pgtype v1.6.1
 	github.com/jackc/pgx v3.6.2+incompatible // indirect
-	github.com/jackc/pgx/v4 v4.9.0
+	github.com/jackc/pgx/v4 v4.9.1
 	github.com/linkedin/goavro/v2 v2.9.8
 	github.com/oklog/run v1.1.0
 	github.com/onsi/ginkgo v1.12.0
