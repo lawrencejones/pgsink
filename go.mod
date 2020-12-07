@@ -3,7 +3,7 @@ module github.com/lawrencejones/pgsink
 go 1.13
 
 require (
-	cloud.google.com/go v0.38.0
+	cloud.google.com/go v0.72.0
 	contrib.go.opencensus.io/exporter/jaeger v0.2.0
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
@@ -25,10 +25,8 @@ require (
 	github.com/pkg/errors v0.8.1
 	github.com/pressly/goose v2.6.0+incompatible
 	github.com/prometheus/client_golang v1.6.0
-	go.opencensus.io v0.22.2
-	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b // indirect
-	google.golang.org/api v0.22.0
-	google.golang.org/appengine v1.6.5 // indirect
+	go.opencensus.io v0.22.5
+	google.golang.org/api v0.36.0
 	gopkg.in/yaml.v2 v2.2.7 // indirect
 	pgregory.net/rapid v0.3.8 // indirect
 )
