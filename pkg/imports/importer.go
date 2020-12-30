@@ -173,7 +173,8 @@ func (i importer) scanBatch(ctx context.Context, logger kitlog.Logger, tx pgx.Tx
 		)
 	)
 
-	rows, err := tx.Query(ctx, cfg.buildQuery(i.opts.BatchLimit))
+	query, args := cfg.buildQuery(i.opts.BatchLimit)
+	rows, err := tx.Query(ctx, query, args...)
 	if err != nil {
 		return fail(err, "failed to query table")
 	}

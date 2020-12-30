@@ -157,19 +157,21 @@ func buildRelation(ctx context.Context, tx querier, tableName, primaryKeyColumn 
 // buildQuery creates a query string for the given relation, with an optional cursor.
 // Prepended to the columns is now(), which enables us to timestamp our imported rows to
 // the database time.
-func (i Import) buildQuery(limit int) string {
+func (i Import) buildQuery(limit int) (string, []interface{}) {
 	columnNames := make([]string, len(i.Relation.Columns))
 	for idx, column := range i.Relation.Columns {
 		columnNames[idx] = column.Name
 	}
 
+	var args []interface{}
 	query := fmt.Sprintf(`select now(), %s from %s`, strings.Join(columnNames, ", "), i.Relation.String())
 	if i.Cursor != nil {
 		query += fmt.Sprintf(` where %s > $1`, i.PrimaryKey)
+		args = append(args, i.PrimaryKey)
 	}
 	query += fmt.Sprintf(` order by %s limit %d`, i.PrimaryKey, limit)
 
-	return query
+	return query, args
 }
 
 type multiplePrimaryKeysError []string
