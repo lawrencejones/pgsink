@@ -154,24 +154,26 @@ func buildRelation(ctx context.Context, tx querier, tableName, primaryKeyColumn 
 	return relation, nil
 }
 
-// buildQuery creates a query string for the given relation, with an optional cursor.
+// buildQuery creates a query string and arguments for the configured relation. It knows
+// how to build the query to incorporate the import cursor, and to provide the cursor
+// value as an argument.
+//
 // Prepended to the columns is now(), which enables us to timestamp our imported rows to
 // the database time.
-func (i Import) buildQuery(limit int) (string, []interface{}) {
+func (i Import) buildQuery(limit int) (query string, args []interface{}) {
 	columnNames := make([]string, len(i.Relation.Columns))
 	for idx, column := range i.Relation.Columns {
 		columnNames[idx] = column.Name
 	}
 
-	var args []interface{}
-	query := fmt.Sprintf(`select now(), %s from %s`, strings.Join(columnNames, ", "), i.Relation.String())
+	query = fmt.Sprintf(`SELECT NOW(), %s FROM %s`, strings.Join(columnNames, ", "), i.Relation.String())
 	if i.Cursor != nil {
-		query += fmt.Sprintf(` where %s > $1`, i.PrimaryKey)
-		args = append(args, i.PrimaryKey)
+		query += fmt.Sprintf(` WHERE %s > $1`, i.PrimaryKey)
+		args = append(args, i.Cursor)
 	}
 	query += fmt.Sprintf(` order by %s limit %d`, i.PrimaryKey, limit)
 
-	return query, args
+	return
 }
 
 type multiplePrimaryKeysError []string

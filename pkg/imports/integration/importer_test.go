@@ -142,8 +142,8 @@ var _ = Describe("Importer", func() {
 		JustBeforeEach(func() {
 			job = insert(job)
 
-			tx, err := db.GetConnection(ctx).Begin(ctx)
-			Expect(err).NotTo(HaveOccurred())
+			tx, txErr := db.GetConnection(ctx).Begin(ctx)
+			Expect(txErr).NotTo(HaveOccurred())
 
 			// Run the import, then commit the transaction. The importer interface leaves the
 			// transaction uncommitted to allow the caller to control whether a jobs work should
@@ -268,6 +268,23 @@ var _ = Describe("Importer", func() {
 					ModificationMatcher(tableOneName).WithAfter(
 						MatchKeys(IgnoreMissing, Keys{
 							"id": BeEquivalentTo(int64(1)),
+						}),
+					),
+				))
+			})
+
+			It("publishes all rows from the given cursor", func() {
+				Expect(store.modifications).To(ConsistOf(
+					ModificationMatcher(tableOneName).WithBefore(BeNil()).WithAfter(
+						MatchAllKeys(Keys{
+							"id":  BeAssignableToTypeOf(int64(0)),
+							"msg": Equal("woof"),
+						}),
+					),
+					ModificationMatcher(tableOneName).WithBefore(BeNil()).WithAfter(
+						MatchAllKeys(Keys{
+							"id":  BeAssignableToTypeOf(int64(0)),
+							"msg": Equal("roar"),
 						}),
 					),
 				))
