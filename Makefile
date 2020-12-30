@@ -2,38 +2,57 @@ PROG=bin/pgsink
 PROJECT=github.com/lawrencejones/pgsink
 VERSION=$(shell git rev-parse --short HEAD)-dev
 BUILD_COMMAND=go build -ldflags "-s -w -X main.Version=$(VERSION)"
-PSQL=docker-compose exec -T postgres psql
-PGDUMP=docker-compose exec -T postgres pg_dump
-DATABASE=pgsink
+DOCKER_COMPOSE=docker-compose --env-file=/dev/null
+PSQL=$(DOCKER_COMPOSE) exec -T postgres psql
+PGDUMP=$(DOCKER_COMPOSE) exec -T postgres pg_dump
 
-.PHONY: prog darwin linux createdb test clean
+# Override these for different configurations
+PGSUPERUSER ?= postgres
+PGHOST ?= localhost
+PGDATABASE ?= pgsink
+PGUSER ?= pgsink
+
+.PHONY: prog darwin linux clean
+.PHONY: migrate createdb dropdb recreatedb test docs
+
+################################################################################
+# Build
+################################################################################
 
 prog: $(PROG)
 darwin: $(PROG:=.darwin_amd64)
 linux: $(PROG:=.linux_amd64)
 
 bin/%.linux_amd64:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ cmd/$*/main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ cmd/$*/*.go
 
 bin/%.darwin_amd64:
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ cmd/$*/main.go
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(BUILD_COMMAND) -a -o $@ cmd/$*/*.go
 
 bin/%:
-	$(BUILD_COMMAND) -o $@ cmd/$*/main.go
+	$(BUILD_COMMAND) -o $@ cmd/$*/*.go
+
+clean:
+	rm -rfv $(PROG)
+
+################################################################################
+# Development
+################################################################################
+
+# Runs migrations against the ambient Postgres credentials
+migrate:
+	go run pkg/migration/run/main.go
 
 createdb:
-	$(PSQL) postgres -U postgres -c "DROP ROLE IF EXISTS $(DATABASE); CREATE ROLE $(DATABASE) WITH LOGIN CREATEDB REPLICATION;"
-	$(PSQL) postgres -U $(DATABASE) -c "CREATE DATABASE $(DATABASE);"
-	$(PSQL) $(DATABASE) -U postgres -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";'
+	$(PSQL) postgres -U postgres -c "CREATE ROLE $(PGUSER) WITH LOGIN CREATEDB REPLICATION;"
+	$(PSQL) postgres -U $(PGUSER) -c "CREATE DATABASE $(PGDATABASE);"
+	$(PSQL) $(PGDATABASE) -U postgres -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";'
 
 dropdb:
-	$(PSQL) -U postgres postgres -c "DROP DATABASE IF EXISTS $(DATABASE);"
+	$(PSQL) -U postgres postgres -c "DROP DATABASE IF EXISTS $(PGDATABASE);"
 
 recreatedb: dropdb createdb
 
 # go get -u github.com/onsi/ginkgo/ginkgo
 test:
 	PGUSER=pgsink_test PGDATABASE=pgsink_test ginkgo -r pkg
-
-clean:
-	rm -rvf $(PROG) $(PROG:%=%.darwin_amd64) $(PROG:%=%.linux_amd64)

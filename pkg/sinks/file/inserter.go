@@ -19,6 +19,12 @@ type inserter struct {
 }
 
 func (s *inserter) Insert(ctx context.Context, modifications []*changelog.Modification) (count int, lsn *uint64, err error) {
+	select {
+	case <-ctx.Done():
+		return 0, nil, ctx.Err()
+	default:
+	}
+
 	var buffer bytes.Buffer
 	for _, modification := range modifications {
 		count++

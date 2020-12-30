@@ -75,10 +75,10 @@ type sink struct {
 	schemaHandler SchemaHandler
 }
 
-// Consume runs two concurrent threads, one that continually flushes the router and
-// another that consumes changelog entries, pushing them into the router. When the
-// changelog entries have finished, we quit the insertion and wait for a final flush to
-// return.
+// Consume runs two concurrent threads, one that continually (every flush interval)
+// flushes the router and another that consumes changelog entries, pushing them into the
+// router. When the changelog entries have finished, we quit the insertion and wait for a
+// final flush to return.
 func (s *sink) Consume(ctx context.Context, entries changelog.Changelog, ack AckCallback) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -91,7 +91,7 @@ func (s *sink) Consume(ctx context.Context, entries changelog.Changelog, ack Ack
 			return s.startFlush(ctx, ack, flushDone)
 		},
 		func(err error) {
-			cancel() // flush only finished with our context, or if consume is done
+			close(flushDone) // this triggers a final flush
 		},
 	)
 
@@ -100,11 +100,7 @@ func (s *sink) Consume(ctx context.Context, entries changelog.Changelog, ack Ack
 			return s.startConsume(ctx, entries, ack)
 		},
 		func(err error) {
-			// If consume was successful, we want to tell flush to run once more before by
-			// closing the flushDone channel
-			if err == nil {
-				close(flushDone)
-			}
+			s.logger.Log("msg", "finished consume", "error", err)
 		},
 	)
 
@@ -174,8 +170,6 @@ func (s *sink) startFlush(ctx context.Context, ack AckCallback, done chan struct
 			}
 		}
 	}
-
-	return nil
 }
 
 func (s *sink) flush(ctx context.Context, ack AckCallback) error {

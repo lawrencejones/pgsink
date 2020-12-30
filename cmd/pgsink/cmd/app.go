@@ -22,10 +22,12 @@ import (
 	"github.com/lawrencejones/pgsink/pkg/subscription"
 
 	"contrib.go.opencensus.io/exporter/jaeger"
+	"contrib.go.opencensus.io/integrations/ocsql"
 	"github.com/alecthomas/kingpin"
 	"github.com/davecgh/go-spew/spew"
 	kitlog "github.com/go-kit/kit/log"
 	level "github.com/go-kit/kit/log/level"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pglogrepl"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/stdlib"
@@ -44,12 +46,6 @@ var (
 	metricsAddress      = app.Flag("metrics-address", "Address to bind HTTP metrics listener").Default("127.0.0.1").String()
 	metricsPort         = app.Flag("metrics-port", "Port to bind HTTP metrics listener").Default("9525").Uint16()
 	jaegerAgentEndpoint = app.Flag("jaeger-agent-endpoint", "Endpoint for Jaeger agent").Default("localhost:6831").String()
-
-	// Database connection paramters
-	host     = app.Flag("host", "Postgres host").Envar("PGHOST").Default("127.0.0.1").String()
-	port     = app.Flag("port", "Postgres port").Envar("PGPORT").Default("5432").Uint16()
-	database = app.Flag("database", "Postgres database name").Envar("PGDATABASE").Default("postgres").String()
-	user     = app.Flag("user", "Postgres user").Envar("PGUSER").Default("postgres").String()
 
 	// Each subscription has a name and a unique identifier
 	subscriptionName = app.Flag("subscription-name", "Subscription name, matches Postgres publication").Default("pgsink").String()
@@ -139,7 +135,7 @@ func Run() (err error) {
 		cancel()
 	}()
 
-	db, cfg, repCfg, err := buildDBConfig(fmt.Sprintf("host=%s port=%d database=%s user=%s", *host, *port, *database, *user))
+	db, cfg, repCfg, err := buildDBConfig(fmt.Sprintf(""), buildDBLogger(logger))
 	if err != nil {
 		kingpin.Fatalf("invalid postgres configuration: %v", err.Error())
 	}
@@ -194,6 +190,7 @@ func Run() (err error) {
 		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 		srv := &http.Server{Addr: fmt.Sprintf("%s:%d", *metricsAddress, *metricsPort)}
+		srv.Handler = mux
 
 		g.Add(
 			func() error {
@@ -352,7 +349,47 @@ func Run() (err error) {
 	return UsageError{fmt.Errorf("unsupported command")}
 }
 
-func buildDBConfig(base string) (db *sql.DB, cfg *pgx.ConnConfig, repCfg *pgx.ConnConfig, err error) {
+// pgxLoggerFunc wraps a function to satisfy the pgx logger interface
+type pgxLoggerFunc func(ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{})
+
+func (f pgxLoggerFunc) Log(ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{}) {
+	f(ctx, level, msg, data)
+}
+
+// buildDBLogger produces a pgx.Logger that can trace SQL operations at the connection
+// level, which is important when the ocsql package can only support commands going via
+// sql.DB.
+//
+// We also log queries, in debug mode, helping to locally reproduce issues.
+func buildDBLogger(logger kitlog.Logger) pgx.Logger {
+	return pgxLoggerFunc(func(ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{}) {
+		queryPID, _ := data["pid"].(uint32)
+		queryCommandTag, _ := data["commandTag"].(pgconn.CommandTag)
+		querySQL, _ := data["sql"].(string)
+		queryArgs, _ := data["args"].([]string)
+
+		// Alias the logger, so we can add fields to it without altering the closured logger
+		logger := logger
+
+		span := trace.FromContext(ctx)
+		if span != nil {
+			logger = kitlog.With(logger, "trace_id", span.SpanContext().TraceID)
+			span.Annotate([]trace.Attribute{
+				trace.StringAttribute("query_pid", fmt.Sprintf("%v", queryPID)),
+				trace.StringAttribute("query_command_tag", queryCommandTag.String()),
+				trace.StringAttribute("query_sql", querySQL),
+			}, msg)
+		}
+
+		logger.Log("event", "pgx", "msg", msg,
+			"query_pid", queryPID,
+			"query_command_tag", queryCommandTag,
+			"query_sql", querySQL,
+			"query_args", spew.Sprint(queryArgs))
+	})
+}
+
+func buildDBConfig(base string, logger pgx.Logger) (db *sql.DB, cfg *pgx.ConnConfig, repCfg *pgx.ConnConfig, err error) {
 	// pgx makes it difficult to use the raw pgconn.Config struct without going via the
 	// ParseConfig method. We compromise by rendering a connection string for our overrides
 	// and relying on ParseConfig to identify additional Postgres parameters from libpq
@@ -368,6 +405,21 @@ func buildDBConfig(base string) (db *sql.DB, cfg *pgx.ConnConfig, repCfg *pgx.Co
 		return nil, nil, nil, fmt.Errorf("invalid replication database configuration: %w", err)
 	}
 
+	// Ensure both connections are assigned the logger, which powers tracing and logs
+	cfg.Logger = logger
+	repCfg.Logger = logger
+
+	// Register the pgx driver via an ocsql (OpenCensus) SQL tracer. The driverName can then
+	// be used to open a *sql.DB in the normal way.
+	driverName, err := ocsql.Register("pgx",
+		ocsql.WithAllTraceOptions(),
+		// Turn off rows.next, as we make many of these calls
+		ocsql.WithRowsNext(false),
+		ocsql.WithInstanceName("db"))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
 	// When interacting with standard database objects, it's easier to use sql.DB. This
 	// allows compatibility with a wide variety of other libraries, while allowing us to
 	// drop into a raw pgx connection when required like so:
@@ -379,7 +431,7 @@ func buildDBConfig(base string) (db *sql.DB, cfg *pgx.ConnConfig, repCfg *pgx.Co
 	// An exception is necessary for the replication connection, as this requires a
 	// different startup paramter (replication=database).
 	connStr := stdlib.RegisterConnConfig(cfg)
-	db, err = sql.Open("pgx", connStr)
+	db, err = sql.Open(driverName, connStr)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to initialise db.SQL: %w", err)
 	}
