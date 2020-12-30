@@ -12,12 +12,12 @@ require (
 	github.com/go-jet/jet v2.3.0+incompatible
 	github.com/go-kit/kit v0.10.0
 	github.com/google/uuid v1.1.2
-	github.com/jackc/pgconn v1.7.0
+	github.com/jackc/pgconn v1.8.0
 	github.com/jackc/pglogrepl v0.0.0-20200309144228-32ec418076b3
-	github.com/jackc/pgproto3/v2 v2.0.5
-	github.com/jackc/pgtype v1.5.0
+	github.com/jackc/pgproto3/v2 v2.0.6
+	github.com/jackc/pgtype v1.6.2
 	github.com/jackc/pgx v3.6.2+incompatible // indirect
-	github.com/jackc/pgx/v4 v4.9.0
+	github.com/jackc/pgx/v4 v4.10.1
 	github.com/linkedin/goavro/v2 v2.9.8
 	github.com/oklog/run v1.1.0
 	github.com/onsi/ginkgo v1.12.0
@@ -26,6 +26,9 @@ require (
 	github.com/pressly/goose v2.6.0+incompatible
 	github.com/prometheus/client_golang v1.9.0
 	go.opencensus.io v0.22.2
+	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
+	golang.org/x/text v0.3.4 // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/api v0.22.0
 	google.golang.org/appengine v1.6.5 // indirect
 	pgregory.net/rapid v0.3.8 // indirect
