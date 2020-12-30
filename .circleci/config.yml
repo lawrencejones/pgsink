@@ -7,17 +7,16 @@ references:
       - image: golang:1.15.6
         environment:
           PGHOST: "127.0.0.1"
-          PGUSER: "pgsink"
+          PGUSER: "pgsink_test"
           PGDATABASE: "pgsink_test"
       - image: postgres:13.1
         command: |
           docker-entrypoint.sh postgres -c 'wal_level=logical'
         environment:
           POSTGRES_USER: "postgres"
-          POSTGRES_DB: "pgsink_test"
           POSTGRES_PASSWORD: ""
           POSTGRES_HOST_AUTH_METHOD: "trust"
-    working_directory: /pgsink
+    working_directory: /app
 
 jobs:
   unit-integration:
@@ -32,7 +31,7 @@ jobs:
           command: apt-get update && apt-get install -y postgresql-client libpq-dev
       - run:
           name: Create test database
-          command: make recreatedb PSQL=$(which psql) DATABASE=pgsink_test
+          command: make recreatedb migrate PSQL=$(which psql)
       - run:
           name: Run tests
           command: make test
@@ -56,7 +55,7 @@ jobs:
 
   release:
     <<: *docker_golang
-    working_directory: /pgsink
+    working_directory: /app
     steps:
       - checkout
       - run:
