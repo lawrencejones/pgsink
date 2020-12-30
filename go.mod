@@ -6,6 +6,7 @@ require (
 	cloud.google.com/go v0.74.0 // indirect
 	cloud.google.com/go/bigquery v1.8.0
 	contrib.go.opencensus.io/exporter/jaeger v0.2.0
+	contrib.go.opencensus.io/integrations/ocsql v0.1.7
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/davecgh/go-spew v1.1.1
