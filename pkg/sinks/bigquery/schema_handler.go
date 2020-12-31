@@ -49,7 +49,7 @@ func (d *schemaHandler) Handle(ctx context.Context, logger kitlog.Logger, schema
 func (d *schemaHandler) syncRawTable(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) (*bq.Table, *bq.TableMetadata, error) {
 	tableName := fmt.Sprintf("%s_raw", stripPostgresSchema(schema.Spec.Namespace))
 	table := d.dataset.Table(tableName)
-	md, err := buildRaw(tableName, schema.Spec)
+	md, err := buildRaw(tableName, schema.Spec.Relation)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to build raw table metadata")
 	}
@@ -63,7 +63,7 @@ func (d *schemaHandler) syncRawTable(ctx context.Context, logger kitlog.Logger, 
 func (d *schemaHandler) syncViewTable(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema, raw *bq.Table) (*bq.Table, *bq.TableMetadata, error) {
 	tableName := stripPostgresSchema(schema.Spec.Namespace)
 	table := d.dataset.Table(tableName)
-	md, err := buildView(tableName, raw.FullyQualifiedName(), schema.Spec)
+	md, err := buildView(tableName, raw.FullyQualifiedName(), schema.Spec.Relation)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to build raw table metadata")
 	}

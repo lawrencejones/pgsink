@@ -3,20 +3,21 @@ package subscription
 import (
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/logical"
+	"github.com/lawrencejones/pgsink/pkg/types"
 
 	kitlog "github.com/go-kit/kit/log"
 )
 
 // BuildChangelog produces a stream of changelog entries from raw logical messages
 // produced by a subscription.
-func BuildChangelog(logger kitlog.Logger, stream *Stream) changelog.Changelog {
+func BuildChangelog(logger kitlog.Logger, decoder types.Decoder, stream *Stream) changelog.Changelog {
 	output := make(changelog.Changelog)
 
 	// TODO: If this is ever modified to marshal entries in parallel, this will complicate
 	// any acknowledgement pipeline. Double check assumptions about acknowledgement order
 	// before removing ordering.
 	go func() {
-		registry, raw := logical.BuildRegistry(logger, stream.Messages())
+		registry, raw := logical.BuildRegistry(logger, decoder, stream.Messages())
 		for msg := range Sequence(raw) {
 			timestamp, lsn := msg.Begin.Timestamp, msg.Begin.LSN
 			switch entry := msg.Entry.(type) {

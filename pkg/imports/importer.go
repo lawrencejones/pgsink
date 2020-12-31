@@ -11,6 +11,7 @@ import (
 	"github.com/lawrencejones/pgsink/pkg/logical"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 	"github.com/lawrencejones/pgsink/pkg/telem"
+	"github.com/lawrencejones/pgsink/pkg/types"
 
 	"github.com/alecthomas/kingpin"
 	. "github.com/go-jet/jet/postgres"
@@ -40,16 +41,18 @@ type Importer interface {
 	Do(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, job model.ImportJobs) error
 }
 
-func NewImporter(sink generic.Sink, opts ImporterOptions) Importer {
+func NewImporter(sink generic.Sink, decoder types.Decoder, opts ImporterOptions) Importer {
 	return &importer{
-		sink: sink,
-		opts: opts,
+		sink:    sink,
+		decoder: decoder,
+		opts:    opts,
 	}
 }
 
 type importer struct {
-	sink generic.Sink
-	opts ImporterOptions
+	sink    generic.Sink
+	decoder types.Decoder
+	opts    ImporterOptions
 }
 
 var (
@@ -94,7 +97,7 @@ func (i importer) Do(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, job m
 		trace.Int64Attribute("batch_limit", int64(i.opts.BatchLimit)),
 	)
 
-	cfg, err := Build(ctx, logger, tx, job)
+	cfg, err := Build(ctx, logger, i.decoder, tx, job)
 	if err != nil {
 		return err
 	}

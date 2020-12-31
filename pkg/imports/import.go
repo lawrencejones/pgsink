@@ -7,6 +7,7 @@ import (
 
 	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
 	"github.com/lawrencejones/pgsink/pkg/logical"
+	"github.com/lawrencejones/pgsink/pkg/types"
 
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgtype"
@@ -33,7 +34,7 @@ type Import struct {
 
 // Build queries the database for information required to perform an import, given an
 // import job to process.
-func Build(ctx context.Context, logger kitlog.Logger, tx querier, job model.ImportJobs) (*Import, error) {
+func Build(ctx context.Context, logger kitlog.Logger, decoder types.Decoder, tx querier, job model.ImportJobs) (*Import, error) {
 	// We should query for the primary key as the first thing we do, as this may fail if the
 	// table is misconfigured. It's better to fail here, before we've pushed anything into
 	// the changelog, than after pushing the schema when we discover the table is
@@ -52,7 +53,7 @@ func Build(ctx context.Context, logger kitlog.Logger, tx querier, job model.Impo
 
 	// Build scanners for decoding column types. We'll need the primary key scanner for
 	// interpreting the cursor.
-	primaryKeyScanner, scanners := buildScanners(relation, primaryKey)
+	primaryKeyScanner, scanners := buildScanners(relation, decoder, primaryKey)
 
 	// We need to translate the import_jobs.cursor value, which is text, into a type that
 	// will be supported for querying into the table. We can use the primaryKeyScanner for
@@ -80,12 +81,12 @@ func Build(ctx context.Context, logger kitlog.Logger, tx querier, job model.Impo
 
 // buildScanners produces pgx type scanners, returning a scanner for the relation primary
 // key and a slice of scanners for the other columns.
-func buildScanners(relation *logical.Relation, primaryKey string) (primaryKeyScanner logical.ValueScanner, scanners []interface{}) {
+func buildScanners(relation *logical.Relation, decoder types.Decoder, primaryKey string) (primaryKeyScanner logical.ValueScanner, scanners []interface{}) {
 	// Go can't handle splatting non-empty-interface types into a parameter list of
 	// empty-interfaces, so we have to construct an interface{} slice of scanners.
 	scanners = make([]interface{}, len(relation.Columns))
 	for idx, column := range relation.Columns {
-		scanner := logical.TypeForOID(column.Type)
+		scanner := decoder.ScannerForOID(column.Type)
 		scanners[idx] = scanner
 
 		// We'll need this scanner to convert the cursor value between what the table accepts

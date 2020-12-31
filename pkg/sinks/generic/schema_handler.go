@@ -60,13 +60,13 @@ func SchemaHandlerGlobalInserter(inserter Inserter, schemaHandler func(context.C
 func SchemaHandlerCacheOnFingerprint(handler SchemaHandler) SchemaHandler {
 	return &schemaHandlerCached{
 		handler: handler,
-		cache:   map[uint64]Inserter{},
+		cache:   map[string]Inserter{},
 	}
 }
 
 type schemaHandlerCached struct {
 	handler SchemaHandler
-	cache   map[uint64]Inserter
+	cache   map[string]Inserter
 	sync.Mutex
 }
 
@@ -80,7 +80,7 @@ func (s *schemaHandlerCached) Handle(ctx context.Context, logger kitlog.Logger, 
 	defer s.Unlock()
 
 	logger = kitlog.With(logger, "namespace", schema.Spec.Namespace)
-	fingerprint := schema.Spec.GetFingerprint()
+	fingerprint := schema.GetFingerprint()
 	existing, ok := s.cache[fingerprint]
 
 	if ok && existing != nil {

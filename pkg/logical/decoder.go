@@ -9,6 +9,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/jackc/pgtype"
+	"github.com/lawrencejones/pgsink/pkg/types"
 )
 
 // PGOutput is the Postgres recognised name of our desired encoding
@@ -21,30 +22,6 @@ type ValueScanner interface {
 	// Not strictly part of the Value and Scanner interfaces, but included in all our
 	// supported types
 	EncodeText(*pgtype.ConnInfo, []byte) ([]byte, error)
-}
-
-// TypeForOID returns the pgtype for the given Postgres oid. This function defines the
-// scope of type support for this project: if it doesn't appear here, your type will be
-// exported in text.
-//
-// Any schema representation must support all these types.
-func TypeForOID(oid uint32) ValueScanner {
-	switch oid {
-	case pgtype.BoolOID:
-		return &pgtype.Bool{}
-	case pgtype.Int2OID:
-		return &pgtype.Int2{}
-	case pgtype.Int4OID:
-		return &pgtype.Int4{}
-	case pgtype.Int8OID:
-		return &pgtype.Int8{}
-	case pgtype.Float4OID:
-		return &pgtype.Float4{}
-	case pgtype.Float8OID:
-		return &pgtype.Float8{}
-	default:
-		return &pgtype.Text{}
-	}
 }
 
 // DecodePGOutput parses a pgoutput logical replication message, as per the format
@@ -185,11 +162,11 @@ type Origin struct {
 // Relation would normally include a column count field, but given Go slices track their
 // size it becomes unnecessary.
 type Relation struct {
-	ID              uint32   // ID of the relation.
-	Namespace       string   // Namespace (empty string for pg_catalog).
-	Name            string   // Relation name.
-	ReplicaIdentity uint8    // Replica identity setting for the relation (same as relreplident in pg_class).
-	Columns         []Column // Repeating message of column definitions.
+	ID              uint32   `json:"id"`               // ID of the relation.
+	Namespace       string   `json:"namespace"`        // Namespace (empty string for pg_catalog).
+	Name            string   `json:"name"`             // Relation name.
+	ReplicaIdentity uint8    `json:"replica_identity"` // Replica identity setting for the relation (same as relreplident in pg_class).
+	Columns         []Column `json:"columns"`          // Repeating message of column definitions.
 }
 
 func (r Relation) String() string {
@@ -198,7 +175,7 @@ func (r Relation) String() string {
 
 // Marshal converts a tuple into a dynamic Golang map type. Values are represented in Go
 // native types.
-func (r *Relation) Marshal(tuple []Element) map[string]interface{} {
+func (r *Relation) Marshal(decoder types.Decoder, tuple []Element) map[string]interface{} {
 	// This tuple doesn't match our relation, if the sizes aren't the same
 	if len(tuple) != len(r.Columns) {
 		return nil
@@ -209,7 +186,7 @@ func (r *Relation) Marshal(tuple []Element) map[string]interface{} {
 		var decoded interface{}
 		if tuple[idx].Value != nil {
 			var err error
-			decoded, err = column.Decode(tuple[idx].Value)
+			decoded, err = column.Decode(decoder, tuple[idx].Value)
 			if err != nil {
 				panic(fmt.Sprintf("failed to decode tuple value: %v\n\n%s", err, spew.Sdump(err)))
 			}
@@ -222,16 +199,16 @@ func (r *Relation) Marshal(tuple []Element) map[string]interface{} {
 }
 
 type Column struct {
-	Key      bool   // Interpreted from flags, which are either 0 or 1 which marks the column as part of the key.
-	Name     string // Name of the column.
-	Type     uint32 // ID of the column's data type.
-	Modifier uint32 // Type modifier of the column (atttypmod).
+	Key      bool   `json:"key"`      // Interpreted from flags, which are either 0 or 1 which marks the column as part of the key.
+	Name     string `json:"name"`     // Name of the column.
+	Type     uint32 `json:"type"`     // ID of the column's data type.
+	Modifier uint32 `json:"modifier"` // Type modifier of the column (atttypmod).
 }
 
 // Decode generates a native Go type from the textual pgoutput representation. This can be
 // extended to support more types if necessary.
-func (c Column) Decode(src []byte) (interface{}, error) {
-	scanner := TypeForOID(c.Type)
+func (c Column) Decode(decoder types.Decoder, src []byte) (interface{}, error) {
+	scanner := decoder.ScannerForOID(c.Type)
 	if err := scanner.Scan(src); err != nil {
 		return nil, err
 	}

@@ -20,6 +20,7 @@ import (
 	sinkfile "github.com/lawrencejones/pgsink/pkg/sinks/file"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 	"github.com/lawrencejones/pgsink/pkg/subscription"
+	"github.com/lawrencejones/pgsink/pkg/types"
 
 	"contrib.go.opencensus.io/exporter/jaeger"
 	"contrib.go.opencensus.io/integrations/ocsql"
@@ -229,16 +230,17 @@ func Run() (err error) {
 	switch command {
 	case stream.FullCommand():
 		var (
-			sub    *subscription.Subscription
-			stream *subscription.Stream
-			sink   generic.Sink
+			sub     *subscription.Subscription
+			stream  *subscription.Stream
+			sink    generic.Sink
+			decoder types.Decoder
 		)
 
 		switch *streamSinkType {
 		case "file":
-			sink, err = sinkfile.New(logger, *streamSinkFileOptions)
+			sink, decoder, err = sinkfile.New(logger, *streamSinkFileOptions)
 		case "bigquery":
-			sink, err = sinkbigquery.New(ctx, logger, *streamSinkBigQueryOptions)
+			sink, decoder, err = sinkbigquery.New(ctx, logger, *streamSinkBigQueryOptions)
 		default:
 			return UsageError{fmt.Errorf("unsupported sink type: %s", *streamSinkType)}
 		}
@@ -281,7 +283,7 @@ func Run() (err error) {
 						return nil
 					}
 
-					entries := subscription.BuildChangelog(logger, stream)
+					entries := subscription.BuildChangelog(logger, decoder, stream)
 					return sink.Consume(ctx, entries, func(entry changelog.Entry) {
 						if entry.Modification != nil && entry.Modification.LSN != nil {
 							stream.Confirm(pglogrepl.LSN(*entry.Modification.LSN))
@@ -330,7 +332,7 @@ func Run() (err error) {
 			// Assign the subscription ID from what we generated on boot
 			streamImportWorkerOptions.SubscriptionID = sub.ID
 
-			importer := imports.NewImporter(sink, *streamImporterOptions)
+			importer := imports.NewImporter(sink, decoder, *streamImporterOptions)
 			worker := imports.NewWorker(logger, db, *streamImportWorkerOptions)
 
 			g.Add(

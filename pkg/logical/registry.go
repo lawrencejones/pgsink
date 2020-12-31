@@ -6,11 +6,12 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	kitlog "github.com/go-kit/kit/log"
+	"github.com/lawrencejones/pgsink/pkg/types"
 )
 
 // BuildRegistry taps a stream of logically replicated messages, extracting the Relations
 // and storing them in the returned registry.
-func BuildRegistry(logger kitlog.Logger, messages <-chan interface{}) (*Registry, <-chan interface{}) {
+func BuildRegistry(logger kitlog.Logger, decoder types.Decoder, messages <-chan interface{}) (*Registry, <-chan interface{}) {
 	registry := &Registry{relations: map[uint32]*Relation{}}
 	output := make(chan interface{})
 
@@ -33,6 +34,7 @@ func BuildRegistry(logger kitlog.Logger, messages <-chan interface{}) (*Registry
 // Registry is a race-safe data structure that pins Relation messages against their
 // Postgres OIDs. It can be used to marshal Modifications from committed messages.
 type Registry struct {
+	decoder   types.Decoder
 	relations map[uint32]*Relation
 	sync.RWMutex
 }
@@ -57,13 +59,13 @@ func (r *Registry) Marshal(msg interface{}) (relation *Relation, before interfac
 	switch cast := msg.(type) {
 	case *Insert:
 		relation = r.Get(cast.ID)
-		after = relation.Marshal(cast.Row)
+		after = relation.Marshal(r.decoder, cast.Row)
 	case *Update:
 		relation = r.Get(cast.ID)
-		before, after = relation.Marshal(cast.OldRow), relation.Marshal(cast.Row)
+		before, after = relation.Marshal(r.decoder, cast.OldRow), relation.Marshal(r.decoder, cast.Row)
 	case *Delete:
 		relation = r.Get(cast.ID)
-		before = relation.Marshal(cast.OldRow)
+		before = relation.Marshal(r.decoder, cast.OldRow)
 	default:
 		panic(fmt.Sprintf("invalid message type (not insert/update/delete): %s", spew.Sdump(msg)))
 	}
