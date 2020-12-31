@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/jackc/pgtype"
 )
 
@@ -21,30 +20,6 @@ type ValueScanner interface {
 	// Not strictly part of the Value and Scanner interfaces, but included in all our
 	// supported types
 	EncodeText(*pgtype.ConnInfo, []byte) ([]byte, error)
-}
-
-// TypeForOID returns the pgtype for the given Postgres oid. This function defines the
-// scope of type support for this project: if it doesn't appear here, your type will be
-// exported in text.
-//
-// Any schema representation must support all these types.
-func TypeForOID(oid uint32) ValueScanner {
-	switch oid {
-	case pgtype.BoolOID:
-		return &pgtype.Bool{}
-	case pgtype.Int2OID:
-		return &pgtype.Int2{}
-	case pgtype.Int4OID:
-		return &pgtype.Int4{}
-	case pgtype.Int8OID:
-		return &pgtype.Int8{}
-	case pgtype.Float4OID:
-		return &pgtype.Float4{}
-	case pgtype.Float8OID:
-		return &pgtype.Float8{}
-	default:
-		return &pgtype.Text{}
-	}
 }
 
 // DecodePGOutput parses a pgoutput logical replication message, as per the format
@@ -180,45 +155,6 @@ type Commit struct {
 type Origin struct {
 	LSN  uint64 // The LSN of the commit on the origin server.
 	Name string // Name of the origin.
-}
-
-// Relation would normally include a column count field, but given Go slices track their
-// size it becomes unnecessary.
-type Relation struct {
-	ID              uint32   // ID of the relation.
-	Namespace       string   // Namespace (empty string for pg_catalog).
-	Name            string   // Relation name.
-	ReplicaIdentity uint8    // Replica identity setting for the relation (same as relreplident in pg_class).
-	Columns         []Column // Repeating message of column definitions.
-}
-
-func (r Relation) String() string {
-	return fmt.Sprintf("%s.%s", r.Namespace, r.Name)
-}
-
-// Marshal converts a tuple into a dynamic Golang map type. Values are represented in Go
-// native types.
-func (r *Relation) Marshal(tuple []Element) map[string]interface{} {
-	// This tuple doesn't match our relation, if the sizes aren't the same
-	if len(tuple) != len(r.Columns) {
-		return nil
-	}
-
-	row := map[string]interface{}{}
-	for idx, column := range r.Columns {
-		var decoded interface{}
-		if tuple[idx].Value != nil {
-			var err error
-			decoded, err = column.Decode(tuple[idx].Value)
-			if err != nil {
-				panic(fmt.Sprintf("failed to decode tuple value: %v\n\n%s", err, spew.Sdump(err)))
-			}
-		}
-
-		row[column.Name] = decoded
-	}
-
-	return row
 }
 
 type Column struct {

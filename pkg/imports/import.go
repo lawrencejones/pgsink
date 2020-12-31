@@ -45,7 +45,7 @@ func Build(ctx context.Context, logger kitlog.Logger, tx querier, job model.Impo
 	}
 
 	logger.Log("event", "build_relation", "msg", "querying Postgres for relation type information")
-	relation, err := buildRelation(ctx, tx, job.TableName, primaryKey)
+	relation, err := logical.BuildRelation(ctx, tx, job.TableName, primaryKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build relation for table: %w", err)
 	}
@@ -96,62 +96,6 @@ func buildScanners(relation *logical.Relation, primaryKey string) (primaryKeySca
 	}
 
 	return
-}
-
-// buildRelation generates the logical.Relation structure by querying Postgres catalog
-// tables. Importantly, this populates the relation.Columns slice, providing type
-// information that can later be used to marshal Golang types.
-func buildRelation(ctx context.Context, tx querier, tableName, primaryKeyColumn string) (*logical.Relation, error) {
-	ctx, span := trace.StartSpan(ctx, "pkg/imports.buildRelation")
-	defer span.End()
-
-	// Eg. oid = 16411, namespace = public, relname = example
-	query := `
-	select pg_class.oid as oid
-	     , nspname as namespace
-	     , relname as name
-		from pg_class join pg_namespace on pg_class.relnamespace=pg_namespace.oid
-	 where pg_class.oid = $1::regclass::oid;
-	`
-
-	relation := &logical.Relation{Columns: []logical.Column{}}
-	err := tx.QueryRow(ctx, query, tableName).Scan(&relation.ID, &relation.Namespace, &relation.Name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to identify table namespace and name: %w", err)
-	}
-
-	// Eg. name = id, type = 20
-	columnQuery := `
-	select attname as name
-			 , atttypid as type
-	  from pg_attribute
-	 where attrelid = $1 and attnum > 0 and not attisdropped
-	 order by attnum;
-	`
-
-	rows, err := tx.Query(ctx, columnQuery, relation.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query pg_attribute for relation columns: %w", err)
-	}
-
-	defer rows.Close()
-
-	for rows.Next() {
-		column := logical.Column{}
-		if err := rows.Scan(&column.Name, &column.Type); err != nil {
-			return nil, err
-		}
-
-		// We don't strictly require this, but it's asking for trouble to generate
-		// logical.Relation structs that have incorrect key metadata.
-		if column.Name == primaryKeyColumn {
-			column.Key = true
-		}
-
-		relation.Columns = append(relation.Columns, column)
-	}
-
-	return relation, nil
 }
 
 // buildQuery creates a query string and arguments for the configured relation. It knows
