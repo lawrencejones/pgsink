@@ -8,10 +8,10 @@ import (
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
 	. "github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/table"
+	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/logical"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 	"github.com/lawrencejones/pgsink/pkg/telem"
-	"github.com/lawrencejones/pgsink/pkg/types"
 
 	"github.com/alecthomas/kingpin"
 	. "github.com/go-jet/jet/postgres"
@@ -41,7 +41,7 @@ type Importer interface {
 	Do(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, job model.ImportJobs) error
 }
 
-func NewImporter(sink generic.Sink, decoder types.Decoder, opts ImporterOptions) Importer {
+func NewImporter(sink generic.Sink, decoder decode.Decoder, opts ImporterOptions) Importer {
 	return &importer{
 		sink:    sink,
 		decoder: decoder,
@@ -51,7 +51,7 @@ func NewImporter(sink generic.Sink, decoder types.Decoder, opts ImporterOptions)
 
 type importer struct {
 	sink    generic.Sink
-	decoder types.Decoder
+	decoder decode.Decoder
 	opts    ImporterOptions
 }
 

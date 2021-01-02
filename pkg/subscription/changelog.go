@@ -2,15 +2,15 @@ package subscription
 
 import (
 	"github.com/lawrencejones/pgsink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/logical"
-	"github.com/lawrencejones/pgsink/pkg/types"
 
 	kitlog "github.com/go-kit/kit/log"
 )
 
 // BuildChangelog produces a stream of changelog entries from raw logical messages
 // produced by a subscription.
-func BuildChangelog(logger kitlog.Logger, decoder types.Decoder, stream *Stream) changelog.Changelog {
+func BuildChangelog(logger kitlog.Logger, decoder decode.Decoder, stream *Stream) changelog.Changelog {
 	output := make(changelog.Changelog)
 
 	// TODO: If this is ever modified to marshal entries in parallel, this will complicate

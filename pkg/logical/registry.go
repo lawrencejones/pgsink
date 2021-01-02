@@ -6,12 +6,12 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	kitlog "github.com/go-kit/kit/log"
-	"github.com/lawrencejones/pgsink/pkg/types"
+	"github.com/lawrencejones/pgsink/pkg/decode"
 )
 
 // BuildRegistry taps a stream of logically replicated messages, extracting the Relations
 // and storing them in the returned registry.
-func BuildRegistry(logger kitlog.Logger, decoder types.Decoder, messages <-chan interface{}) (*Registry, <-chan interface{}) {
+func BuildRegistry(logger kitlog.Logger, decoder decode.Decoder, messages <-chan interface{}) (*Registry, <-chan interface{}) {
 	registry := &Registry{relations: map[uint32]*Relation{}}
 	output := make(chan interface{})
 
@@ -34,7 +34,7 @@ func BuildRegistry(logger kitlog.Logger, decoder types.Decoder, messages <-chan 
 // Registry is a race-safe data structure that pins Relation messages against their
 // Postgres OIDs. It can be used to marshal Modifications from committed messages.
 type Registry struct {
-	decoder   types.Decoder
+	decoder   decode.Decoder
 	relations map[uint32]*Relation
 	sync.RWMutex
 }

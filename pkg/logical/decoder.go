@@ -9,7 +9,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/jackc/pgtype"
-	"github.com/lawrencejones/pgsink/pkg/types"
+	"github.com/lawrencejones/pgsink/pkg/decode"
 )
 
 // PGOutput is the Postgres recognised name of our desired encoding
@@ -175,7 +175,7 @@ func (r Relation) String() string {
 
 // Marshal converts a tuple into a dynamic Golang map type. Values are represented in Go
 // native types.
-func (r *Relation) Marshal(decoder types.Decoder, tuple []Element) map[string]interface{} {
+func (r *Relation) Marshal(decoder decode.Decoder, tuple []Element) map[string]interface{} {
 	// This tuple doesn't match our relation, if the sizes aren't the same
 	if len(tuple) != len(r.Columns) {
 		return nil
@@ -207,8 +207,11 @@ type Column struct {
 
 // Decode generates a native Go type from the textual pgoutput representation. This can be
 // extended to support more types if necessary.
-func (c Column) Decode(decoder types.Decoder, src []byte) (interface{}, error) {
-	scanner := decoder.ScannerForOID(c.Type)
+func (c Column) Decode(decoder decode.Decoder, src []byte) (interface{}, error) {
+	scanner, err := decoder.ScannerForOID(c.Type)
+	if err != nil {
+		return nil, err
+	}
 	if err := scanner.Scan(src); err != nil {
 		return nil, err
 	}

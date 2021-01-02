@@ -14,13 +14,13 @@ import (
 	"time"
 
 	"github.com/lawrencejones/pgsink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/imports"
 	"github.com/lawrencejones/pgsink/pkg/migration"
 	sinkbigquery "github.com/lawrencejones/pgsink/pkg/sinks/bigquery"
 	sinkfile "github.com/lawrencejones/pgsink/pkg/sinks/file"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 	"github.com/lawrencejones/pgsink/pkg/subscription"
-	"github.com/lawrencejones/pgsink/pkg/types"
 
 	"contrib.go.opencensus.io/exporter/jaeger"
 	"contrib.go.opencensus.io/integrations/ocsql"
@@ -233,7 +233,7 @@ func Run() (err error) {
 			sub     *subscription.Subscription
 			stream  *subscription.Stream
 			sink    generic.Sink
-			decoder types.Decoder
+			decoder decode.Decoder
 		)
 
 		switch *streamSinkType {

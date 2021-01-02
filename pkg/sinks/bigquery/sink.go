@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
-	"github.com/lawrencejones/pgsink/pkg/types"
 
 	bq "cloud.google.com/go/bigquery"
 	"github.com/alecthomas/kingpin"
@@ -34,7 +34,7 @@ func (opt *Options) Bind(cmd *kingpin.CmdClause, prefix string) *Options {
 	return opt
 }
 
-func New(ctx context.Context, logger kitlog.Logger, opts Options) (generic.Sink, types.Decoder, error) {
+func New(ctx context.Context, logger kitlog.Logger, opts Options) (generic.Sink, decode.Decoder, error) {
 	client, err := bq.NewClient(ctx, opts.ProjectID)
 	if err != nil {
 		return nil, nil, err
