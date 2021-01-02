@@ -15,14 +15,13 @@ import (
 // In future, we'll want to be able to translate this schema type into official formats,
 // like Avro.
 type Schema struct {
-	Timestamp time.Time           `json:"timestamp"` // commit timestamp
-	LSN       *uint64             `json:"lsn"`       // log sequence number, where appropriate
-	Spec      SchemaSpecification `json:"spec"`      // schema definition
+	Timestamp time.Time        `json:"timestamp"` // commit timestamp
+	LSN       *uint64          `json:"lsn"`       // log sequence number, where appropriate
+	Spec      logical.Relation `json:"spec"`      // schema definition
 }
 
 type SchemaSpecification struct {
-	Namespace Namespace        `json:"namespace"` // <schema>.<table>
-	Relation  logical.Relation `json:"relation"`  // Postgres relation
+	Relation logical.Relation `json:"relation"` // Postgres relation
 }
 
 // SchemaFromRelation uses a logical.Relation and decoder to generate an intermediate schema
@@ -30,10 +29,7 @@ func SchemaFromRelation(timestamp time.Time, lsn *uint64, relation *logical.Rela
 	return Schema{
 		Timestamp: timestamp,
 		LSN:       lsn,
-		Spec: SchemaSpecification{
-			Namespace: BuildNamespace(relation.Namespace, relation.Name),
-			Relation:  *relation,
-		},
+		Spec:      *relation,
 	}
 }
 
@@ -43,7 +39,7 @@ func SchemaFromRelation(timestamp time.Time, lsn *uint64, relation *logical.Rela
 // duration of the Go process. Beyond that, you can use any value here.
 func (s Schema) GetFingerprint() string {
 	h := md5.New()
-	for _, column := range s.Spec.Relation.Columns {
+	for _, column := range s.Spec.Columns {
 		fmt.Fprintf(h, "%v|%v|%v|%v\n", column.Key, column.Name, column.Type, column.Modifier)
 	}
 	return string(h.Sum(nil))
