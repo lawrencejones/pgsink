@@ -9,7 +9,6 @@ import (
 	"github.com/alecthomas/kingpin"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/changelog/serialize"
-	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
 	kitlog "github.com/go-kit/kit/log"
@@ -34,15 +33,15 @@ func (opt *Options) Bind(cmd *kingpin.CmdClause, prefix string) *Options {
 	return opt
 }
 
-func New(logger kitlog.Logger, opts Options) (generic.Sink, decode.Decoder, error) {
+func New(logger kitlog.Logger, opts Options) (generic.Sink, error) {
 	schemas, err := openFile(opts.SchemasPath)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	modifications, err := openFile(opts.ModificationsPath)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// TODO: We don't use the serialize package properly yet. Until we do, there's no point
@@ -69,7 +68,7 @@ func New(logger kitlog.Logger, opts Options) (generic.Sink, decode.Decoder, erro
 		),
 	)
 
-	return sink, Decoder, nil
+	return sink, nil
 }
 
 func openFile(path string) (*os.File, error) {
