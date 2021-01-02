@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
 	bq "cloud.google.com/go/bigquery"
@@ -34,10 +33,10 @@ func (opt *Options) Bind(cmd *kingpin.CmdClause, prefix string) *Options {
 	return opt
 }
 
-func New(ctx context.Context, logger kitlog.Logger, opts Options) (generic.Sink, decode.Decoder, error) {
+func New(ctx context.Context, logger kitlog.Logger, opts Options) (generic.Sink, error) {
 	client, err := bq.NewClient(ctx, opts.ProjectID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	kitlog.With(logger, "project", opts.ProjectID, "dataset", opts.Dataset, "location", opts.Location)
@@ -45,7 +44,7 @@ func New(ctx context.Context, logger kitlog.Logger, opts Options) (generic.Sink,
 	dataset := client.Dataset(opts.Dataset)
 	md, err := dataset.Metadata(ctx)
 	if allowNotFound(err) != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if md == nil {
@@ -57,7 +56,7 @@ func New(ctx context.Context, logger kitlog.Logger, opts Options) (generic.Sink,
 		}
 
 		if err := dataset.Create(ctx, md); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
@@ -73,7 +72,7 @@ func New(ctx context.Context, logger kitlog.Logger, opts Options) (generic.Sink,
 		),
 	)
 
-	return sink, Decoder, nil
+	return sink, nil
 }
 
 func allowNotFound(err error) error {

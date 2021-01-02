@@ -27,14 +27,15 @@ import (
 func buildRaw(tableName string, relation logical.Relation) (*bq.TableMetadata, error) {
 	fields := bq.Schema{}
 	for _, column := range relation.Columns {
-		externalType, err := Decoder.ExternalTypeForOID(column.Type)
+		externalType, repeated, err := fieldTypeFor(column.Type)
 		if err != nil {
 			return nil, err
 		}
 
 		fieldSchema := &bq.FieldSchema{
 			Name:     column.Name,
-			Type:     externalType.(bq.FieldType),
+			Type:     externalType,
+			Repeated: repeated,
 			Required: false,
 		}
 
