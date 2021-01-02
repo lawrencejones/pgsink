@@ -8,49 +8,34 @@ import (
 	"github.com/jackc/pgtype"
 )
 
-// Decoder stores the mapping from Postgres OID to scanner, which can parse a Golang type
-// from the Postgres string, and the Golang type that those scanners will produce.
-type Decoder interface {
-	ScannerForOID(oid uint32) (scanner valueScanner, err error)
-	EmptyForOID(oid uint32) (empty interface{}, err error)
-	ExternalTypeForOID(oid uint32) (externalType interface{}, err error)
-}
-
-// Build is how we expect decoders to be built, and allows us to perform validations on
-// the mappings.
-var Build = decoderBuilderFunc(func(opts ...func(*decoder)) Decoder {
-	d := &decoder{}
-	for _, opt := range opts {
-		opt(d)
-	}
-
-	// Check if we have any duplicate mappings assigned to the same Postgres OID, as this
-	// would result in undefined behaviour
-	{
-		mappedOIDs := map[uint32]bool{}
-		for _, mapping := range d.mappings {
-			_, alreadyMapped := mappedOIDs[mapping.OID]
-			if alreadyMapped {
-				panic(fmt.Sprintf("duplicate mapping found for Postgres OID %v", mapping.OID))
-			}
-		}
-	}
-
-	return d
-})
-
-type decoderBuilderFunc func(opts ...func(*decoder)) Decoder
-
-func (b decoderBuilderFunc) WithType(oid uint32, scanner valueScanner, empty interface{}, externalType interface{}) func(*decoder) {
-	return func(d *decoder) {
-		d.mappings = append(d.mappings, typeMapping{
-			OID:          oid,
-			Scanner:      scanner,
-			Empty:        empty,
-			ExternalType: externalType,
-		})
+func NewDecoder(fallback *TypeMapping) Decoder {
+	return Decoder{
+		fallback: fallback,
+		mappings: Mappings,
 	}
 }
+
+type Decoder struct {
+	fallback *TypeMapping  // if set, will be the fallback mapping for unrecognised types
+	mappings []TypeMapping // list of all available type mappings
+}
+
+type TypeMapping struct {
+	OID     uint32       // Postgres type OID
+	Scanner valueScanner // scanner for parsing type from database
+	Empty   interface{}  // Golang empty type produced by the scanner
+}
+
+// NewScanner initialises a new scanner, using the mapping Scanner as a template
+func (t TypeMapping) NewScanner() valueScanner {
+	return reflect.New(reflect.TypeOf(t.Scanner).Elem()).Interface().(valueScanner)
+}
+
+// TextFallback should be used as a fallback type, when we want pgsink to coerce
+// unrecognised types to text when pushing them into the sink. Providing this when
+// constructing the decoder prevents us from rejecting tables with unknown types, but
+// comes at the cost of a column being represented in a potentially strange way.
+var TextFallback = &TypeMapping{OID: pgtype.TextOID, Scanner: &pgtype.Text{}}
 
 // valueScanner combines the pgx and sql interfaces to provide a useful API surface for a
 // variety of pgsink operations.
@@ -63,17 +48,6 @@ type valueScanner interface {
 	EncodeText(*pgtype.ConnInfo, []byte) ([]byte, error)
 }
 
-type decoder struct {
-	mappings []typeMapping
-}
-
-type typeMapping struct {
-	OID          uint32       // Postgres type OID
-	Scanner      valueScanner // scanner for parsing type from database
-	Empty        interface{}  // Golang empty type produced by the scanner
-	ExternalType interface{}  // associated type for user of the decoder
-}
-
 // UnregisteredType is returned whenever we see a Postgres OID that has no associated type
 // mapping. How we handle this depends on the caller.
 type UnregisteredType struct {
@@ -84,31 +58,24 @@ func (e *UnregisteredType) Error() string {
 	return fmt.Sprintf("decoder has no type mapping for Postgres OID '%v'", e.OID)
 }
 
-func (d *decoder) ScannerForOID(oid uint32) (scanner valueScanner, err error) {
+func (d Decoder) ScannerForOID(oid uint32) (scanner valueScanner, err error) {
 	for _, mapping := range d.mappings {
 		if oid == mapping.OID {
-			newScanner := reflect.New(reflect.TypeOf(mapping.Scanner).Elem()).Interface()
-			return newScanner.(valueScanner), nil
+			return mapping.NewScanner(), nil
 		}
+	}
+
+	if d.fallback != nil {
+		return d.fallback.NewScanner(), nil
 	}
 
 	return nil, &UnregisteredType{oid}
 }
 
-func (d *decoder) EmptyForOID(oid uint32) (empty interface{}, err error) {
+func (d Decoder) EmptyForOID(oid uint32) (empty interface{}, err error) {
 	for _, mapping := range d.mappings {
 		if oid == mapping.OID {
 			return mapping.Empty, nil
-		}
-	}
-
-	return nil, &UnregisteredType{oid}
-}
-
-func (d *decoder) ExternalTypeForOID(oid uint32) (externalType interface{}, err error) {
-	for _, mapping := range d.mappings {
-		if oid == mapping.OID && mapping.ExternalType != nil {
-			return mapping.ExternalType, nil
 		}
 	}
 
