@@ -158,30 +158,37 @@ type Relation struct {
 	Columns         []Column `json:"columns"`          // Repeating message of column definitions.
 }
 
-func (r Relation) String() string {
-	return fmt.Sprintf("%s.%s", r.Namespace, r.Name)
-}
-
 // Marshal converts a tuple into a dynamic Golang map type. Values are represented in Go
 // native types.
 func (r *Relation) Marshal(decoder decode.Decoder, tuple []Element) (map[string]interface{}, error) {
 	// This tuple doesn't match our relation, if the sizes aren't the same
 	if len(tuple) != len(r.Columns) {
-		return nil, fmt.Errorf("tuple does not match the relation")
+		return nil, nil
 	}
 
 	row := map[string]interface{}{}
 	for idx, column := range r.Columns {
-		var decoded interface{}
-		if tuple[idx].Value != nil {
-			var err error
-			decoded, err = column.Decode(decoder, tuple[idx].Value)
+		var dest interface{}
+
+		// If we're non-NULL, try to decode the contents
+		if tuple[idx].Type != 'n' {
+			typeMapping, err := decoder.TypeMappingForOID(column.Type)
 			if err != nil {
+				return nil, err
+			}
+
+			scanner := typeMapping.NewScanner()
+			if err := scanner.Scan(tuple[idx].Value); err != nil {
 				return nil, fmt.Errorf("failed to decode tuple value: %w: \n\n%s", err, spew.Sdump(err))
+			}
+
+			dest = typeMapping.NewEmpty()
+			if err := scanner.AssignTo(dest); err != nil {
+				return nil, fmt.Errorf("failed to assign decoded tuple value: %w: \n\n%s", err, spew.Sdump(err))
 			}
 		}
 
-		row[column.Name] = decoded
+		row[column.Name] = dest
 	}
 
 	return row, nil

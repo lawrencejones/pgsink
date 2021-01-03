@@ -177,7 +177,7 @@ func (i Import) buildQuery(limit int) (query string, args []interface{}) {
 		columnNames[idx] = column.Name
 	}
 
-	query = fmt.Sprintf(`SELECT NOW(), %s FROM %s`, strings.Join(columnNames, ", "), i.Relation.String())
+	query = fmt.Sprintf(`SELECT NOW(), %s FROM %s.%s`, strings.Join(columnNames, ", "), i.Relation.Namespace, i.Relation.Name)
 	if i.Cursor != nil {
 		query += fmt.Sprintf(` WHERE %s > $1`, i.PrimaryKey)
 		args = append(args, i.Cursor)
