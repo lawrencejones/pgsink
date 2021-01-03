@@ -64,7 +64,6 @@ var cfg = Config{
 		"_aclitem",
 		"_inet",
 		"bpchar",
-		"varchar",
 		"date",
 		"interval",
 		"_numeric",

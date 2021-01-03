@@ -144,6 +144,12 @@ var Mappings = []decode.TypeMapping{
 		Empty:   new([]float64),
 	},
 	{
+		Name:    "varchar",
+		OID:     1043,
+		Scanner: &pgtype.Varchar{},
+		Empty:   new(string),
+	},
+	{
 		Name:    "time",
 		OID:     1083,
 		Scanner: &pgtype.Time{},
@@ -257,10 +263,6 @@ var Unsupported = []decode.TypeMapping{
 	{
 		Name: "bpchar",
 		OID:  1042,
-	},
-	{
-		Name: "varchar",
-		OID:  1043,
 	},
 	{
 		Name: "date",
