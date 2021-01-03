@@ -1,6 +1,7 @@
 package changelog
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -16,12 +17,23 @@ type Modification struct {
 	After     interface{} `json:"after"`     // row after modification
 }
 
+func (m Modification) String() string {
+	return fmt.Sprintf("%s.%s", m.Namespace, m.Name)
+}
+
 // ModificationBuilder provides a fluent interface around constructing Modifications. This
 // is used by tests to easily create fixtures.
 var ModificationBuilder = modificationBuilderFunc(func(opts ...func(*Modification)) *Modification {
 	m := &Modification{}
 	for _, opt := range opts {
 		opt(m)
+	}
+
+	if m.Name == "" {
+		panic("missing modification.name")
+	}
+	if m.Namespace == "" {
+		panic("missing modification.namespace")
 	}
 
 	return m

@@ -15,21 +15,31 @@ import (
 // In future, we'll want to be able to translate this schema type into official formats,
 // like Avro.
 type Schema struct {
-	Timestamp time.Time        `json:"timestamp"` // commit timestamp
-	LSN       *uint64          `json:"lsn"`       // log sequence number, where appropriate
-	Spec      logical.Relation `json:"spec"`      // schema definition
+	Timestamp time.Time           `json:"timestamp"` // commit timestamp
+	Namespace string              `json:"namespace"` // Postgres schema
+	Name      string              `json:"name"`      // Postgres table name
+	LSN       *uint64             `json:"lsn"`       // log sequence number, where appropriate
+	Spec      SchemaSpecification `json:"spec"`      // schema definition
+}
+
+func (s Schema) String() string {
+	return fmt.Sprintf("%s.%s", s.Namespace, s.Name)
 }
 
 type SchemaSpecification struct {
-	Relation logical.Relation `json:"relation"` // Postgres relation
+	Columns []logical.Column `json:"columns"` // Postgres columns
 }
 
 // SchemaFromRelation uses a logical.Relation and decoder to generate an intermediate schema
 func SchemaFromRelation(timestamp time.Time, lsn *uint64, relation *logical.Relation) Schema {
 	return Schema{
 		Timestamp: timestamp,
+		Namespace: relation.Namespace,
+		Name:      relation.Name,
 		LSN:       lsn,
-		Spec:      *relation,
+		Spec: SchemaSpecification{
+			Columns: relation.Columns,
+		},
 	}
 }
 
