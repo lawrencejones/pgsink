@@ -11,12 +11,18 @@ import (
 )
 
 func NewDecoder(mappings []TypeMapping) Decoder {
-	return Decoder{
+	return &decoder{
 		mappings: mappings,
 	}
 }
 
-type Decoder struct {
+type Decoder interface {
+	TypeMappingForOID(oid uint32) (mapping *TypeMapping, err error)
+	ScannerForOID(oid uint32) (scanner ValueScanner, err error)
+	EmptyForOID(oid uint32) (empty interface{}, err error)
+}
+
+type decoder struct {
 	mappings []TypeMapping // mappings, usually set from the auto-generated mappings
 }
 
@@ -45,7 +51,7 @@ func (e *UnregisteredType) Error() string {
 	return fmt.Sprintf("decoder has no type mapping for Postgres OID '%v'", e.OID)
 }
 
-func (d Decoder) TypeMappingForOID(oid uint32) (mapping *TypeMapping, err error) {
+func (d decoder) TypeMappingForOID(oid uint32) (mapping *TypeMapping, err error) {
 	for _, mapping := range d.mappings {
 		if oid == mapping.OID {
 			return &mapping, nil
@@ -55,7 +61,7 @@ func (d Decoder) TypeMappingForOID(oid uint32) (mapping *TypeMapping, err error)
 	return nil, &UnregisteredType{oid}
 }
 
-func (d Decoder) ScannerForOID(oid uint32) (scanner ValueScanner, err error) {
+func (d decoder) ScannerForOID(oid uint32) (scanner ValueScanner, err error) {
 	for _, mapping := range d.mappings {
 		if oid == mapping.OID {
 			return mapping.NewScanner(), nil
@@ -65,7 +71,7 @@ func (d Decoder) ScannerForOID(oid uint32) (scanner ValueScanner, err error) {
 	return nil, &UnregisteredType{oid}
 }
 
-func (d Decoder) EmptyForOID(oid uint32) (empty interface{}, err error) {
+func (d decoder) EmptyForOID(oid uint32) (empty interface{}, err error) {
 	for _, mapping := range d.mappings {
 		if oid == mapping.OID {
 			return mapping.Empty, nil

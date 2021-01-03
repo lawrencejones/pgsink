@@ -31,6 +31,7 @@ var _ = Describe("Subscription", func() {
 
 	var (
 		schema       = "subscription_integration_test"
+		decoder      = decode.NewDecoder(mappings.Mappings)
 		tableOneName = "one"
 		tableOne     = changelog.Table{Schema: schema, TableName: tableOneName}
 		tableTwoName = "two"
@@ -111,7 +112,7 @@ var _ = Describe("Subscription", func() {
 				subscription.StreamOptions{HeartbeatInterval: 500 * time.Millisecond})
 			Expect(err).NotTo(HaveOccurred())
 
-			return stream, subscription.BuildChangelog(logger, decode.NewDecoder(mappings.Mappings), stream)
+			return stream, subscription.BuildChangelog(logger, decoder, stream)
 		}
 
 		BeforeEach(func() {

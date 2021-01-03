@@ -12,7 +12,11 @@ import (
 // BuildRegistry taps a stream of logically replicated messages, extracting the Relations
 // and storing them in the returned registry.
 func BuildRegistry(logger kitlog.Logger, decoder decode.Decoder, messages <-chan interface{}) (*Registry, <-chan interface{}) {
-	registry := &Registry{relations: map[uint32]*Relation{}}
+	registry := &Registry{
+		decoder:   decoder,
+		relations: map[uint32]*Relation{},
+	}
+
 	output := make(chan interface{})
 
 	go func() {

@@ -3,6 +3,7 @@ package imports
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
@@ -222,7 +223,8 @@ func getPrimaryKeyColumn(ctx context.Context, tx querier, schema, tableName stri
 	if len(primaryKeys) == 0 {
 		return "", NoPrimaryKeyError
 	} else if len(primaryKeys) > 1 {
-		return "", multiplePrimaryKeysError(primaryKeys)
+		// Sort the keys to make any errors deterministic
+		return "", multiplePrimaryKeysError(sort.StringSlice(primaryKeys))
 	}
 
 	return primaryKeys[0], nil
