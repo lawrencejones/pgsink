@@ -16,7 +16,7 @@ var (
 	// insert into example (id, msg) values (1, 'original');
 	fixtureExample1Insert = changelog.ModificationBuilder(
 		changelog.ModificationBuilder.WithTimestampNow(),
-		changelog.ModificationBuilder.WithNamespace("public.example"),
+		changelog.ModificationBuilder.WithName("public", "example"),
 		changelog.ModificationBuilder.WithLSN(1),
 		changelog.ModificationBuilder.WithAfter(map[string]interface{}{"id": 1, "msg": "original"}),
 	)
@@ -35,7 +35,7 @@ var (
 	// insert into dog (id, name) values (1, 'scooby');
 	fixtureDog1Insert = changelog.ModificationBuilder(
 		changelog.ModificationBuilder.WithTimestampNow(),
-		changelog.ModificationBuilder.WithNamespace("public.dog"),
+		changelog.ModificationBuilder.WithName("public", "dog"),
 		changelog.ModificationBuilder.WithLSN(4),
 		changelog.ModificationBuilder.WithAfter(map[string]interface{}{"id": 1, "name": "scooby"}),
 	)
@@ -48,7 +48,7 @@ var (
 	// insert into cat (id, name, lives) values (1, 'tom', 9);
 	fixtureCat1Insert = changelog.ModificationBuilder(
 		changelog.ModificationBuilder.WithTimestampNow(),
-		changelog.ModificationBuilder.WithNamespace("public.cat"),
+		changelog.ModificationBuilder.WithName("public", "cat"),
 		changelog.ModificationBuilder.WithLSN(6),
 		changelog.ModificationBuilder.WithAfter(map[string]interface{}{"id": 1, "name": "tom", "lives": 9}),
 	)

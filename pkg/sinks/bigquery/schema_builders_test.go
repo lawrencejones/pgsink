@@ -23,9 +23,9 @@ func mustFixture(path string) string {
 
 var (
 	dogsSchemaFixture = changelog.Schema{
-		Spec: logical.Relation{
-			Namespace: "public",
-			Name:      "dogs",
+		Namespace: "public",
+		Name:      "dogs",
+		Spec: changelog.SchemaSpecification{
 			Columns: []logical.Column{
 				{
 					Key:  true,
@@ -40,9 +40,9 @@ var (
 		},
 	}
 	exampleSchemaFixture = changelog.Schema{
-		Spec: logical.Relation{
-			Namespace: "public",
-			Name:      "example",
+		Namespace: "public",
+		Name:      "example",
+		Spec: changelog.SchemaSpecification{
 			Columns: []logical.Column{
 				{
 					Key:  true,
@@ -69,17 +69,17 @@ var _ = Describe("buildView", func() {
 
 		tableName     string
 		rawTableName  string
-		schemaFixture changelog.Schema
+		schemaFixture *changelog.Schema
 	)
 
 	JustBeforeEach(func() {
-		md, err = buildView(tableName, rawTableName, schemaFixture.Spec)
+		md, err = buildView(tableName, rawTableName, schemaFixture)
 	})
 
 	BeforeEach(func() {
 		tableName = "example"
 		rawTableName = "project.dataset.example_raw"
-		schemaFixture = exampleSchemaFixture
+		schemaFixture = &exampleSchemaFixture
 	})
 
 	It("generates view that correctly uses primary keys", func() {
@@ -92,7 +92,7 @@ var _ = Describe("buildView", func() {
 	Context("with non-id primary key column", func() {
 		BeforeEach(func() {
 			rawTableName = "project.dataset.dogs_raw"
-			schemaFixture = dogsSchemaFixture
+			schemaFixture = &dogsSchemaFixture
 		})
 
 		It("generates view that correctly uses primary keys", func() {

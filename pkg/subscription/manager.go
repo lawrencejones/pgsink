@@ -6,14 +6,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 	_ "github.com/lawrencejones/pgsink/pkg/dbschema/information_schema/model"
 	isv "github.com/lawrencejones/pgsink/pkg/dbschema/information_schema/view"
-	"github.com/lawrencejones/pgsink/pkg/util"
 
 	"github.com/alecthomas/kingpin"
-	. "github.com/go-jet/jet/postgres"
+	pg "github.com/go-jet/jet/postgres"
 	kitlog "github.com/go-kit/kit/log"
-	"github.com/jackc/pgx/v4/stdlib"
 )
 
 type ManagerOptions struct {
@@ -101,7 +100,7 @@ func (m *Manager) Manage(ctx context.Context, sub Subscription) (err error) {
 
 // Reconcile ensures all watched tables are added to the subscription, through the
 // Postgres publication.
-func (m *Manager) Reconcile(ctx context.Context, sub Subscription) (added []string, removed []string, err error) {
+func (m *Manager) Reconcile(ctx context.Context, sub Subscription) (added changelog.Tables, removed changelog.Tables, err error) {
 	watched, err := m.getWatchedTables(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to discover watched tables: %w", err)
@@ -112,8 +111,8 @@ func (m *Manager) Reconcile(ctx context.Context, sub Subscription) (added []stri
 		return nil, nil, fmt.Errorf("failed to query published tables: %w", err)
 	}
 
-	watchedNotPublished := util.Diff(watched, published)
-	publishedNotWatched := util.Diff(published, watched)
+	watchedNotPublished := watched.Diff(published)
+	publishedNotWatched := published.Diff(watched)
 
 	if (len(watchedNotPublished) > 0) || (len(publishedNotWatched) > 0) {
 		if err := sub.SetTables(ctx, m.db, watched...); err != nil {
@@ -125,52 +124,40 @@ func (m *Manager) Reconcile(ctx context.Context, sub Subscription) (added []stri
 }
 
 // getWatchedTables scans the database for tables that match our watch conditions
-func (m *Manager) getWatchedTables(ctx context.Context) ([]string, error) {
-	query, _ := isv.Tables.
+func (m *Manager) getWatchedTables(ctx context.Context) (changelog.Tables, error) {
+	stmt := isv.Tables.
 		SELECT(
-			isv.Tables.TableSchema.AS("schema"),
-			isv.Tables.TableName.AS("name"),
+			isv.Tables.TableSchema.AS("table.schema"),
+			isv.Tables.TableName.AS("table.table_name"),
 		).
-		WHERE(isv.Tables.TableType.EQ(String("BASE TABLE"))).
-		WHERE(CAST(Raw("table_schema = any($1::text[])")).AS_BOOL()).
-		Sql()
+		WHERE(isv.Tables.TableType.EQ(pg.String("BASE TABLE")))
 
-	// Drop into pgx to provide support for any, which is incompatible with db.SQL
-	conn, err := stdlib.AcquireConn(m.db)
-	if err != nil {
+	var allTables []changelog.Table
+	if err := stmt.QueryContext(ctx, m.db, &allTables); err != nil {
 		return nil, err
 	}
-	defer stdlib.ReleaseConn(m.db, conn)
 
-	rows, err := conn.Query(ctx, query, m.opts.Schemas)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var (
-		table  struct{ Schema, Name string }
-		tables []string
-	)
-
-	for rows.Next() {
-		if err := rows.Scan(&table.Schema, &table.Name); err != nil {
-			return nil, err
+	var tables changelog.Tables
+	for _, table := range allTables {
+		for _, schema := range m.opts.Schemas {
+			if table.Schema == schema {
+				tables = append(tables, table)
+			}
 		}
-
-		tables = append(tables, fmt.Sprintf("%s.%s", table.Schema, table.Name))
 	}
 
-	watchedTables := []string{}
+	var watchedTables changelog.Tables
 forEachRow:
 	for _, table := range tables {
-		if util.Includes(m.opts.Excludes, table) {
-			continue forEachRow
+		for _, excluded := range m.opts.Excludes {
+			if excluded == table.String() {
+				continue forEachRow
+			}
 		}
 
 		// If we have an includes list, we only include our table if it appears in that list
 		isIncluded := len(m.opts.Includes) == 0
-		isIncluded = isIncluded || util.Includes(m.opts.Includes, table)
+		isIncluded = isIncluded || m.includes(table)
 
 		if !isIncluded {
 			continue forEachRow
@@ -180,4 +167,14 @@ forEachRow:
 	}
 
 	return watchedTables, nil
+}
+
+func (m *Manager) includes(table changelog.Table) bool {
+	for _, included := range m.opts.Includes {
+		if included == table.String() {
+			return true
+		}
+	}
+
+	return false
 }

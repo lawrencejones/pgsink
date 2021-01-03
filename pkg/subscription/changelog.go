@@ -30,9 +30,22 @@ func BuildChangelog(logger kitlog.Logger, decoder decode.Decoder, stream *Stream
 					LSN:       &lsn,
 				}
 
-				var relation *logical.Relation
-				relation, modification.Before, modification.After = registry.Marshal(msg.Entry)
-				modification.Namespace = changelog.BuildNamespace(relation.Namespace, relation.Name)
+				var (
+					relation *logical.Relation
+					err      error
+				)
+				relation, modification.Before, modification.After, err = registry.Marshal(msg.Entry)
+				// This shouldn't panic, but it does for now. The primary reason this might fail
+				// is the decoder being unable to recognise a type, which means we can't continue
+				// subscribing.
+				//
+				// We need better ways of recovering from this, such as removing the problem table
+				// from the subscription.
+				if err != nil {
+					panic(err.Error())
+				}
+
+				modification.Namespace, modification.Name = relation.Namespace, relation.Name
 
 				output <- changelog.Entry{Modification: modification}
 			default:

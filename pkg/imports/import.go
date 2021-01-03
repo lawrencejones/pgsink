@@ -25,6 +25,7 @@ type querier interface {
 // Import is built for each job in the database, having resolved contextual information
 // that can help run the job from the database whenever the job was enqueued.
 type Import struct {
+	Schema            string
 	TableName         string
 	PrimaryKey        string
 	PrimaryKeyScanner logical.ValueScanner
@@ -41,13 +42,13 @@ func Build(ctx context.Context, logger kitlog.Logger, decoder decode.Decoder, tx
 	// the changelog, than after pushing the schema when we discover the table is
 	// incompatible.
 	logger.Log("event", "lookup_primary_key", "msg", "querying Postgres for relations primary key column")
-	primaryKey, err := getPrimaryKeyColumn(ctx, tx, job.TableName)
+	primaryKey, err := getPrimaryKeyColumn(ctx, tx, job.Schema, job.TableName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to lookup primary key: %w", err)
 	}
 
 	logger.Log("event", "build_relation", "msg", "querying Postgres for relation type information")
-	relation, err := buildRelation(ctx, tx, job.TableName, primaryKey)
+	relation, err := buildRelation(ctx, tx, job.Schema, job.TableName, primaryKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build relation for table: %w", err)
 	}
@@ -72,6 +73,7 @@ func Build(ctx context.Context, logger kitlog.Logger, decoder decode.Decoder, tx
 	}
 
 	cfg := &Import{
+		Schema:            job.Schema,
 		TableName:         job.TableName,
 		PrimaryKey:        primaryKey,
 		PrimaryKeyScanner: primaryKeyScanner,
@@ -109,7 +111,7 @@ func buildScanners(relation *logical.Relation, decoder decode.Decoder, primaryKe
 // buildRelation generates the logical.Relation structure by querying Postgres catalog
 // tables. Importantly, this populates the relation.Columns slice, providing type
 // information that can later be used to marshal Golang types.
-func buildRelation(ctx context.Context, tx querier, tableName, primaryKeyColumn string) (*logical.Relation, error) {
+func buildRelation(ctx context.Context, tx querier, schema, tableName, primaryKeyColumn string) (*logical.Relation, error) {
 	ctx, span := trace.StartSpan(ctx, "pkg/imports.buildRelation")
 	defer span.End()
 
@@ -119,13 +121,13 @@ func buildRelation(ctx context.Context, tx querier, tableName, primaryKeyColumn 
 	     , nspname as namespace
 	     , relname as name
 		from pg_class join pg_namespace on pg_class.relnamespace=pg_namespace.oid
-	 where pg_class.oid = $1::regclass::oid;
+	 where nspname = $1 and relname = $2;
 	`
 
 	relation := &logical.Relation{Columns: []logical.Column{}}
-	err := tx.QueryRow(ctx, query, tableName).Scan(&relation.ID, &relation.Namespace, &relation.Name)
+	err := tx.QueryRow(ctx, query, schema, tableName).Scan(&relation.ID, &relation.Namespace, &relation.Name)
 	if err != nil {
-		return nil, fmt.Errorf("failed to identify table namespace and name: %w", err)
+		return nil, fmt.Errorf("failed to identify table with namespace '%s' and name '%s': %w", schema, tableName, err)
 	}
 
 	// Eg. name = id, type = 20
@@ -194,7 +196,7 @@ var NoPrimaryKeyError = fmt.Errorf("no primary key found")
 
 // getPrimaryKeyColumn identifies the primary key column of the given table. It only
 // supports tables with primary keys, and of those, only single column primary keys.
-func getPrimaryKeyColumn(ctx context.Context, tx querier, tableName string) (string, error) {
+func getPrimaryKeyColumn(ctx context.Context, tx querier, schema, tableName string) (string, error) {
 	ctx, span := trace.StartSpan(ctx, "pkg/imports.getPrimaryKeyColumn")
 	defer span.End()
 

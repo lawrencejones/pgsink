@@ -30,7 +30,7 @@ func (d *schemaHandler) Handle(ctx context.Context, logger kitlog.Logger, schema
 	ctx, span := trace.StartSpan(ctx, "pkg/sinks/bigquery/schemaHandler.Handle")
 	defer span.End()
 
-	logger = kitlog.With(logger, "namespace", schema.Spec.Namespace)
+	logger = kitlog.With(logger, "schema", schema.String())
 	raw, rawMetadata, err := d.syncRawTable(ctx, logger, schema)
 	if err != nil {
 		return nil, generic.SchemaHandlerFailed, err
@@ -45,10 +45,15 @@ func (d *schemaHandler) Handle(ctx context.Context, logger kitlog.Logger, schema
 
 // syncRawTable creates or updates the raw changelog table that powers the most-recent row
 // view. It is named the same as the Postgres table it represents, but with a _raw suffix.
+//
+// This does not handle Postgres schemas! That is because BigQuery has no support for a
+// schema prefix in table names, and we only want to manage a single dataset. Any pgsink
+// installation that consumes tables of the same name from different schemas will have a
+// bad time.
 func (d *schemaHandler) syncRawTable(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) (*bq.Table, *bq.TableMetadata, error) {
-	tableName := fmt.Sprintf("%s_raw", schema.Spec.Name)
+	tableName := fmt.Sprintf("%s_raw", schema.Name)
 	table := d.dataset.Table(tableName)
-	md, err := buildRaw(tableName, schema.Spec)
+	md, err := buildRaw(tableName, schema)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to build raw table metadata")
 	}
@@ -60,8 +65,8 @@ func (d *schemaHandler) syncRawTable(ctx context.Context, logger kitlog.Logger, 
 // syncViewTable creates or updates the most-recent row state view, which depends on the
 // raw changelog table.
 func (d *schemaHandler) syncViewTable(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema, raw *bq.Table) (*bq.Table, *bq.TableMetadata, error) {
-	table := d.dataset.Table(schema.Spec.Name)
-	md, err := buildView(schema.Spec.Name, raw.FullyQualifiedName(), schema.Spec)
+	table := d.dataset.Table(schema.Name)
+	md, err := buildView(schema.Name, raw.FullyQualifiedName(), schema)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to build raw table metadata")
 	}

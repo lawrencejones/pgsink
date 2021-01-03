@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lawrencejones/pgsink/pkg/logical"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 
 	bq "cloud.google.com/go/bigquery"
 	"github.com/alecthomas/template"
@@ -24,9 +24,9 @@ import (
 //      ...,
 //    },
 // }
-func buildRaw(tableName string, relation logical.Relation) (*bq.TableMetadata, error) {
+func buildRaw(tableName string, schema *changelog.Schema) (*bq.TableMetadata, error) {
 	fields := bq.Schema{}
-	for _, column := range relation.Columns {
+	for _, column := range schema.Spec.Columns {
 		externalType, repeated, err := fieldTypeFor(column.Type)
 		if err != nil {
 			return nil, err
@@ -47,7 +47,7 @@ func buildRaw(tableName string, relation logical.Relation) (*bq.TableMetadata, e
 		return fields[i].Name < fields[j].Name
 	})
 
-	schema := bq.Schema{
+	bqSchema := bq.Schema{
 		&bq.FieldSchema{
 			Name:        "timestamp",
 			Type:        bq.TimestampFieldType,
@@ -76,7 +76,7 @@ func buildRaw(tableName string, relation logical.Relation) (*bq.TableMetadata, e
 
 	md := &bq.TableMetadata{
 		Name:   tableName,
-		Schema: schema,
+		Schema: bqSchema,
 		TimePartitioning: &bq.TimePartitioning{
 			Field: "timestamp",
 		},
@@ -88,9 +88,9 @@ func buildRaw(tableName string, relation logical.Relation) (*bq.TableMetadata, e
 // buildView creates a BigQuery view that presents only the most recent row content in the
 // raw table to the user. We expect the rawTableName to be in projectID:datasetID.tableID
 // form.
-func buildView(tableName, rawTableName string, relation logical.Relation) (*bq.TableMetadata, error) {
+func buildView(tableName, rawTableName string, schema *changelog.Schema) (*bq.TableMetadata, error) {
 	keys := []string{}
-	for _, column := range relation.Columns {
+	for _, column := range schema.Spec.Columns {
 		if column.Key {
 			keys = append(keys, column.Name)
 		}

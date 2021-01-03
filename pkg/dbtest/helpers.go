@@ -34,7 +34,7 @@ type DB struct {
 
 // defaultOptions is appended to all user supplied options
 var defaultOptions = []func(*DB){
-	WithTruncate("pgsink.import_jobs"),
+	WithTruncate("pgsink", "import_jobs"),
 }
 
 func Configure(opts ...func(*DB)) *DB {
@@ -188,22 +188,24 @@ func WithSchema(name string) func(*DB) {
 	}
 }
 
-func WithTruncate(name string) func(*DB) {
+func WithTruncate(namespace, name string) func(*DB) {
+	tableName := fmt.Sprintf("%s.%s", namespace, name)
 	return WithLifecycle(
 		nil, // allow the test to create data
 		func(ctx context.Context, db, _ *sql.DB) (sql.Result, error) {
-			return db.ExecContext(ctx, fmt.Sprintf(`truncate %s;`, name))
+			return db.ExecContext(ctx, fmt.Sprintf(`truncate %s;`, tableName))
 		},
 	)
 }
 
-func WithTable(name string, fieldDefinitions ...string) func(*DB) {
+func WithTable(namespace string, name string, fieldDefinitions ...string) func(*DB) {
+	tableName := fmt.Sprintf("%s.%s", namespace, name)
 	return WithLifecycle(
 		func(ctx context.Context, db, _ *sql.DB) (sql.Result, error) {
-			return db.ExecContext(ctx, fmt.Sprintf("create table %s (%s);", name, strings.Join(fieldDefinitions, ", ")))
+			return db.ExecContext(ctx, fmt.Sprintf("create table %s (%s);", tableName, strings.Join(fieldDefinitions, ", ")))
 		},
 		func(ctx context.Context, db, _ *sql.DB) (sql.Result, error) {
-			return db.ExecContext(ctx, fmt.Sprintf(`drop table if exists %s cascade;`, name))
+			return db.ExecContext(ctx, fmt.Sprintf(`drop table if exists %s cascade;`, tableName))
 		},
 	)
 }

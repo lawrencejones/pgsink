@@ -205,7 +205,8 @@ forEachRow:
 		modificationCount++
 		modification := &changelog.Modification{
 			Timestamp: timestamp.Get().(time.Time),
-			Namespace: changelog.Namespace(cfg.Relation.String()),
+			Namespace: cfg.Relation.Namespace,
+			Name:      cfg.Relation.Name,
 			After:     row,
 		}
 
