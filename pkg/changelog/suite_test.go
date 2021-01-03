@@ -1,4 +1,4 @@
-package util_test
+package changelog_test
 
 import (
 	"testing"
@@ -9,5 +9,5 @@ import (
 
 func TestSuite(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "pkg/util")
+	RunSpecs(t, "pkg/changelog")
 }
