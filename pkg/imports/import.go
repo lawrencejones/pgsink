@@ -31,7 +31,7 @@ type Import struct {
 	PrimaryKey        string
 	PrimaryKeyScanner decode.ValueScanner
 	Relation          *logical.Relation
-	Scanners          []interface{}
+	TypeMappings      []*decode.TypeMapping
 	Cursor            interface{}
 }
 
@@ -56,7 +56,7 @@ func Build(ctx context.Context, logger kitlog.Logger, decoder decode.Decoder, tx
 
 	// Build scanners for decoding column types. We'll need the primary key scanner for
 	// interpreting the cursor.
-	primaryKeyScanner, scanners, err := buildScanners(relation, decoder, primaryKey)
+	primaryKeyScanner, typeMappings, err := buildTypeMappings(relation, decoder, primaryKey)
 	if err != nil {
 		return nil, err
 	}
@@ -79,30 +79,30 @@ func Build(ctx context.Context, logger kitlog.Logger, decoder decode.Decoder, tx
 		PrimaryKey:        primaryKey,
 		PrimaryKeyScanner: primaryKeyScanner,
 		Relation:          relation,
-		Scanners:          scanners,
+		TypeMappings:      typeMappings,
 		Cursor:            cursor,
 	}
 
 	return cfg, nil
 }
 
-// buildScanners produces pgx type scanners, returning a scanner for the relation primary
-// key and a slice of scanners for the other columns.
-func buildScanners(relation *logical.Relation, decoder decode.Decoder, primaryKey string) (primaryKeyScanner decode.ValueScanner, scanners []interface{}, err error) {
+// buildTypeMappings produces decoder TypeMappings, providing scanners for the relation
+// primary key and other columns.
+func buildTypeMappings(relation *logical.Relation, decoder decode.Decoder, primaryKey string) (primaryKeyScanner decode.ValueScanner, typeMappings []*decode.TypeMapping, err error) {
 	// Go can't handle splatting non-empty-interface types into a parameter list of
 	// empty-interfaces, so we have to construct an interface{} slice of scanners.
-	scanners = make([]interface{}, len(relation.Columns))
+	typeMappings = make([]*decode.TypeMapping, len(relation.Columns))
 	for idx, column := range relation.Columns {
-		scanner, err := decoder.ScannerForOID(column.Type)
+		typeMapping, err := decoder.TypeMappingForOID(column.Type)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "table contains Postgres type that we cannot decode")
 		}
-		scanners[idx] = scanner
+		typeMappings[idx] = typeMapping
 
 		// We'll need this scanner to convert the cursor value between what the table accepts
 		// and what we'll store in import_jobs
 		if column.Name == primaryKey {
-			primaryKeyScanner = scanner
+			primaryKeyScanner = typeMapping.Scanner
 		}
 	}
 

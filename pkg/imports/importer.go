@@ -189,15 +189,24 @@ func (i importer) scanBatch(ctx context.Context, logger kitlog.Logger, tx pgx.Tx
 		workQueryDurationSeconds.WithLabelValues(cfg.TableName).Observe(v)
 	})).ObserveDuration()
 
+	var scanners []interface{}
+	for _, typeMapping := range cfg.TypeMappings {
+		scanners = append(scanners, typeMapping.Scanner)
+	}
+
 forEachRow:
 	for rows.Next() {
-		if err := rows.Scan(append([]interface{}{&timestamp}, cfg.Scanners...)...); err != nil {
+		if err := rows.Scan(append([]interface{}{&timestamp}, scanners...)...); err != nil {
 			return fail(err, "failed to scan table")
 		}
 
 		row := map[string]interface{}{}
 		for idx, column := range cfg.Relation.Columns {
-			row[column.Name] = cfg.Scanners[idx].(decode.ValueScanner).Get()
+			typeMapping := cfg.TypeMappings[idx]
+			dest := typeMapping.NewEmpty()
+			typeMapping.Scanner.AssignTo(dest)
+
+			row[column.Name] = dest
 		}
 
 		tableRowsRead.Inc()

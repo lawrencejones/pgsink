@@ -206,14 +206,14 @@ var _ = Describe("Importer", func() {
 				Expect(store.modifications).To(ConsistOf(
 					ModificationMatcher(schema, tableOneName).WithBefore(BeNil()).WithAfter(
 						MatchAllKeys(Keys{
-							"id":  BeAssignableToTypeOf(int64(0)),
-							"msg": Equal("meow"),
+							"id":  PointTo(BeAssignableToTypeOf(int64(0))),
+							"msg": PointTo(Equal("meow")),
 						}),
 					),
 					ModificationMatcher(schema, tableOneName).WithBefore(BeNil()).WithAfter(
 						MatchAllKeys(Keys{
-							"id":  BeAssignableToTypeOf(int64(0)),
-							"msg": Equal("woof"),
+							"id":  PointTo(BeAssignableToTypeOf(int64(0))),
+							"msg": PointTo(Equal("woof")),
 						}),
 					),
 				))
@@ -282,14 +282,14 @@ var _ = Describe("Importer", func() {
 				Expect(store.modifications).To(ConsistOf(
 					ModificationMatcher(schema, tableOneName).WithBefore(BeNil()).WithAfter(
 						MatchAllKeys(Keys{
-							"id":  BeAssignableToTypeOf(int64(0)),
-							"msg": Equal("woof"),
+							"id":  PointTo(BeAssignableToTypeOf(int64(0))),
+							"msg": PointTo(Equal("woof")),
 						}),
 					),
 					ModificationMatcher(schema, tableOneName).WithBefore(BeNil()).WithAfter(
 						MatchAllKeys(Keys{
-							"id":  BeAssignableToTypeOf(int64(0)),
-							"msg": Equal("roar"),
+							"id":  PointTo(BeAssignableToTypeOf(int64(0))),
+							"msg": PointTo(Equal("roar")),
 						}),
 					),
 				))

@@ -54,7 +54,7 @@ func (e *UnregisteredType) Error() string {
 func (d decoder) TypeMappingForOID(oid uint32) (mapping *TypeMapping, err error) {
 	for _, mapping := range d.mappings {
 		if oid == mapping.OID {
-			return &mapping, nil
+			return mapping.Clone(), nil
 		}
 	}
 
@@ -74,7 +74,7 @@ func (d decoder) ScannerForOID(oid uint32) (scanner ValueScanner, err error) {
 func (d decoder) EmptyForOID(oid uint32) (empty interface{}, err error) {
 	for _, mapping := range d.mappings {
 		if oid == mapping.OID {
-			return mapping.Empty, nil
+			return mapping.NewEmpty(), nil
 		}
 	}
 
@@ -86,6 +86,17 @@ type TypeMapping struct {
 	OID     uint32       // Postgres type OID
 	Scanner ValueScanner // scanner for parsing type from database
 	Empty   interface{}  // Golang empty type produced by the scanner
+}
+
+// Clone produces a new copy of the TypeMapping, which is essential, given the scanners
+// are stateful.
+func (t TypeMapping) Clone() *TypeMapping {
+	return &TypeMapping{
+		Name:    t.Name,
+		OID:     t.OID,
+		Scanner: t.NewScanner(),
+		Empty:   t.NewEmpty(),
+	}
 }
 
 // NewScanner initialises a new scanner, using the mapping Scanner as a template
