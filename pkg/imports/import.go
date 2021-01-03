@@ -28,7 +28,7 @@ type Import struct {
 	Schema            string
 	TableName         string
 	PrimaryKey        string
-	PrimaryKeyScanner logical.ValueScanner
+	PrimaryKeyScanner decode.ValueScanner
 	Relation          *logical.Relation
 	Scanners          []interface{}
 	Cursor            interface{}
@@ -87,7 +87,7 @@ func Build(ctx context.Context, logger kitlog.Logger, decoder decode.Decoder, tx
 
 // buildScanners produces pgx type scanners, returning a scanner for the relation primary
 // key and a slice of scanners for the other columns.
-func buildScanners(relation *logical.Relation, decoder decode.Decoder, primaryKey string) (primaryKeyScanner logical.ValueScanner, scanners []interface{}, err error) {
+func buildScanners(relation *logical.Relation, decoder decode.Decoder, primaryKey string) (primaryKeyScanner decode.ValueScanner, scanners []interface{}, err error) {
 	// Go can't handle splatting non-empty-interface types into a parameter list of
 	// empty-interfaces, so we have to construct an interface{} slice of scanners.
 	scanners = make([]interface{}, len(relation.Columns))

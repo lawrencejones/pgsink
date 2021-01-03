@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lawrencejones/pgsink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
 	bq "cloud.google.com/go/bigquery"
@@ -15,11 +16,13 @@ import (
 
 type schemaHandler struct {
 	dataset *bq.Dataset
+	decoder decode.Decoder
 }
 
-func newSchemaHandler(dataset *bq.Dataset) *schemaHandler {
+func newSchemaHandler(dataset *bq.Dataset, decoder decode.Decoder) *schemaHandler {
 	return &schemaHandler{
 		dataset: dataset,
+		decoder: decoder,
 	}
 }
 
@@ -53,7 +56,7 @@ func (d *schemaHandler) Handle(ctx context.Context, logger kitlog.Logger, schema
 func (d *schemaHandler) syncRawTable(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) (*bq.Table, *bq.TableMetadata, error) {
 	tableName := fmt.Sprintf("%s_raw", schema.Name)
 	table := d.dataset.Table(tableName)
-	md, err := buildRaw(tableName, schema)
+	md, err := buildRaw(tableName, schema, d.decoder)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to build raw table metadata")
 	}

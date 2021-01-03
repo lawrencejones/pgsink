@@ -15,6 +15,7 @@ import (
 
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/decode"
+	"github.com/lawrencejones/pgsink/pkg/decode/gen/mappings"
 	"github.com/lawrencejones/pgsink/pkg/imports"
 	"github.com/lawrencejones/pgsink/pkg/migration"
 	sinkbigquery "github.com/lawrencejones/pgsink/pkg/sinks/bigquery"
@@ -51,10 +52,9 @@ var (
 	// Each subscription has a name and a unique identifier
 	subscriptionName = app.Flag("subscription-name", "Subscription name, matches Postgres publication").Default("pgsink").String()
 
-	stream               = app.Command("stream", "Stream changes into sink")
-	streamConsume        = stream.Flag("consume", "Consume messages from the subscription").Default("true").Bool()
-	streamDecodeOnly     = stream.Flag("decode-only", "Print messages only, ignoring sink").Default("false").Bool()
-	streamDecodeFallback = stream.Flag("decode-fallback", "If enabled, coerce unrecognised Postgres columns to text").Default("false").Bool()
+	stream           = app.Command("stream", "Stream changes into sink")
+	streamConsume    = stream.Flag("consume", "Consume messages from the subscription").Default("true").Bool()
+	streamDecodeOnly = stream.Flag("decode-only", "Print messages only, ignoring sink").Default("false").Bool()
 
 	streamOptions = new(subscription.StreamOptions).Bind(stream, "")
 
@@ -234,24 +234,14 @@ func Run() (err error) {
 			sub     *subscription.Subscription
 			stream  *subscription.Stream
 			sink    generic.Sink
-			decoder decode.Decoder
+			decoder = decode.NewDecoder(mappings.Mappings)
 		)
-
-		{
-			var fallback *decode.TypeMapping
-			if *streamDecodeFallback {
-				logger.Log("msg", "configuring Postgres decoder to fallback to text for unrecognised types")
-				fallback = decode.TextFallback
-			}
-
-			decoder = decode.NewDecoder(fallback)
-		}
 
 		switch *streamSinkType {
 		case "file":
 			sink, err = sinkfile.New(logger, *streamSinkFileOptions)
 		case "bigquery":
-			sink, err = sinkbigquery.New(ctx, logger, *streamSinkBigQueryOptions)
+			sink, err = sinkbigquery.New(ctx, logger, decoder, *streamSinkBigQueryOptions)
 		default:
 			return UsageError{fmt.Errorf("unsupported sink type: %s", *streamSinkType)}
 		}

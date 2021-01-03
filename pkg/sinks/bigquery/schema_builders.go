@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lawrencejones/pgsink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/decode"
 
 	bq "cloud.google.com/go/bigquery"
 	"github.com/alecthomas/template"
@@ -24,10 +25,14 @@ import (
 //      ...,
 //    },
 // }
-func buildRaw(tableName string, schema *changelog.Schema) (*bq.TableMetadata, error) {
+func buildRaw(tableName string, schema *changelog.Schema, decoder decode.Decoder) (*bq.TableMetadata, error) {
 	fields := bq.Schema{}
 	for _, column := range schema.Spec.Columns {
-		externalType, repeated, err := fieldTypeFor(column.Type)
+		empty, err := decoder.EmptyForOID(column.Type)
+		if err != nil {
+			return nil, err
+		}
+		externalType, repeated, err := fieldTypeFor(empty)
 		if err != nil {
 			return nil, err
 		}

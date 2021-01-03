@@ -11,6 +11,7 @@ import (
 	. "github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/table"
 	"github.com/lawrencejones/pgsink/pkg/dbtest"
 	"github.com/lawrencejones/pgsink/pkg/decode"
+	"github.com/lawrencejones/pgsink/pkg/decode/gen/mappings"
 	"github.com/lawrencejones/pgsink/pkg/imports"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
@@ -97,7 +98,7 @@ var _ = Describe("Importer", func() {
 					),
 				),
 			),
-			decode.NewDecoder(nil),
+			decode.NewDecoder(mappings.Mappings),
 			imports.ImporterOptions{
 				SnapshotTimeout: snapshotTimeout,
 				BatchLimit:      batchLimit,

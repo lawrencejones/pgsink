@@ -7,6 +7,7 @@ import (
 	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
 	"github.com/lawrencejones/pgsink/pkg/dbtest"
 	"github.com/lawrencejones/pgsink/pkg/decode"
+	"github.com/lawrencejones/pgsink/pkg/decode/gen/mappings"
 	"github.com/lawrencejones/pgsink/pkg/imports"
 	"github.com/lawrencejones/pgsink/pkg/logical"
 
@@ -57,7 +58,7 @@ var _ = Describe("Import", func() {
 		)
 
 		JustBeforeEach(func() {
-			subject, err = imports.Build(ctx, logger, decode.NewDecoder(nil), db.GetConnection(ctx), job)
+			subject, err = imports.Build(ctx, logger, decode.NewDecoder(mappings.Mappings), db.GetConnection(ctx), job)
 		})
 
 		BeforeEach(func() {
@@ -119,7 +120,7 @@ var _ = Describe("Import", func() {
 						job.Cursor = &cursor
 					}
 
-					subject, err = imports.Build(ctx, logger, decode.NewDecoder(nil), db.GetConnection(ctx), job)
+					subject, err = imports.Build(ctx, logger, decode.NewDecoder(mappings.Mappings), db.GetConnection(ctx), job)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(subject.Cursor).To(matcher)

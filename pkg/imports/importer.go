@@ -9,7 +9,6 @@ import (
 	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
 	. "github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/table"
 	"github.com/lawrencejones/pgsink/pkg/decode"
-	"github.com/lawrencejones/pgsink/pkg/logical"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 	"github.com/lawrencejones/pgsink/pkg/telem"
 
@@ -198,7 +197,7 @@ forEachRow:
 
 		row := map[string]interface{}{}
 		for idx, column := range cfg.Relation.Columns {
-			row[column.Name] = cfg.Scanners[idx].(logical.ValueScanner).Get()
+			row[column.Name] = cfg.Scanners[idx].(decode.ValueScanner).Get()
 		}
 
 		tableRowsRead.Inc()

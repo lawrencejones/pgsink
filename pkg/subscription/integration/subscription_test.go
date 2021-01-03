@@ -9,6 +9,7 @@ import (
 	. "github.com/lawrencejones/pgsink/pkg/changelog/matchers"
 	"github.com/lawrencejones/pgsink/pkg/dbtest"
 	"github.com/lawrencejones/pgsink/pkg/decode"
+	"github.com/lawrencejones/pgsink/pkg/decode/gen/mappings"
 	"github.com/lawrencejones/pgsink/pkg/subscription"
 
 	"github.com/jackc/pglogrepl"
@@ -110,7 +111,7 @@ var _ = Describe("Subscription", func() {
 				subscription.StreamOptions{HeartbeatInterval: 500 * time.Millisecond})
 			Expect(err).NotTo(HaveOccurred())
 
-			return stream, subscription.BuildChangelog(logger, decode.NewDecoder(nil), stream)
+			return stream, subscription.BuildChangelog(logger, decode.NewDecoder(mappings.Mappings), stream)
 		}
 
 		BeforeEach(func() {

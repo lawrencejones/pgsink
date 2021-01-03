@@ -2,27 +2,16 @@ package logical
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/binary"
 	"fmt"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/jackc/pgtype"
 	"github.com/lawrencejones/pgsink/pkg/decode"
 )
 
 // PGOutput is the Postgres recognised name of our desired encoding
 const PGOutput = "pgoutput"
-
-type ValueScanner interface {
-	pgtype.Value
-	sql.Scanner
-
-	// Not strictly part of the Value and Scanner interfaces, but included in all our
-	// supported types
-	EncodeText(*pgtype.ConnInfo, []byte) ([]byte, error)
-}
 
 // DecodePGOutput parses a pgoutput logical replication message, as per the format
 // specification at:

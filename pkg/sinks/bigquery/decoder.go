@@ -2,28 +2,47 @@ package bigquery
 
 import (
 	"fmt"
+	"time"
 
 	bq "cloud.google.com/go/bigquery"
-	"github.com/jackc/pgtype"
 )
 
 // fieldTypeFor maps Postgres OID types to BigQuery types, allowing us to build BigQuery
 // schemas from Postgres type information.
-func fieldTypeFor(oid uint32) (fieldType bq.FieldType, repeated bool, err error) {
-	switch oid {
-	case pgtype.BoolOID:
-		return bq.BooleanFieldType, false, nil
-	case pgtype.Int2OID, pgtype.Int4OID, pgtype.Int8OID:
-		return bq.IntegerFieldType, false, nil
-	case pgtype.Float4OID, pgtype.Float8OID:
-		return bq.FloatFieldType, false, nil
-	case pgtype.TimestampOID, pgtype.TimestamptzOID:
-		return bq.TimestampFieldType, false, nil
-	case pgtype.TextOID, pgtype.VarcharOID:
-		return bq.StringFieldType, false, nil
-	case pgtype.TextArrayOID, pgtype.VarcharArrayOID:
-		return bq.StringFieldType, true, nil
+func fieldTypeFor(val interface{}) (fieldType bq.FieldType, repeated bool, err error) {
+	switch val.(type) {
+	case *bool:
+		return bq.BooleanFieldType, repeated, nil
+	case *int8, *int16, *int32, *int64:
+		return bq.IntegerFieldType, repeated, nil
+	case *uint8, *uint16, *uint32, *uint64:
+		return bq.IntegerFieldType, repeated, nil
+	case *float32, *float64:
+		return bq.FloatFieldType, repeated, nil
+	case *time.Time:
+		return bq.TimestampFieldType, repeated, nil
+	case *string:
+		return bq.StringFieldType, repeated, nil
 	}
 
-	return "", false, fmt.Errorf("no BigQuery field for Postgres oid %v", oid)
+	// All types that follow must be repeated
+	repeated = true
+
+	// Composite types
+	switch val.(type) {
+	case *[]bool:
+		return bq.BooleanFieldType, repeated, nil
+	case *[]int8, *[]int16, *[]int32, *[]int64:
+		return bq.IntegerFieldType, repeated, nil
+	case *[]uint8, *[]uint16, *[]uint32, *[]uint64:
+		return bq.IntegerFieldType, repeated, nil
+	case *[]float32, *[]float64:
+		return bq.FloatFieldType, repeated, nil
+	case *[]time.Time:
+		return bq.TimestampFieldType, repeated, nil
+	case *[]string:
+		return bq.StringFieldType, repeated, nil
+	}
+
+	return "", false, fmt.Errorf("no BigQuery field for type %T", val)
 }
