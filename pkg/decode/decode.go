@@ -11,13 +11,11 @@ import (
 func NewDecoder(fallback *TypeMapping) Decoder {
 	return Decoder{
 		fallback: fallback,
-		mappings: Mappings,
 	}
 }
 
 type Decoder struct {
-	fallback *TypeMapping  // if set, will be the fallback mapping for unrecognised types
-	mappings []TypeMapping // list of all available type mappings
+	fallback *TypeMapping // if set, will be the fallback mapping for unrecognised types
 }
 
 type TypeMapping struct {
@@ -59,7 +57,7 @@ func (e *UnregisteredType) Error() string {
 }
 
 func (d Decoder) ScannerForOID(oid uint32) (scanner valueScanner, err error) {
-	for _, mapping := range d.mappings {
+	for _, mapping := range Mappings {
 		if oid == mapping.OID {
 			return mapping.NewScanner(), nil
 		}
@@ -73,7 +71,7 @@ func (d Decoder) ScannerForOID(oid uint32) (scanner valueScanner, err error) {
 }
 
 func (d Decoder) EmptyForOID(oid uint32) (empty interface{}, err error) {
-	for _, mapping := range d.mappings {
+	for _, mapping := range Mappings {
 		if oid == mapping.OID {
 			return mapping.Empty, nil
 		}

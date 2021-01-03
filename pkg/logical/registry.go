@@ -55,17 +55,27 @@ func (r *Registry) Get(oid uint32) *Relation {
 
 // Marshal uses the schema information in the registry to marshal Golang native structures
 // from logical messages.
-func (r *Registry) Marshal(msg interface{}) (relation *Relation, before interface{}, after interface{}) {
+func (r *Registry) Marshal(msg interface{}) (relation *Relation, before interface{}, after interface{}, err error) {
 	switch cast := msg.(type) {
 	case *Insert:
 		relation = r.Get(cast.ID)
-		after = relation.Marshal(r.decoder, cast.Row)
+		after, err = relation.Marshal(r.decoder, cast.Row)
+
 	case *Update:
 		relation = r.Get(cast.ID)
-		before, after = relation.Marshal(r.decoder, cast.OldRow), relation.Marshal(r.decoder, cast.Row)
+		before, err = relation.Marshal(r.decoder, cast.OldRow)
+		if err != nil {
+			return
+		}
+		after, err = relation.Marshal(r.decoder, cast.Row)
+		if err != nil {
+			return
+		}
+
 	case *Delete:
 		relation = r.Get(cast.ID)
-		before = relation.Marshal(r.decoder, cast.OldRow)
+		before, err = relation.Marshal(r.decoder, cast.OldRow)
+
 	default:
 		panic(fmt.Sprintf("invalid message type (not insert/update/delete): %s", spew.Sdump(msg)))
 	}

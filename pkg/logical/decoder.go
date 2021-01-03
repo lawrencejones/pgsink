@@ -175,10 +175,10 @@ func (r Relation) String() string {
 
 // Marshal converts a tuple into a dynamic Golang map type. Values are represented in Go
 // native types.
-func (r *Relation) Marshal(decoder decode.Decoder, tuple []Element) map[string]interface{} {
+func (r *Relation) Marshal(decoder decode.Decoder, tuple []Element) (map[string]interface{}, error) {
 	// This tuple doesn't match our relation, if the sizes aren't the same
 	if len(tuple) != len(r.Columns) {
-		return nil
+		return nil, fmt.Errorf("tuple does not match the relation")
 	}
 
 	row := map[string]interface{}{}
@@ -188,14 +188,14 @@ func (r *Relation) Marshal(decoder decode.Decoder, tuple []Element) map[string]i
 			var err error
 			decoded, err = column.Decode(decoder, tuple[idx].Value)
 			if err != nil {
-				panic(fmt.Sprintf("failed to decode tuple value: %v\n\n%s", err, spew.Sdump(err)))
+				return nil, fmt.Errorf("failed to decode tuple value: %w: \n\n%s", err, spew.Sdump(err))
 			}
 		}
 
 		row[column.Name] = decoded
 	}
 
-	return row
+	return row, nil
 }
 
 type Column struct {
