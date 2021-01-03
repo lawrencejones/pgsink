@@ -13,7 +13,7 @@ PGDATABASE ?= pgsink
 PGUSER ?= pgsink
 
 .PHONY: prog darwin linux clean
-.PHONY: migrate createdb dropdb recreatedb test docs
+.PHONY: migrate createdb dropdb recreatedb test docs pkg/dbschema
 
 ################################################################################
 # Build
@@ -56,3 +56,8 @@ recreatedb: dropdb createdb
 # go get -u github.com/onsi/ginkgo/ginkgo
 test:
 	PGUSER=pgsink_test PGDATABASE=pgsink_test ginkgo -r pkg
+
+# Generates database types from live Postgres schema (start docker-compose for
+# this)
+pkg/dbschema:
+	jet -source=PostgreSQL -host=localhost -port=5432 -user=$(PGUSER) -dbname=$(PGDATABASE) -schema=pgsink -path=pkg/dbschema

@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/lawrencejones/pgsink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/decode"
+	"github.com/lawrencejones/pgsink/pkg/decode/gen/mappings"
 	"github.com/lawrencejones/pgsink/pkg/imports"
 	"github.com/lawrencejones/pgsink/pkg/migration"
 	sinkbigquery "github.com/lawrencejones/pgsink/pkg/sinks/bigquery"
@@ -229,16 +231,17 @@ func Run() (err error) {
 	switch command {
 	case stream.FullCommand():
 		var (
-			sub    *subscription.Subscription
-			stream *subscription.Stream
-			sink   generic.Sink
+			sub     *subscription.Subscription
+			stream  *subscription.Stream
+			sink    generic.Sink
+			decoder = decode.NewDecoder(mappings.Mappings)
 		)
 
 		switch *streamSinkType {
 		case "file":
 			sink, err = sinkfile.New(logger, *streamSinkFileOptions)
 		case "bigquery":
-			sink, err = sinkbigquery.New(ctx, logger, *streamSinkBigQueryOptions)
+			sink, err = sinkbigquery.New(ctx, logger, decoder, *streamSinkBigQueryOptions)
 		default:
 			return UsageError{fmt.Errorf("unsupported sink type: %s", *streamSinkType)}
 		}
@@ -281,7 +284,7 @@ func Run() (err error) {
 						return nil
 					}
 
-					entries := subscription.BuildChangelog(logger, stream)
+					entries := subscription.BuildChangelog(logger, decoder, stream)
 					return sink.Consume(ctx, entries, func(entry changelog.Entry) {
 						if entry.Modification != nil && entry.Modification.LSN != nil {
 							stream.Confirm(pglogrepl.LSN(*entry.Modification.LSN))
@@ -330,7 +333,7 @@ func Run() (err error) {
 			// Assign the subscription ID from what we generated on boot
 			streamImportWorkerOptions.SubscriptionID = sub.ID
 
-			importer := imports.NewImporter(sink, *streamImporterOptions)
+			importer := imports.NewImporter(sink, decoder, *streamImporterOptions)
 			worker := imports.NewWorker(logger, db, *streamImportWorkerOptions)
 
 			g.Add(

@@ -8,9 +8,12 @@ import (
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 	. "github.com/lawrencejones/pgsink/pkg/changelog/matchers"
 	"github.com/lawrencejones/pgsink/pkg/dbtest"
+	"github.com/lawrencejones/pgsink/pkg/decode"
+	"github.com/lawrencejones/pgsink/pkg/decode/gen/mappings"
 	"github.com/lawrencejones/pgsink/pkg/subscription"
 
 	"github.com/jackc/pglogrepl"
+	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4"
 
 	. "github.com/onsi/ginkgo"
@@ -28,16 +31,19 @@ var _ = Describe("Subscription", func() {
 
 	var (
 		schema       = "subscription_integration_test"
-		tableOneName = fmt.Sprintf("%s.one", schema)
-		tableTwoName = fmt.Sprintf("%s.two", schema)
+		decoder      = decode.NewDecoder(mappings.Mappings)
+		tableOneName = "one"
+		tableOne     = changelog.Table{Schema: schema, TableName: tableOneName}
+		tableTwoName = "two"
+		tableTwo     = changelog.Table{Schema: schema, TableName: tableTwoName}
 	)
 
 	db := dbtest.Configure(
 		dbtest.WithSchema(schema),
 		dbtest.WithPublicationClean(schema),
 		dbtest.WithReplicationSlotClean(schema),
-		dbtest.WithTable(tableOneName, "id bigserial primary key", "message text"),
-		dbtest.WithTable(tableTwoName, "id bigserial primary key", "message text"),
+		dbtest.WithTable(schema, tableOneName, "id bigserial primary key", "message text"),
+		dbtest.WithTable(schema, tableTwoName, "id bigserial primary key", "message text"),
 	)
 
 	BeforeEach(func() {
@@ -106,14 +112,14 @@ var _ = Describe("Subscription", func() {
 				subscription.StreamOptions{HeartbeatInterval: 500 * time.Millisecond})
 			Expect(err).NotTo(HaveOccurred())
 
-			return stream, subscription.BuildChangelog(logger, stream)
+			return stream, subscription.BuildChangelog(logger, decoder, stream)
 		}
 
 		BeforeEach(func() {
 			sub, repconn = createSubscription(subscription.SubscriptionOptions{Name: schema})
 			stream, entries = createStream(sub, repconn)
 
-			err = sub.SetTables(ctx, db.GetDB(), "one")
+			err = sub.SetTables(ctx, db.GetDB(), tableOne)
 			Expect(err).NotTo(HaveOccurred(), "adding table one to publication should succeed")
 
 			// We need to perform an insert to trigger changes down the replication link.
@@ -123,29 +129,24 @@ var _ = Describe("Subscription", func() {
 
 		It("receives schema for published tables", func() {
 			Eventually(entries).Should(Receive(ChangelogMatcher(
-				SchemaMatcher(tableOneName).
-					WithFields(
-						changelog.SchemaField{
-							Name: "id",
-							Type: []string{"null", "long"},
-							Key:  true,
-						},
-						changelog.SchemaField{
-							Name: "message",
-							Type: []string{"null", "string"},
-						},
+				SchemaMatcher(schema, tableOneName).
+					WithColumns(
+						MatchFields(IgnoreExtras, Fields{
+							"Name": Equal("id"), "Type": BeEquivalentTo(pgtype.Int8OID)}),
+						MatchFields(IgnoreExtras, Fields{
+							"Name": Equal("message"), "Type": BeEquivalentTo(pgtype.TextOID)}),
 					),
 			)))
 		})
 
 		It("receives changes to published tables down the channel", func() {
 			Eventually(entries).Should(Receive(ChangelogMatcher(
-				ModificationMatcher(tableOneName).
+				ModificationMatcher(schema, tableOneName).
 					WithBefore(BeNil()).
 					WithAfter(
 						MatchAllKeys(Keys{
-							"id":      BeAssignableToTypeOf(int64(0)),
-							"message": Equal("hello"),
+							"id":      PointTo(BeAssignableToTypeOf(int64(0))),
+							"message": PointTo(Equal("hello")),
 						}),
 					),
 			)))
@@ -159,8 +160,8 @@ var _ = Describe("Subscription", func() {
 			It("does not receive entries for non-published tables", func() {
 				Consistently(entries).ShouldNot(Receive(
 					SatisfyAny(
-						SchemaMatcher(tableTwoName),
-						ModificationMatcher(tableTwoName),
+						SchemaMatcher(schema, tableTwoName),
+						ModificationMatcher(schema, tableTwoName),
 					),
 				))
 			})
@@ -177,7 +178,7 @@ var _ = Describe("Subscription", func() {
 							continue
 						}
 
-						if match, _ := ModificationMatcher(tableOneName).Match(*entry.Modification); match {
+						if match, _ := ModificationMatcher(schema, tableOneName).Match(*entry.Modification); match {
 							// Wait until the stream tells us we've sent a confirmed heartbeat to the
 							// upstream server
 							Eventually(stream.Confirm(pglogrepl.LSN(*entry.Modification.LSN))).Should(Receive(
@@ -242,15 +243,15 @@ var _ = Describe("Subscription", func() {
 					// We should never receive this, as we confirmed we had flushed it to the
 					// upstream Postgres in the previous subscription stream.
 					Expect(*modification).NotTo(
-						ModificationMatcher(tableOneName).WithAfter(
-							MatchKeys(IgnoreExtras, Keys{"message": Equal("hello")}),
+						ModificationMatcher(schema, tableOneName).WithAfter(
+							MatchKeys(IgnoreExtras, Keys{"message": PointTo(Equal("hello"))}),
 						),
 					)
 
 					// This is the entry we're after, as it was created after the first stream was
 					// shutdown.
-					matcher := ModificationMatcher(tableOneName).WithAfter(
-						MatchKeys(IgnoreExtras, Keys{"message": Equal("this should be streamed")}),
+					matcher := ModificationMatcher(schema, tableOneName).WithAfter(
+						MatchKeys(IgnoreExtras, Keys{"message": PointTo(Equal("this should be streamed"))}),
 					)
 					if match, _ := matcher.Match(*modification); match {
 						return // we received the correct message
@@ -286,7 +287,7 @@ var _ = Describe("Subscription", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				By("add table two to the subscription, alongside table one")
-				err = sub.SetTables(ctx, db.GetDB(), tableOneName, tableTwoName)
+				err = sub.SetTables(ctx, db.GetDB(), tableOne, tableTwo)
 				Expect(err).NotTo(HaveOccurred())
 
 				By("commit insert into table two")
@@ -298,8 +299,8 @@ var _ = Describe("Subscription", func() {
 				// test it to confirm those implications and because we'll have to work around it,
 				// not because it's desirable.
 				Consistently(entries).ShouldNot(Receive(ChangelogMatcher(
-					ModificationMatcher(tableTwoName).WithAfter(
-						MatchKeys(IgnoreExtras, Keys{"message": Equal("on-going transaction")}),
+					ModificationMatcher(schema, tableTwoName).WithAfter(
+						MatchKeys(IgnoreExtras, Keys{"message": PointTo(Equal("on-going transaction"))}),
 					),
 				)))
 			})

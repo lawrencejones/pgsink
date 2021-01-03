@@ -65,12 +65,11 @@ func (m *changelogMatcher) NegatedFailureMessage(actual interface{}) (message st
 	return m.matcher.NegatedFailureMessage(actual)
 }
 
-func SchemaMatcher(namespace interface{}) schemaMatcher {
+func SchemaMatcher(namespace, name interface{}) schemaMatcher {
 	return schemaMatcher{
 		MatchFields(IgnoreExtras, Fields{
-			"Spec": MatchFields(IgnoreExtras, Fields{
-				"Namespace": BeEquivalentTo(namespace),
-			}),
+			"Namespace": BeEquivalentTo(namespace),
+			"Name":      BeEquivalentTo(name),
 		}),
 	}
 }
@@ -87,14 +86,15 @@ func (m schemaMatcher) WithSpec(matcher interface{}) schemaMatcher {
 	return m.With(MatchFields(IgnoreExtras, Fields{"Spec": match(matcher)}))
 }
 
-func (m schemaMatcher) WithFields(fields ...interface{}) schemaMatcher {
-	return m.WithSpec(MatchFields(IgnoreExtras, Fields{"Fields": ContainElements(fields...)}))
+func (m schemaMatcher) WithColumns(columns ...interface{}) schemaMatcher {
+	return m.WithSpec(MatchFields(IgnoreExtras, Fields{"Columns": ContainElements(columns...)}))
 }
 
-func ModificationMatcher(namespace interface{}) modificationMatcher {
+func ModificationMatcher(namespace, name interface{}) modificationMatcher {
 	return modificationMatcher{
 		MatchFields(IgnoreExtras, Fields{
 			"Namespace": BeEquivalentTo(namespace),
+			"Name":      BeEquivalentTo(name),
 		}),
 	}
 }

@@ -130,7 +130,7 @@ func (w Worker) acquire(ctx context.Context, tx pgx.Tx) (*model.ImportJobs, erro
 	// Each import worker locks an import_jobs row while that job is being processed. This
 	// allows running concurrent workers without doubly running the jobs.
 	query, args := ImportJobs.
-		SELECT(ImportJobs.ID, ImportJobs.SubscriptionID, ImportJobs.TableName, ImportJobs.Cursor).
+		SELECT(ImportJobs.ID, ImportJobs.SubscriptionID, ImportJobs.Schema, ImportJobs.TableName, ImportJobs.Cursor).
 		FOR(UPDATE().SKIP_LOCKED()). // conflict against any other workers
 		WHERE(
 			ImportJobs.SubscriptionID.EQ(String(w.opts.SubscriptionID)).
@@ -142,7 +142,7 @@ func (w Worker) acquire(ctx context.Context, tx pgx.Tx) (*model.ImportJobs, erro
 		Sql()
 
 	var job model.ImportJobs
-	if err := tx.QueryRow(ctx, query, args...).Scan(&job.ID, &job.SubscriptionID, &job.TableName, &job.Cursor); err != nil {
+	if err := tx.QueryRow(ctx, query, args...).Scan(&job.ID, &job.SubscriptionID, &job.Schema, &job.TableName, &job.Cursor); err != nil {
 		// It's expected that sometimes we'll have worked everything, and no job will remain
 		if err == pgx.ErrNoRows {
 			err = nil

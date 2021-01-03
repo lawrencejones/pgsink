@@ -2,6 +2,7 @@ package subscription
 
 import (
 	"github.com/lawrencejones/pgsink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/logical"
 
 	kitlog "github.com/go-kit/kit/log"
@@ -9,14 +10,14 @@ import (
 
 // BuildChangelog produces a stream of changelog entries from raw logical messages
 // produced by a subscription.
-func BuildChangelog(logger kitlog.Logger, stream *Stream) changelog.Changelog {
+func BuildChangelog(logger kitlog.Logger, decoder decode.Decoder, stream *Stream) changelog.Changelog {
 	output := make(changelog.Changelog)
 
 	// TODO: If this is ever modified to marshal entries in parallel, this will complicate
 	// any acknowledgement pipeline. Double check assumptions about acknowledgement order
 	// before removing ordering.
 	go func() {
-		registry, raw := logical.BuildRegistry(logger, stream.Messages())
+		registry, raw := logical.BuildRegistry(logger, decoder, stream.Messages())
 		for msg := range Sequence(raw) {
 			timestamp, lsn := msg.Begin.Timestamp, msg.Begin.LSN
 			switch entry := msg.Entry.(type) {
@@ -29,9 +30,22 @@ func BuildChangelog(logger kitlog.Logger, stream *Stream) changelog.Changelog {
 					LSN:       &lsn,
 				}
 
-				var relation *logical.Relation
-				relation, modification.Before, modification.After = registry.Marshal(msg.Entry)
-				modification.Namespace = changelog.BuildNamespace(relation.Namespace, relation.Name)
+				var (
+					relation *logical.Relation
+					err      error
+				)
+				relation, modification.Before, modification.After, err = registry.Marshal(msg.Entry)
+				// This shouldn't panic, but it does for now. The primary reason this might fail
+				// is the decoder being unable to recognise a type, which means we can't continue
+				// subscribing.
+				//
+				// We need better ways of recovering from this, such as removing the problem table
+				// from the subscription.
+				if err != nil {
+					panic(err.Error())
+				}
+
+				modification.Namespace, modification.Name = relation.Namespace, relation.Name
 
 				output <- changelog.Entry{Modification: modification}
 			default:

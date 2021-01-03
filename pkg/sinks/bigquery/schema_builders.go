@@ -7,19 +7,11 @@ import (
 	"strings"
 
 	"github.com/lawrencejones/pgsink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/decode"
 
 	bq "cloud.google.com/go/bigquery"
 	"github.com/alecthomas/template"
 )
-
-var typeMap = map[string]bq.FieldType{
-	"boolean": bq.BooleanFieldType,
-	"int":     bq.IntegerFieldType,
-	"long":    bq.IntegerFieldType,
-	"float":   bq.FloatFieldType,
-	"double":  bq.FloatFieldType,
-	"string":  bq.StringFieldType,
-}
 
 // buildRawMetadata generates a BigQuery schema from an avro-ish changelog entry. This schema
 // is for the raw tables, those that contain each changelog entry. This table is what
@@ -33,17 +25,22 @@ var typeMap = map[string]bq.FieldType{
 //      ...,
 //    },
 // }
-func buildRaw(tableName string, spec changelog.SchemaSpecification) (*bq.TableMetadata, error) {
+func buildRaw(tableName string, schema *changelog.Schema, decoder decode.Decoder) (*bq.TableMetadata, error) {
 	fields := bq.Schema{}
-	for _, field := range spec.Fields {
-		bqType, ok := typeMap[field.GetType()]
-		if !ok {
-			return nil, fmt.Errorf("unsupported type %s for BigQuery", field.GetType())
+	for _, column := range schema.Spec.Columns {
+		empty, err := decoder.EmptyForOID(column.Type)
+		if err != nil {
+			return nil, err
+		}
+		externalType, repeated, err := fieldTypeFor(empty)
+		if err != nil {
+			return nil, err
 		}
 
 		fieldSchema := &bq.FieldSchema{
-			Name:     field.Name,
-			Type:     bqType,
+			Name:     column.Name,
+			Type:     externalType,
+			Repeated: repeated,
 			Required: false,
 		}
 
@@ -55,7 +52,7 @@ func buildRaw(tableName string, spec changelog.SchemaSpecification) (*bq.TableMe
 		return fields[i].Name < fields[j].Name
 	})
 
-	schema := bq.Schema{
+	bqSchema := bq.Schema{
 		&bq.FieldSchema{
 			Name:        "timestamp",
 			Type:        bq.TimestampFieldType,
@@ -84,7 +81,7 @@ func buildRaw(tableName string, spec changelog.SchemaSpecification) (*bq.TableMe
 
 	md := &bq.TableMetadata{
 		Name:   tableName,
-		Schema: schema,
+		Schema: bqSchema,
 		TimePartitioning: &bq.TimePartitioning{
 			Field: "timestamp",
 		},
@@ -96,11 +93,11 @@ func buildRaw(tableName string, spec changelog.SchemaSpecification) (*bq.TableMe
 // buildView creates a BigQuery view that presents only the most recent row content in the
 // raw table to the user. We expect the rawTableName to be in projectID:datasetID.tableID
 // form.
-func buildView(tableName, rawTableName string, spec changelog.SchemaSpecification) (*bq.TableMetadata, error) {
+func buildView(tableName, rawTableName string, schema *changelog.Schema) (*bq.TableMetadata, error) {
 	keys := []string{}
-	for _, field := range spec.Fields {
-		if field.Key {
-			keys = append(keys, field.Name)
+	for _, column := range schema.Spec.Columns {
+		if column.Key {
+			keys = append(keys, column.Name)
 		}
 	}
 

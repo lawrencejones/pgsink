@@ -10,6 +10,8 @@ import (
 	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
 	. "github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/table"
 	"github.com/lawrencejones/pgsink/pkg/dbtest"
+	"github.com/lawrencejones/pgsink/pkg/decode"
+	"github.com/lawrencejones/pgsink/pkg/decode/gen/mappings"
 	"github.com/lawrencejones/pgsink/pkg/imports"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
@@ -58,12 +60,13 @@ var _ = Describe("Importer", func() {
 
 	var (
 		schema       = "imports_importer_integration_test"
-		tableOneName = fmt.Sprintf("%s.one", schema)
+		tableOneName = "one"
+		tableOne     = changelog.Table{Schema: schema, TableName: tableOneName}
 	)
 
 	db := dbtest.Configure(
 		dbtest.WithSchema(schema),
-		dbtest.WithTable(tableOneName, "id bigserial primary key", "msg text"),
+		dbtest.WithTable(schema, tableOneName, "id bigserial primary key", "msg text"),
 	)
 
 	BeforeEach(func() {
@@ -95,6 +98,7 @@ var _ = Describe("Importer", func() {
 					),
 				),
 			),
+			decode.NewDecoder(mappings.Mappings),
 			imports.ImporterOptions{
 				SnapshotTimeout: snapshotTimeout,
 				BatchLimit:      batchLimit,
@@ -134,6 +138,7 @@ var _ = Describe("Importer", func() {
 			job = model.ImportJobs{
 				ID:             123,
 				SubscriptionID: "subscription-id",
+				Schema:         schema,
 				TableName:      tableOneName,
 				Cursor:         nil,
 			}
@@ -166,7 +171,7 @@ var _ = Describe("Importer", func() {
 			// a schema before it gets a modification.
 			It("publishes the table schema", func() {
 				Expect(store.schemas).To(ConsistOf(
-					SchemaMatcher(tableOneName),
+					SchemaMatcher(schema, tableOneName),
 				))
 			})
 		}
@@ -187,8 +192,8 @@ var _ = Describe("Importer", func() {
 			BeforeEach(func() {
 				batchLimit = 3
 
-				db.MustExec(ctx, fmt.Sprintf(`insert into %s (id, msg) values (1, 'meow');`, tableOneName))
-				db.MustExec(ctx, fmt.Sprintf(`insert into %s (id, msg) values (2, 'woof');`, tableOneName))
+				db.MustExec(ctx, fmt.Sprintf(`insert into %s (id, msg) values (1, 'meow');`, tableOne))
+				db.MustExec(ctx, fmt.Sprintf(`insert into %s (id, msg) values (2, 'woof');`, tableOne))
 			})
 
 			itSuccessfullyImports()
@@ -199,16 +204,16 @@ var _ = Describe("Importer", func() {
 
 			It("publishes all rows from the table", func() {
 				Expect(store.modifications).To(ConsistOf(
-					ModificationMatcher(tableOneName).WithBefore(BeNil()).WithAfter(
+					ModificationMatcher(schema, tableOneName).WithBefore(BeNil()).WithAfter(
 						MatchAllKeys(Keys{
-							"id":  BeAssignableToTypeOf(int64(0)),
-							"msg": Equal("meow"),
+							"id":  PointTo(BeAssignableToTypeOf(int64(0))),
+							"msg": PointTo(Equal("meow")),
 						}),
 					),
-					ModificationMatcher(tableOneName).WithBefore(BeNil()).WithAfter(
+					ModificationMatcher(schema, tableOneName).WithBefore(BeNil()).WithAfter(
 						MatchAllKeys(Keys{
-							"id":  BeAssignableToTypeOf(int64(0)),
-							"msg": Equal("woof"),
+							"id":  PointTo(BeAssignableToTypeOf(int64(0))),
+							"msg": PointTo(Equal("woof")),
 						}),
 					),
 				))
@@ -265,7 +270,7 @@ var _ = Describe("Importer", func() {
 
 			It("does not publish rows that had already been imported", func() {
 				Expect(store.modifications).NotTo(ContainElement(
-					ModificationMatcher(tableOneName).WithAfter(
+					ModificationMatcher(schema, tableOneName).WithAfter(
 						MatchKeys(IgnoreMissing, Keys{
 							"id": BeEquivalentTo(int64(1)),
 						}),
@@ -275,16 +280,16 @@ var _ = Describe("Importer", func() {
 
 			It("publishes all rows from the given cursor", func() {
 				Expect(store.modifications).To(ConsistOf(
-					ModificationMatcher(tableOneName).WithBefore(BeNil()).WithAfter(
+					ModificationMatcher(schema, tableOneName).WithBefore(BeNil()).WithAfter(
 						MatchAllKeys(Keys{
-							"id":  BeAssignableToTypeOf(int64(0)),
-							"msg": Equal("woof"),
+							"id":  PointTo(BeAssignableToTypeOf(int64(0))),
+							"msg": PointTo(Equal("woof")),
 						}),
 					),
-					ModificationMatcher(tableOneName).WithBefore(BeNil()).WithAfter(
+					ModificationMatcher(schema, tableOneName).WithBefore(BeNil()).WithAfter(
 						MatchAllKeys(Keys{
-							"id":  BeAssignableToTypeOf(int64(0)),
-							"msg": Equal("roar"),
+							"id":  PointTo(BeAssignableToTypeOf(int64(0))),
+							"msg": PointTo(Equal("roar")),
 						}),
 					),
 				))

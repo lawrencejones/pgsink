@@ -1,134 +1,56 @@
 package changelog
 
 import (
-	"encoding/json"
+	"crypto/md5"
+	"fmt"
 	"time"
 
 	"github.com/lawrencejones/pgsink/pkg/logical"
-
-	"github.com/jackc/pgtype"
-	goavro "github.com/linkedin/goavro/v2"
 )
 
-// Schema is a timestamped Avro schema object. We use the timestamp field to order schema
-// updates, using the greatest timestamp value to represent the most recent schema update.
-// The schema specification is a valid Avro schema.
+// Schema defines the structure of data pulled from Postgres. It can be generated from an
+// existing logical.Relation, when combined with a decoder that translates the Postgres
+// types to Golang.
+//
+// In future, we'll want to be able to translate this schema type into official formats,
+// like Avro.
 type Schema struct {
 	Timestamp time.Time           `json:"timestamp"` // commit timestamp
+	Namespace string              `json:"namespace"` // Postgres schema
+	Name      string              `json:"name"`      // Postgres table name
 	LSN       *uint64             `json:"lsn"`       // log sequence number, where appropriate
-	Spec      SchemaSpecification `json:"spec"`      // Avro schema format
+	Spec      SchemaSpecification `json:"spec"`      // schema definition
 }
 
-// SchemaFromRelation generates a schema from a logical relation message
+func (s Schema) String() string {
+	return fmt.Sprintf("%s.%s", s.Namespace, s.Name)
+}
+
+type SchemaSpecification struct {
+	Columns []logical.Column `json:"columns"` // Postgres columns
+}
+
+// SchemaFromRelation uses a logical.Relation and decoder to generate an intermediate schema
 func SchemaFromRelation(timestamp time.Time, lsn *uint64, relation *logical.Relation) Schema {
-	spec := SchemaSpecification{
-		Namespace: BuildNamespace(relation.Namespace, relation.Name),
-		Type:      schemaType,
-		Name:      schemaName,
-		Fields:    []SchemaField{},
-	}
-
-	for _, column := range relation.Columns {
-		spec.Fields = append(spec.Fields, schemaFieldFromColumn(column))
-	}
-
 	return Schema{
 		Timestamp: timestamp,
+		Namespace: relation.Namespace,
+		Name:      relation.Name,
 		LSN:       lsn,
-		Spec:      spec,
+		Spec: SchemaSpecification{
+			Columns: relation.Columns,
+		},
 	}
 }
 
-// Be consistent when structuring Avro schemas. The table schema & namespace denotes the
-// Avro namespace, while the type of the schema is always record and the name always
-// value.
-const (
-	schemaType = "record"
-	schemaName = "value"
-)
-
-// SchemaSpecification is an Avro compliant schema format. We store all schemas for a
-// Postgres table under the same namespace, and a row inside this table has a schema of
-// type 'record' named 'value'.
-type SchemaSpecification struct {
-	Namespace Namespace     `json:"namespace"` // <schema>.<table>
-	Type      string        `json:"type"`      // always record
-	Name      string        `json:"name"`      // always value
-	Fields    []SchemaField `json:"fields"`    // schema fields
-}
-
-// GetFingerprint returns a unique idenfier for the schema. It currently uses the goavro
-// Rabin calculation to produce a fingerprint, but we should move to something less janky
-// if it becomes a performance problem.
+// GetFingerprint returns a unique idenfier for the schema.
 //
 // The only important thing is that any given schema returns the same fingerprint for the
 // duration of the Go process. Beyond that, you can use any value here.
-func (s SchemaSpecification) GetFingerprint() uint64 {
-	jsonBytes, err := json.Marshal(s)
-	if err != nil {
-		panic("failed to marshal SchemaSpecification into json")
+func (s Schema) GetFingerprint() string {
+	h := md5.New()
+	for _, column := range s.Spec.Columns {
+		fmt.Fprintf(h, "%v|%v|%v|%v\n", column.Key, column.Name, column.Type, column.Modifier)
 	}
-
-	codec, err := goavro.NewCodec(string(jsonBytes))
-	if err != nil {
-		panic("failed to parse Avro codec from SchemaSpecification")
-	}
-
-	return codec.Rabin
-}
-
-type SchemaField struct {
-	Name    string      `json:"name"`
-	Type    []string    `json:"type"`
-	Default interface{} `json:"default"`
-	Key     bool        `json:"key"`
-}
-
-func (s SchemaField) GetType() string {
-	for _, t := range s.Type {
-		if t != "null" {
-			return t
-		}
-	}
-
-	panic("all schema fields should have a non-null type")
-}
-
-// Avro provides a limited number of primitives that we need to map to Postgres OIDs. This
-// SchemaField can perform this mapping, defaulting to string if not possible. All types
-// should be nullable in order to allow deletions, given Avro's back/forward compatibility
-// promise.
-//
-//   null: no value
-//   boolean: a binary value
-//   int: 32-bit signed integer
-//   long: 64-bit signed integer
-//   float: single precision (32-bit) IEEE 754 floating-point number
-//   double: double precision (64-bit) IEEE 754 floating-point number
-//   bytes: sequence of 8-bit unsigned bytes
-//   string: unicode character sequence
-//
-func schemaFieldFromColumn(c logical.Column) SchemaField {
-	var avroType string
-	switch c.Type {
-	case pgtype.BoolOID:
-		avroType = "boolean"
-	case pgtype.Int2OID, pgtype.Int4OID:
-		avroType = "int"
-	case pgtype.Int8OID:
-		avroType = "long"
-	case pgtype.Float4OID:
-		avroType = "float"
-	case pgtype.Float8OID:
-		avroType = "double"
-	default:
-		avroType = "string"
-	}
-
-	return SchemaField{
-		Name:    c.Name,
-		Type:    []string{"null", avroType},
-		Default: nil,
-		Key:     c.Key,
-	}
+	return string(h.Sum(nil))
 }

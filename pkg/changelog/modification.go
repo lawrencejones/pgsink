@@ -1,6 +1,7 @@
 package changelog
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -9,10 +10,15 @@ import (
 // this modification.
 type Modification struct {
 	Timestamp time.Time   `json:"timestamp"` // commit timestamp, or time of import
-	Namespace Namespace   `json:"namespace"` // <schema>.<table>
+	Namespace string      `json:"namespace"` // Postgres schema
+	Name      string      `json:"name"`      // Postgres table name
 	LSN       *uint64     `json:"lsn"`       // log sequence number, where appropriate
 	Before    interface{} `json:"before"`    // row before modification, if relevant
 	After     interface{} `json:"after"`     // row after modification
+}
+
+func (m Modification) String() string {
+	return fmt.Sprintf("%s.%s", m.Namespace, m.Name)
 }
 
 // ModificationBuilder provides a fluent interface around constructing Modifications. This
@@ -21,6 +27,13 @@ var ModificationBuilder = modificationBuilderFunc(func(opts ...func(*Modificatio
 	m := &Modification{}
 	for _, opt := range opts {
 		opt(m)
+	}
+
+	if m.Name == "" {
+		panic("missing modification.name")
+	}
+	if m.Namespace == "" {
+		panic("missing modification.namespace")
 	}
 
 	return m
@@ -40,9 +53,10 @@ func (b modificationBuilderFunc) WithTimestampNow() func(*Modification) {
 	}
 }
 
-func (b modificationBuilderFunc) WithNamespace(n string) func(*Modification) {
+func (b modificationBuilderFunc) WithName(namespace, name string) func(*Modification) {
 	return func(m *Modification) {
-		m.Namespace = Namespace(n)
+		m.Namespace = namespace
+		m.Name = name
 	}
 }
 

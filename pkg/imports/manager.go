@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
 	. "github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/table"
 	"github.com/lawrencejones/pgsink/pkg/subscription"
-	"github.com/lawrencejones/pgsink/pkg/util"
 
 	"github.com/alecthomas/kingpin"
 	. "github.com/go-jet/jet/postgres"
@@ -101,14 +101,17 @@ func (m *Manager) Reconcile(ctx context.Context, sub subscription.Subscription) 
 		return nil, fmt.Errorf("failed to find already imported tables: %w", err)
 	}
 
-	notImportedTables := util.Diff(publishedTables, importedTables)
+	notImportedTables := publishedTables.Diff(importedTables)
 
-	return m.create(ctx, sub, notImportedTables...)
+	return m.create(ctx, sub, notImportedTables)
 }
 
-func (m *Manager) getImportedTables(ctx context.Context, sub subscription.Subscription) ([]string, error) {
-	stmt := SELECT(ImportJobs.TableName).
-		FROM(ImportJobs).
+func (m *Manager) getImportedTables(ctx context.Context, sub subscription.Subscription) (changelog.Tables, error) {
+	stmt := ImportJobs.
+		SELECT(
+			ImportJobs.Schema.AS("table.schema"),
+			ImportJobs.TableName.AS("table.table_name"),
+		).
 		WHERE(
 			ImportJobs.SubscriptionID.EQ(String(sub.GetID())).AND(
 				// Filter out any jobs that have an expiry, as these imports are no longer valid
@@ -116,27 +119,31 @@ func (m *Manager) getImportedTables(ctx context.Context, sub subscription.Subscr
 			),
 		)
 
-	var tableNames []string
-	if err := stmt.QueryContext(ctx, m.db, &tableNames); err != nil {
+	var tables []changelog.Table
+	if err := stmt.QueryContext(ctx, m.db, &tables); err != nil {
 		return nil, err
 	}
 
-	return tableNames, nil
+	return tables, nil
 }
 
-func (m *Manager) create(ctx context.Context, sub subscription.Subscription, tableNames ...string) ([]model.ImportJobs, error) {
+func (m *Manager) create(ctx context.Context, sub subscription.Subscription, tables []changelog.Table) ([]model.ImportJobs, error) {
 	var jobs []model.ImportJobs
-	if len(tableNames) == 0 {
+	if len(tables) == 0 {
 		return jobs, nil
 	}
 
 	stmt := ImportJobs.
-		INSERT(ImportJobs.SubscriptionID, ImportJobs.TableName).
+		INSERT(ImportJobs.SubscriptionID, ImportJobs.Schema, ImportJobs.TableName).
 		RETURNING(ImportJobs.AllColumns)
 
-	for _, tableName := range tableNames {
-		stmt = stmt.VALUES(sub.GetID(), tableName)
+	for _, table := range tables {
+		stmt = stmt.VALUES(sub.GetID(), table.Schema, table.TableName)
 	}
 
-	return jobs, stmt.QueryContext(ctx, m.db, &jobs)
+	if err := stmt.QueryContext(ctx, m.db, &jobs); err != nil {
+		return nil, err
+	}
+
+	return jobs, nil
 }

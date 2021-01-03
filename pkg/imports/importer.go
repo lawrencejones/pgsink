@@ -8,7 +8,7 @@ import (
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
 	. "github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/table"
-	"github.com/lawrencejones/pgsink/pkg/logical"
+	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 	"github.com/lawrencejones/pgsink/pkg/telem"
 
@@ -40,16 +40,18 @@ type Importer interface {
 	Do(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, job model.ImportJobs) error
 }
 
-func NewImporter(sink generic.Sink, opts ImporterOptions) Importer {
+func NewImporter(sink generic.Sink, decoder decode.Decoder, opts ImporterOptions) Importer {
 	return &importer{
-		sink: sink,
-		opts: opts,
+		sink:    sink,
+		decoder: decoder,
+		opts:    opts,
 	}
 }
 
 type importer struct {
-	sink generic.Sink
-	opts ImporterOptions
+	sink    generic.Sink
+	decoder decode.Decoder
+	opts    ImporterOptions
 }
 
 var (
@@ -94,7 +96,7 @@ func (i importer) Do(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, job m
 		trace.Int64Attribute("batch_limit", int64(i.opts.BatchLimit)),
 	)
 
-	cfg, err := Build(ctx, logger, tx, job)
+	cfg, err := Build(ctx, logger, i.decoder, tx, job)
 	if err != nil {
 		return err
 	}
@@ -187,22 +189,32 @@ func (i importer) scanBatch(ctx context.Context, logger kitlog.Logger, tx pgx.Tx
 		workQueryDurationSeconds.WithLabelValues(cfg.TableName).Observe(v)
 	})).ObserveDuration()
 
+	var scanners []interface{}
+	for _, typeMapping := range cfg.TypeMappings {
+		scanners = append(scanners, typeMapping.Scanner)
+	}
+
 forEachRow:
 	for rows.Next() {
-		if err := rows.Scan(append([]interface{}{&timestamp}, cfg.Scanners...)...); err != nil {
+		if err := rows.Scan(append([]interface{}{&timestamp}, scanners...)...); err != nil {
 			return fail(err, "failed to scan table")
 		}
 
 		row := map[string]interface{}{}
 		for idx, column := range cfg.Relation.Columns {
-			row[column.Name] = cfg.Scanners[idx].(logical.ValueScanner).Get()
+			typeMapping := cfg.TypeMappings[idx]
+			dest := typeMapping.NewEmpty()
+			typeMapping.Scanner.AssignTo(dest)
+
+			row[column.Name] = dest
 		}
 
 		tableRowsRead.Inc()
 		modificationCount++
 		modification := &changelog.Modification{
 			Timestamp: timestamp.Get().(time.Time),
-			Namespace: changelog.Namespace(cfg.Relation.String()),
+			Namespace: cfg.Relation.Namespace,
+			Name:      cfg.Relation.Name,
 			After:     row,
 		}
 

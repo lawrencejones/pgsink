@@ -6,12 +6,17 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	kitlog "github.com/go-kit/kit/log"
+	"github.com/lawrencejones/pgsink/pkg/decode"
 )
 
 // BuildRegistry taps a stream of logically replicated messages, extracting the Relations
 // and storing them in the returned registry.
-func BuildRegistry(logger kitlog.Logger, messages <-chan interface{}) (*Registry, <-chan interface{}) {
-	registry := &Registry{relations: map[uint32]*Relation{}}
+func BuildRegistry(logger kitlog.Logger, decoder decode.Decoder, messages <-chan interface{}) (*Registry, <-chan interface{}) {
+	registry := &Registry{
+		decoder:   decoder,
+		relations: map[uint32]*Relation{},
+	}
+
 	output := make(chan interface{})
 
 	go func() {
@@ -33,6 +38,7 @@ func BuildRegistry(logger kitlog.Logger, messages <-chan interface{}) (*Registry
 // Registry is a race-safe data structure that pins Relation messages against their
 // Postgres OIDs. It can be used to marshal Modifications from committed messages.
 type Registry struct {
+	decoder   decode.Decoder
 	relations map[uint32]*Relation
 	sync.RWMutex
 }
@@ -53,17 +59,27 @@ func (r *Registry) Get(oid uint32) *Relation {
 
 // Marshal uses the schema information in the registry to marshal Golang native structures
 // from logical messages.
-func (r *Registry) Marshal(msg interface{}) (relation *Relation, before interface{}, after interface{}) {
+func (r *Registry) Marshal(msg interface{}) (relation *Relation, before interface{}, after interface{}, err error) {
 	switch cast := msg.(type) {
 	case *Insert:
 		relation = r.Get(cast.ID)
-		after = relation.Marshal(cast.Row)
+		after, err = relation.Marshal(r.decoder, cast.Row)
+
 	case *Update:
 		relation = r.Get(cast.ID)
-		before, after = relation.Marshal(cast.OldRow), relation.Marshal(cast.Row)
+		before, err = relation.Marshal(r.decoder, cast.OldRow)
+		if err != nil {
+			return
+		}
+		after, err = relation.Marshal(r.decoder, cast.Row)
+		if err != nil {
+			return
+		}
+
 	case *Delete:
 		relation = r.Get(cast.ID)
-		before = relation.Marshal(cast.OldRow)
+		before, err = relation.Marshal(r.decoder, cast.OldRow)
+
 	default:
 		panic(fmt.Sprintf("invalid message type (not insert/update/delete): %s", spew.Sdump(msg)))
 	}

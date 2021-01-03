@@ -2,11 +2,12 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
 	"github.com/lawrencejones/pgsink/pkg/dbtest"
+	"github.com/lawrencejones/pgsink/pkg/decode"
+	"github.com/lawrencejones/pgsink/pkg/decode/gen/mappings"
 	"github.com/lawrencejones/pgsink/pkg/imports"
 	"github.com/lawrencejones/pgsink/pkg/logical"
 
@@ -27,18 +28,18 @@ var _ = Describe("Import", func() {
 
 	var (
 		schema             = "imports_import_integration_test"
-		tableOneName       = fmt.Sprintf("%s.one", schema)
-		tableCompositeName = fmt.Sprintf("%s.composite", schema)
-		tableKeylessName   = fmt.Sprintf("%s.keyless", schema)
-		tableTextName      = fmt.Sprintf("%s.text", schema)
+		tableOneName       = "one"
+		tableCompositeName = "composite"
+		tableKeylessName   = "keyless"
+		tableTextName      = "text"
 	)
 
 	db := dbtest.Configure(
 		dbtest.WithSchema(schema),
-		dbtest.WithTable(tableOneName, "id bigserial primary key", "msg text"),
-		dbtest.WithTable(tableCompositeName, "id bigserial", "msg text", "primary key(id, msg)"),
-		dbtest.WithTable(tableKeylessName, "id bigserial", "msg text"),
-		dbtest.WithTable(tableTextName, "id text primary key", "msg text"),
+		dbtest.WithTable(schema, tableOneName, "id bigserial primary key", "msg text"),
+		dbtest.WithTable(schema, tableCompositeName, "id bigserial", "msg text", "primary key(id, msg)"),
+		dbtest.WithTable(schema, tableKeylessName, "id bigserial", "msg text"),
+		dbtest.WithTable(schema, tableTextName, "id text primary key", "msg text"),
 	)
 
 	BeforeEach(func() {
@@ -57,13 +58,14 @@ var _ = Describe("Import", func() {
 		)
 
 		JustBeforeEach(func() {
-			subject, err = imports.Build(ctx, logger, db.GetConnection(ctx), job)
+			subject, err = imports.Build(ctx, logger, decode.NewDecoder(mappings.Mappings), db.GetConnection(ctx), job)
 		})
 
 		BeforeEach(func() {
 			job = model.ImportJobs{
 				ID:             123,
 				SubscriptionID: "nothingness",
+				Schema:         schema,
 				TableName:      tableOneName,
 				Cursor:         nil,
 			}
@@ -118,7 +120,7 @@ var _ = Describe("Import", func() {
 						job.Cursor = &cursor
 					}
 
-					subject, err = imports.Build(ctx, logger, db.GetConnection(ctx), job)
+					subject, err = imports.Build(ctx, logger, decode.NewDecoder(mappings.Mappings), db.GetConnection(ctx), job)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(subject.Cursor).To(matcher)

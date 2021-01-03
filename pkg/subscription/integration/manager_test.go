@@ -2,9 +2,9 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/dbtest"
 	"github.com/lawrencejones/pgsink/pkg/subscription"
 
@@ -28,15 +28,17 @@ var _ = Describe("Manager", func() {
 	var (
 		schema         = "subscription_manager_integration_test"
 		subscriptionID = "uniqueness"
-		tableOneName   = fmt.Sprintf("%s.one", schema)
-		tableTwoName   = fmt.Sprintf("%s.two", schema)
+		tableOneName   = "one"
+		tableOne       = changelog.Table{Schema: schema, TableName: tableOneName}
+		tableTwoName   = "two"
+		tableTwo       = changelog.Table{Schema: schema, TableName: tableTwoName}
 	)
 
 	db := dbtest.Configure(
 		dbtest.WithSchema(schema),
 		dbtest.WithPublication(schema),
-		dbtest.WithTable(tableOneName, "id bigserial primary key", "message text"),
-		dbtest.WithTable(tableTwoName, "id bigserial primary key", "message text"),
+		dbtest.WithTable(schema, tableOneName, "id bigserial primary key", "message text"),
+		dbtest.WithTable(schema, tableTwoName, "id bigserial primary key", "message text"),
 	)
 
 	JustBeforeEach(func() {
@@ -66,8 +68,8 @@ var _ = Describe("Manager", func() {
 
 	Describe("Reconcile()", func() {
 		var (
-			added   []string
-			removed []string
+			added   changelog.Tables
+			removed changelog.Tables
 			err     error
 		)
 
@@ -77,12 +79,12 @@ var _ = Describe("Manager", func() {
 		})
 
 		It("adds watched tables", func() {
-			Expect(added).To(ConsistOf(tableOneName, tableTwoName))
+			Expect(added).To(ConsistOf(tableOne, tableTwo))
 		})
 
 		Context("when tables are already added", func() {
 			BeforeEach(func() {
-				Expect(sub.SetTables(ctx, db.GetDB(), tableOneName, tableTwoName)).To(Succeed())
+				Expect(sub.SetTables(ctx, db.GetDB(), tableOne, tableTwo)).To(Succeed())
 			})
 
 			It("adds and removes nothing", func() {
@@ -92,11 +94,11 @@ var _ = Describe("Manager", func() {
 
 			Context("but they should be ignored", func() {
 				BeforeEach(func() {
-					opts.Excludes = []string{tableOneName}
+					opts.Excludes = []string{tableOne.String()}
 				})
 
 				It("removes them", func() {
-					Expect(removed).To(ConsistOf(tableOneName))
+					Expect(removed).To(ConsistOf(tableOne))
 				})
 			})
 		})

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 	_ "github.com/lawrencejones/pgsink/pkg/dbschema/pg_catalog/model"
 	. "github.com/lawrencejones/pgsink/pkg/dbschema/pg_catalog/table"
 	. "github.com/lawrencejones/pgsink/pkg/dbschema/pg_catalog/view"
@@ -106,34 +107,30 @@ func (p Publication) String() string {
 }
 
 // GetTables returns a slice of table names that are included on the publication.
-func (p Publication) GetTables(ctx context.Context, db *sql.DB) (tables []string, err error) {
+func (p Publication) GetTables(ctx context.Context, db *sql.DB) (tables changelog.Tables, err error) {
 	stmt := PgPublication.
 		INNER_JOIN(PgPublicationTables, PgPublicationTables.Pubname.EQ(PgPublication.Pubname)).
 		SELECT(
-			PgPublicationTables.Schemaname.AS("schemaname"),
-			PgPublicationTables.Tablename.AS("tablename"),
+			PgPublicationTables.Schemaname.AS("table.schema"),
+			PgPublicationTables.Tablename.AS("table.table_name"),
 		).
 		WHERE(PgPublication.Pubname.EQ(String(p.Name)))
 
-	var rows []struct {
-		Schemaname string
-		Tablename  string
-	}
-
-	if err := stmt.QueryContext(ctx, db, &rows); err != nil {
+	if err := stmt.QueryContext(ctx, db, &tables); err != nil {
 		return nil, err
-	}
-
-	for _, row := range rows {
-		tables = append(tables, fmt.Sprintf("%s.%s", row.Schemaname, row.Tablename))
 	}
 
 	return tables, nil
 }
 
 // SetTables resets the publication to include the given tables only
-func (p Publication) SetTables(ctx context.Context, db *sql.DB, tables ...string) error {
-	query := fmt.Sprintf(`alter publication %s set table %s;`, p.Name, strings.Join(tables, ", "))
+func (p Publication) SetTables(ctx context.Context, db *sql.DB, tables ...changelog.Table) error {
+	var fullyQualifiedTableNames []string
+	for _, table := range tables {
+		fullyQualifiedTableNames = append(fullyQualifiedTableNames, table.String())
+	}
+
+	query := fmt.Sprintf(`alter publication %s set table %s;`, p.Name, strings.Join(fullyQualifiedTableNames, ", "))
 	_, err := db.ExecContext(ctx, query)
 	return err
 }

@@ -3,9 +3,9 @@ package integration
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"time"
 
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
 	. "github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/table"
 	"github.com/lawrencejones/pgsink/pkg/dbtest"
@@ -32,15 +32,16 @@ var _ = Describe("Manager", func() {
 	var (
 		schema         = "imports_manager_integration_test"
 		subscriptionID = "uniqueness"
-		tableOneName   = fmt.Sprintf("%s.one", schema)
-		tableTwoName   = fmt.Sprintf("%s.two", schema)
+		tableOneName   = "one"
+		tableOne       = changelog.Table{Schema: schema, TableName: tableOneName}
+		tableTwoName   = "two"
 	)
 
 	db := dbtest.Configure(
 		dbtest.WithSchema(schema),
 		dbtest.WithPublication(schema),
-		dbtest.WithTable(tableOneName, "id bigserial primary key", "message text"),
-		dbtest.WithTable(tableTwoName, "id bigserial primary key", "message text"),
+		dbtest.WithTable(schema, tableOneName, "id bigserial primary key", "message text"),
+		dbtest.WithTable(schema, tableTwoName, "id bigserial primary key", "message text"),
 		dbtest.WithLifecycle(
 			nil, // no creation, this table should already be here
 			func(ctx context.Context, db, _ *sql.DB) (sql.Result, error) {
@@ -80,14 +81,15 @@ var _ = Describe("Manager", func() {
 
 		Context("for published table", func() {
 			BeforeEach(func() {
-				Expect(sub.SetTables(ctx, db.GetDB(), tableOneName)).To(Succeed())
+				Expect(sub.SetTables(ctx, db.GetDB(), tableOne)).To(Succeed())
 			})
 
 			Context("with no previous import", func() {
 				It("creates import job", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(jobs).To(ContainElement(
-						MatchFields(IgnoreExtras, Fields{"TableName": Equal(tableOneName)}),
+						MatchFields(IgnoreExtras, Fields{
+							"Schema": Equal(schema), "TableName": Equal(tableOneName)}),
 					))
 				})
 			})
@@ -95,8 +97,8 @@ var _ = Describe("Manager", func() {
 			Context("with previous import", func() {
 				BeforeEach(func() {
 					query, args := ImportJobs.
-						INSERT(ImportJobs.SubscriptionID, ImportJobs.TableName).
-						VALUES(sub.GetID(), tableOneName).
+						INSERT(ImportJobs.SubscriptionID, ImportJobs.Schema, ImportJobs.TableName).
+						VALUES(sub.GetID(), schema, tableOneName).
 						Sql()
 
 					db.MustExec(ctx, query, args...)
@@ -111,8 +113,8 @@ var _ = Describe("Manager", func() {
 			Context("with previous expired import", func() {
 				BeforeEach(func() {
 					query, args := ImportJobs.
-						INSERT(ImportJobs.SubscriptionID, ImportJobs.TableName, ImportJobs.ExpiredAt).
-						VALUES(sub.GetID(), tableOneName, Raw("now()")).
+						INSERT(ImportJobs.SubscriptionID, ImportJobs.Schema, ImportJobs.TableName, ImportJobs.ExpiredAt).
+						VALUES(sub.GetID(), schema, tableOneName, Raw("now()")).
 						Sql()
 
 					db.MustExec(ctx, query, args...)
@@ -121,7 +123,8 @@ var _ = Describe("Manager", func() {
 				It("creates import job", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(jobs).To(ContainElement(
-						MatchFields(IgnoreExtras, Fields{"TableName": Equal(tableOneName)}),
+						MatchFields(IgnoreExtras, Fields{
+							"Schema": Equal(schema), "TableName": Equal(tableOneName)}),
 					))
 				})
 			})

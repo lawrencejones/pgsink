@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
 	bq "cloud.google.com/go/bigquery"
@@ -33,7 +34,7 @@ func (opt *Options) Bind(cmd *kingpin.CmdClause, prefix string) *Options {
 	return opt
 }
 
-func New(ctx context.Context, logger kitlog.Logger, opts Options) (generic.Sink, error) {
+func New(ctx context.Context, logger kitlog.Logger, decoder decode.Decoder, opts Options) (generic.Sink, error) {
 	client, err := bq.NewClient(ctx, opts.ProjectID)
 	if err != nil {
 		return nil, err
@@ -67,7 +68,7 @@ func New(ctx context.Context, logger kitlog.Logger, opts Options) (generic.Sink,
 		generic.SinkBuilder.WithFlushInterval(opts.FlushInterval),
 		generic.SinkBuilder.WithSchemaHandler(
 			generic.SchemaHandlerCacheOnFingerprint(
-				newSchemaHandler(dataset),
+				newSchemaHandler(dataset, decoder),
 			),
 		),
 	)

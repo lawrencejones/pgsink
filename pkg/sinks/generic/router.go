@@ -83,7 +83,7 @@ func (r *router) Insert(ctx context.Context, modifications []*changelog.Modifica
 
 	result := EmptyInsertResult
 	for _, modification := range modifications {
-		inserter, ok := r.routes[Route(modification.Namespace)]
+		inserter, ok := r.routes[Route(modification.String())]
 		if !ok || inserter == nil {
 			panic("asked to route modification before namespace was registered")
 		}
