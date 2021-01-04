@@ -127,39 +127,11 @@ func DecodePGOutput(src []byte) (Message, string, error) {
 	return new(Message), "Unknown", fmt.Errorf("decoding not implemented: %c", src[0])
 }
 
-// Message is a parsed pgoutput message received from the replication stream
-type Message interface{}
-
-type Begin struct {
-	LSN       uint64    // The final LSN of the transaction.
-	Timestamp time.Time // Commit timestamp of the transaction.
-	XID       uint32    // Xid of the transaction.
-}
-
-type Commit struct {
-	Flags          uint8     // Flags; currently unused (must be 0).
-	LSN            uint64    // The LSN of the commit.
-	TransactionLSN uint64    // The end LSN of the transaction.
-	Timestamp      time.Time // Commit timestamp of the transaction.
-}
-
-type Origin struct {
-	LSN  uint64 // The LSN of the commit on the origin server.
-	Name string // Name of the origin.
-}
-
-// Relation would normally include a column count field, but given Go slices track their
-// size it becomes unnecessary.
-type Relation struct {
-	ID              uint32   `json:"id"`               // ID of the relation.
-	Namespace       string   `json:"namespace"`        // Namespace (empty string for pg_catalog).
-	Name            string   `json:"name"`             // Relation name.
-	ReplicaIdentity uint8    `json:"replica_identity"` // Replica identity setting for the relation (same as relreplident in pg_class).
-	Columns         []Column `json:"columns"`          // Repeating message of column definitions.
-}
-
 // Marshal converts a tuple into a dynamic Golang map type. Values are represented in Go
 // native types.
+//
+// TODO: We should try moving this, as the behaviour it implements must match how we
+// decode import content and is best unified.
 func (r *Relation) Marshal(decoder decode.Decoder, tuple []Element) (map[string]interface{}, error) {
 	// This tuple doesn't match our relation, if the sizes aren't the same
 	if len(tuple) != len(r.Columns) {
@@ -192,59 +164,6 @@ func (r *Relation) Marshal(decoder decode.Decoder, tuple []Element) (map[string]
 	}
 
 	return row, nil
-}
-
-type Column struct {
-	Key      bool   `json:"key"`      // Interpreted from flags, which are either 0 or 1 which marks the column as part of the key.
-	Name     string `json:"name"`     // Name of the column.
-	Type     uint32 `json:"type"`     // ID of the column's data type.
-	Modifier uint32 `json:"modifier"` // Type modifier of the column (atttypmod).
-}
-
-// Decode generates a native Go type from the textual pgoutput representation. This can be
-// extended to support more types if necessary.
-func (c Column) Decode(decoder decode.Decoder, src []byte) (interface{}, error) {
-	scanner, err := decoder.ScannerForOID(c.Type)
-	if err != nil {
-		return nil, err
-	}
-	if err := scanner.Scan(src); err != nil {
-		return nil, err
-	}
-
-	return scanner.Get(), nil
-}
-
-type Type struct {
-	ID        uint32 // ID of the data type.
-	Namespace string // Namespace (empty string for pg_catalog).
-	Name      string // Name of data type.
-}
-
-type Insert struct {
-	ID  uint32    // ID of the relation corresponding to the ID in the relation message.
-	Row []Element // TupleData message part representing the contents of new tuple.
-}
-
-type Update struct {
-	ID     uint32    // ID of the relation corresponding to the ID in the relation message.
-	Key    bool      // True if the update changed data in any of the column(s) that are part of the REPLICA IDENTITY index.
-	Old    bool      // True if populated the OldRow value.
-	New    bool      // True if populated the Row value.
-	OldRow []Element // Old value of this row, only present if Old or Key.
-	Row    []Element // New contents of the tuple.
-}
-
-type Delete struct {
-	ID     uint32    // ID of the relation corresponding to the ID in the relation message.
-	Key    bool      // True if the update changed data in any of the column(s) that are part of the REPLICA IDENTITY index.
-	Old    bool      // True if populated the OldRow value.
-	OldRow []Element // Old value of this row.
-}
-
-type Element struct {
-	Type  byte   // Either 'n' (NULL), 'u' (unchanged TOASTed value) or 't' (test formatted).
-	Value []byte // Will only be populated if Type is 't'.
 }
 
 // decoder provides stateful methods that advance the given buffer, parsing the contents
