@@ -23,7 +23,7 @@ var _ = Describe("Decoder", func() {
 		// pulling them from the database and asserting that they match the empty values we
 		// expect. For now, it shows how we can use the scanners to achieve parsing.
 		It("can decode into Golang native slices", func() {
-			typeMapping, err := decoder.TypeMappingForOID(pgtype.TextArrayOID)
+			scanner, dest, err := decoder.ScannerFor(pgtype.TextArrayOID)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Use pgtype.TextArray to generate a text encoded array
@@ -34,8 +34,6 @@ var _ = Describe("Decoder", func() {
 				raw, err = arr.EncodeText(nil, []byte{})
 				Expect(err).NotTo(HaveOccurred())
 			}
-
-			dest, scanner := typeMapping.NewEmpty(), typeMapping.NewScanner()
 
 			Expect(scanner.Scan(raw)).To(Succeed())
 			Expect(scanner.AssignTo(dest)).To(Succeed())

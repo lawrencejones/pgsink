@@ -221,9 +221,9 @@ nextDataType:
 			continue // no type registered for oid
 		}
 
-		valueScanner, ok := dataType.Value.(decode.ValueScanner)
+		valueScanner, ok := dataType.Value.(decode.Scanner)
 		if !ok {
-			continue // we only want scanners that can encode text
+			continue // we only want scanners that support our interface
 		}
 
 		for _, name := range cfg.Unsupported {

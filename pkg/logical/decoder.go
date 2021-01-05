@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"reflect"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/lawrencejones/pgsink/pkg/decode"
 )
 
@@ -133,34 +133,31 @@ func DecodePGOutput(src []byte) (Message, string, error) {
 // TODO: We should try moving this, as the behaviour it implements must match how we
 // decode import content and is best unified.
 func (r *Relation) Marshal(decoder decode.Decoder, tuple []Element) (map[string]interface{}, error) {
-	// This tuple doesn't match our relation, if the sizes aren't the same
+	// TODO: Should we be ignoring this? I haven't investigated why this happens, though it
+	// appears to have little effect on correctness.
 	if len(tuple) != len(r.Columns) {
 		return nil, nil
 	}
 
 	row := map[string]interface{}{}
 	for idx, column := range r.Columns {
-		var dest interface{}
+		scanner, dest, err := decoder.ScannerFor(column.Type)
+		if err != nil {
+			return nil, err
+		}
 
-		// If we're non-NULL, try to decode the contents
 		if tuple[idx].Type != 'n' {
-			typeMapping, err := decoder.TypeMappingForOID(column.Type)
-			if err != nil {
-				return nil, err
-			}
-
-			scanner := typeMapping.NewScanner()
 			if err := scanner.Scan(tuple[idx].Value); err != nil {
-				return nil, fmt.Errorf("failed to decode tuple value: %w: \n\n%s", err, spew.Sdump(err))
-			}
-
-			dest = typeMapping.NewEmpty()
-			if err := scanner.AssignTo(dest); err != nil {
-				return nil, fmt.Errorf("failed to assign decoded tuple value: %w: \n\n%s", err, spew.Sdump(err))
+				return nil, err
 			}
 		}
 
-		row[column.Name] = dest
+		if err := scanner.AssignTo(dest); err != nil {
+			return nil, err
+		}
+
+		// Dereference the value we get from our destination, to remove double pointer-ing
+		row[column.Name] = reflect.ValueOf(dest).Elem().Interface()
 	}
 
 	return row, nil

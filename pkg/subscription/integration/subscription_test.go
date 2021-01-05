@@ -145,8 +145,8 @@ var _ = Describe("Subscription", func() {
 					WithBefore(BeNil()).
 					WithAfter(
 						MatchAllKeys(Keys{
-							"id":      PointTo(BeAssignableToTypeOf(int64(0))),
-							"message": PointTo(Equal("hello")),
+							"id":      BeAssignableToTypeOf(int64(0)),
+							"message": Equal("hello"),
 						}),
 					),
 			)))
@@ -244,14 +244,14 @@ var _ = Describe("Subscription", func() {
 					// upstream Postgres in the previous subscription stream.
 					Expect(*modification).NotTo(
 						ModificationMatcher(schema, tableOneName).WithAfter(
-							MatchKeys(IgnoreExtras, Keys{"message": PointTo(Equal("hello"))}),
+							MatchKeys(IgnoreExtras, Keys{"message": Equal("hello")}),
 						),
 					)
 
 					// This is the entry we're after, as it was created after the first stream was
 					// shutdown.
 					matcher := ModificationMatcher(schema, tableOneName).WithAfter(
-						MatchKeys(IgnoreExtras, Keys{"message": PointTo(Equal("this should be streamed"))}),
+						MatchKeys(IgnoreExtras, Keys{"message": Equal("this should be streamed")}),
 					)
 					if match, _ := matcher.Match(*modification); match {
 						return // we received the correct message
@@ -300,7 +300,7 @@ var _ = Describe("Subscription", func() {
 				// not because it's desirable.
 				Consistently(entries).ShouldNot(Receive(ChangelogMatcher(
 					ModificationMatcher(schema, tableTwoName).WithAfter(
-						MatchKeys(IgnoreExtras, Keys{"message": PointTo(Equal("on-going transaction"))}),
+						MatchKeys(IgnoreExtras, Keys{"message": Equal("on-going transaction")}),
 					),
 				)))
 			})
