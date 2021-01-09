@@ -35,6 +35,15 @@ Postgres databases.
 
 ## Developing
 
+As an overview of important packages, for those understanding the source code:
+
+- `changelog` the input to sinks, produced by subscription or import
+- `decode` configures decoding of Postgres types into Golang (text -> int64)
+- `imports` create, manage and work import jobs, producing changelog entries
+- `logical` parsing of the pgoutput logical encoding, used by subscription
+- `sinks` implements different types of sink, from files to Google BigQuery
+- `subscription` Postgres change capture via replication, generating a changelog
+
 This project comes with a docker-compose development environment. Boot the
 environment like so:
 
