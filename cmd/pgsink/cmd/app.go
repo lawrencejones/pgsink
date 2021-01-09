@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	stdlog "log"
 	"net/http"
@@ -73,14 +72,6 @@ var (
 	streamImporterOptions     = new(imports.ImporterOptions).Bind(stream, "import-worker.")
 )
 
-// SilentError should be returned when the command wants to skip all logging of the error
-// it has encountered. It wraps no error content as we should never inspect it.
-var SilentError = errors.New("silent error")
-
-type UsageError struct {
-	error
-}
-
 func Run() (err error) {
 	command := kingpin.MustParse(app.Parse(os.Args[1:]))
 
@@ -91,30 +82,6 @@ func Run() (err error) {
 	}
 	logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", kitlog.DefaultCaller)
 	stdlog.SetOutput(kitlog.NewStdlibAdapter(logger))
-
-	// Setup an error handler to log and print usage
-	defer func() {
-		var usageErr UsageError
-		switch {
-		// Do nothing if no error
-		case err == nil:
-			return
-		// Suppress silent errors
-		case errors.Is(err, SilentError):
-			return
-		// If we're a usage error, unwrap it and print out usage before returning
-		case errors.As(err, &usageErr):
-			context, _ := app.ParseContext(os.Args[1:])
-			app.UsageForContext(context)
-			fmt.Fprintf(os.Stderr, "error: %s\n", usageErr.Error())
-
-			err = usageErr.error
-			return
-		// Otherwise we probably want to log our error
-		default:
-			logger.Log("event", "error", "error", err, "msg", "exiting with error")
-		}
-	}()
 
 	// This is the root context for the application. Once terminated, everything we have
 	// started should also finish.
@@ -139,7 +106,7 @@ func Run() (err error) {
 
 	db, cfg, repCfg, err := buildDBConfig(fmt.Sprintf("search_path=%s,public", *schemaName), buildDBLogger(logger))
 	if err != nil {
-		kingpin.Fatalf("invalid postgres configuration: %v", err.Error())
+		app.FatalUsage("invalid postgres configuration: %v", err.Error())
 	}
 
 	logger.Log("event", "database_config",
@@ -218,7 +185,7 @@ func Run() (err error) {
 		})
 
 		if err != nil {
-			return UsageError{err}
+			return err
 		}
 
 		trace.RegisterExporter(jexporter)
@@ -240,7 +207,7 @@ func Run() (err error) {
 		case "bigquery":
 			sink, err = sinkbigquery.New(ctx, logger, decoder, *streamSinkBigQueryOptions)
 		default:
-			return UsageError{fmt.Errorf("unsupported sink type: %s", *streamSinkType)}
+			app.FatalUsage(fmt.Sprintf("unsupported sink type: %s", *streamSinkType))
 		}
 
 		if err != nil {
@@ -249,7 +216,7 @@ func Run() (err error) {
 
 		repconn, err := pgx.ConnectConfig(ctx, repCfg)
 		if err != nil {
-			kingpin.Fatalf("failed to open replication connection: %v", err)
+			app.FatalUsage("failed to open replication connection: %v", err)
 		}
 
 		// Initialise our subscription, a process that requires both a replication and a
@@ -258,7 +225,6 @@ func Run() (err error) {
 			ctx, logger, db, repconn, subscription.SubscriptionOptions{
 				Name: *subscriptionName,
 			})
-
 		if err != nil {
 			return fmt.Errorf("failed to create subscription: %w", err)
 		}
@@ -346,7 +312,8 @@ func Run() (err error) {
 		return g.Run()
 	}
 
-	return UsageError{fmt.Errorf("unsupported command")}
+	app.FatalUsage(fmt.Sprintf("unsupported command: %s", command))
+	panic("unreachable")
 }
 
 // pgxLoggerFunc wraps a function to satisfy the pgx logger interface
