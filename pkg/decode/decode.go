@@ -76,13 +76,4 @@ type Scanner interface {
 
 	// Value is the common interface to all the pgtype constructs
 	pgtype.Value
-
-	// EncodeText generates a textual representation of a column, once a value has been
-	// scanned. This allows us to encode arbitrary column values into the import jobs table,
-	// using it as a cursor for the next import step.
-	//
-	// We probably shouldn't restrict our database types to those with this method, and
-	// check it (along with other preconditions, such as the type being sortable) in the
-	// import package.
-	EncodeText(ci *pgtype.ConnInfo, buffer []byte) ([]byte, error)
 }

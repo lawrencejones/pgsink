@@ -78,6 +78,7 @@ var cfg = Config{
 		"tstzrange",
 		"daterange",
 		"int8range",
+		"unknown",
 	},
 	Templates: map[string]TemplatedTypeMapping{
 		"bool": {
@@ -239,7 +240,7 @@ nextDataType:
 
 		template, found := cfg.Templates[dataType.Name]
 		if !found {
-			log.Fatalf("no template set for %s", dataType.Name)
+			log.Fatalf("no template set for %s (oid=%v)", dataType.Name, dataType.OID)
 		}
 
 		supported = append(supported, TemplatedTypeMapping{
