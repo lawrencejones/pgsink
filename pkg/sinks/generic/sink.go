@@ -123,7 +123,7 @@ func (s *sink) startConsume(ctx context.Context, entries changelog.Changelog, ac
 }
 
 func (s *sink) handleSchema(ctx context.Context, schema *changelog.Schema) error {
-	logger := kitlog.With(s.logger, "event", "handle_schema", "schema", schema.String())
+	logger := kitlog.With(s.logger, "event", "handle_schema", "schema", schema.TableReference())
 	defer logger.Log()
 
 	inserter, outcome, err := s.schemaHandler.Handle(ctx, s.logger, schema)
@@ -132,7 +132,7 @@ func (s *sink) handleSchema(ctx context.Context, schema *changelog.Schema) error
 		return err
 	}
 
-	route := Route(schema.String())
+	route := Route(schema.TableReference())
 	if outcome == SchemaHandlerUpdate {
 		s.router.Register(ctx, route, s.buildInserter(route, inserter))
 	}

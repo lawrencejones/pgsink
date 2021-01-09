@@ -23,15 +23,25 @@ type querier interface {
 	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
 }
 
+// textTranscodingScanner is a pgtype scanner that supports transcoding to text. This is
+// how we store non-text formats inside the textual column of the import jobs table, for
+// the purpose of cursoring.
+type textTranscodingScanner interface {
+	pgtype.Value
+	pgtype.TextEncoder
+	pgtype.TextDecoder
+}
+
 // Import is built for each job in the database, having resolved contextual information
 // that can help run the job from the database whenever the job was enqueued.
 type Import struct {
 	Schema            string
 	TableName         string
 	PrimaryKey        string
-	PrimaryKeyScanner decode.ValueScanner
+	PrimaryKeyScanner textTranscodingScanner
 	Relation          *logical.Relation
-	TypeMappings      []*decode.TypeMapping
+	Scanners          []decode.Scanner
+	Destinations      []interface{}
 	Cursor            interface{}
 }
 
@@ -56,7 +66,7 @@ func Build(ctx context.Context, logger kitlog.Logger, decoder decode.Decoder, tx
 
 	// Build scanners for decoding column types. We'll need the primary key scanner for
 	// interpreting the cursor.
-	primaryKeyScanner, typeMappings, err := buildTypeMappings(relation, decoder, primaryKey)
+	primaryKeyScanner, scanners, destinations, err := buildScanners(relation, decoder, primaryKey)
 	if err != nil {
 		return nil, err
 	}
@@ -66,10 +76,13 @@ func Build(ctx context.Context, logger kitlog.Logger, decoder decode.Decoder, tx
 	// this, which ensures we reliably encode/decode Postgres types.
 	var cursor interface{}
 	if job.Cursor != nil {
-		if err := primaryKeyScanner.Scan(*job.Cursor); err != nil {
-			return nil, fmt.Errorf("incompatible cursor in import_jobs table: %w", err)
+		if err := primaryKeyScanner.DecodeText(nil, []byte(*job.Cursor)); err != nil {
+			return nil, errors.Wrap(err, "incompatible cursor in import_jobs table")
 		}
 
+		// We don't need to enforce our decoder's choice of type here, as we only ever use
+		// EncodeText to retrieve the value, and anything that Get() produces should be
+		// useable as a query parameter of this columns type.
 		cursor = primaryKeyScanner.Get()
 	}
 
@@ -79,30 +92,41 @@ func Build(ctx context.Context, logger kitlog.Logger, decoder decode.Decoder, tx
 		PrimaryKey:        primaryKey,
 		PrimaryKeyScanner: primaryKeyScanner,
 		Relation:          relation,
-		TypeMappings:      typeMappings,
+		Scanners:          scanners,
+		Destinations:      destinations,
 		Cursor:            cursor,
 	}
 
 	return cfg, nil
 }
 
-// buildTypeMappings produces decoder TypeMappings, providing scanners for the relation
-// primary key and other columns.
-func buildTypeMappings(relation *logical.Relation, decoder decode.Decoder, primaryKey string) (primaryKeyScanner decode.ValueScanner, typeMappings []*decode.TypeMapping, err error) {
-	// Go can't handle splatting non-empty-interface types into a parameter list of
-	// empty-interfaces, so we have to construct an interface{} slice of scanners.
-	typeMappings = make([]*decode.TypeMapping, len(relation.Columns))
-	for idx, column := range relation.Columns {
-		typeMapping, err := decoder.TypeMappingForOID(column.Type)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "table contains Postgres type that we cannot decode")
-		}
-		typeMappings[idx] = typeMapping
+// buildScanners generates scanners that can be used to decode the import results. Each
+// scanner is a separate instance, and will cache the scanned contents between subsequent
+// scans: this is how we retrieve the primary key from the result of the last scan.
+func buildScanners(relation *logical.Relation, decoder decode.Decoder, primaryKey string) (primaryKeyScanner textTranscodingScanner, scanners []decode.Scanner, destinations []interface{}, err error) {
+	scanners = make([]decode.Scanner, len(relation.Columns))
+	destinations = make([]interface{}, len(relation.Columns))
 
-		// We'll need this scanner to convert the cursor value between what the table accepts
-		// and what we'll store in import_jobs
+	for idx, column := range relation.Columns {
+		scanner, dest, err := decoder.ScannerFor(column.Type)
+		if err != nil {
+			return nil, nil, nil, errors.Wrap(err, "table contains Postgres type that we cannot decode")
+		}
+
+		// Assign the scanner to match the column order
+		scanners[idx] = scanner
+		destinations[idx] = dest
+
+		// If we're the primary key, we need the scanner to support text transcoding, so we
+		// can store the cursor value as text into our field.
 		if column.Name == primaryKey {
-			primaryKeyScanner = typeMapping.Scanner
+			scanner, ok := scanner.(textTranscodingScanner)
+			if !ok {
+				return nil, nil, nil, errors.Errorf(
+					"primary key has oid that is not text transcodable (oid=%v), cannot import table", column.Type)
+			}
+
+			primaryKeyScanner = scanner
 		}
 	}
 

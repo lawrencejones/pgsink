@@ -33,7 +33,7 @@ func (d *schemaHandler) Handle(ctx context.Context, logger kitlog.Logger, schema
 	ctx, span := trace.StartSpan(ctx, "pkg/sinks/bigquery/schemaHandler.Handle")
 	defer span.End()
 
-	logger = kitlog.With(logger, "schema", schema.String())
+	logger = kitlog.With(logger, "schema", schema.TableReference())
 	raw, rawMetadata, err := d.syncRawTable(ctx, logger, schema)
 	if err != nil {
 		return nil, generic.SchemaHandlerFailed, err

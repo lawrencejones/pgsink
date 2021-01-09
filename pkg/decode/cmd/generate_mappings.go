@@ -78,6 +78,7 @@ var cfg = Config{
 		"tstzrange",
 		"daterange",
 		"int8range",
+		"unknown",
 	},
 	Templates: map[string]TemplatedTypeMapping{
 		"bool": {
@@ -221,9 +222,9 @@ nextDataType:
 			continue // no type registered for oid
 		}
 
-		valueScanner, ok := dataType.Value.(decode.ValueScanner)
+		valueScanner, ok := dataType.Value.(decode.Scanner)
 		if !ok {
-			continue // we only want scanners that can encode text
+			continue // we only want scanners that support our interface
 		}
 
 		for _, name := range cfg.Unsupported {
@@ -239,7 +240,7 @@ nextDataType:
 
 		template, found := cfg.Templates[dataType.Name]
 		if !found {
-			log.Fatalf("no template set for %s", dataType.Name)
+			log.Fatalf("no template set for %s (oid=%v)", dataType.Name, dataType.OID)
 		}
 
 		supported = append(supported, TemplatedTypeMapping{

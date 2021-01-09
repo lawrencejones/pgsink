@@ -3,6 +3,7 @@ package imports
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/lawrencejones/pgsink/pkg/changelog"
@@ -189,9 +190,11 @@ func (i importer) scanBatch(ctx context.Context, logger kitlog.Logger, tx pgx.Tx
 		workQueryDurationSeconds.WithLabelValues(cfg.TableName).Observe(v)
 	})).ObserveDuration()
 
+	// Scan accepts interface{}, which means we have to make the conversion from Scanner to
+	// interface{} here.
 	var scanners []interface{}
-	for _, typeMapping := range cfg.TypeMappings {
-		scanners = append(scanners, typeMapping.Scanner)
+	for _, scanner := range cfg.Scanners {
+		scanners = append(scanners, scanner)
 	}
 
 forEachRow:
@@ -202,11 +205,13 @@ forEachRow:
 
 		row := map[string]interface{}{}
 		for idx, column := range cfg.Relation.Columns {
-			typeMapping := cfg.TypeMappings[idx]
-			dest := typeMapping.NewEmpty()
-			typeMapping.Scanner.AssignTo(dest)
+			dest := cfg.Destinations[idx]
+			if err := scanners[idx].(decode.Scanner).AssignTo(dest); err != nil {
+				return fail(err, "failed to scan column")
+			}
 
-			row[column.Name] = dest
+			// Dereference the value we get from our destination, to remove double pointer-ing
+			row[column.Name] = reflect.ValueOf(dest).Elem().Interface()
 		}
 
 		tableRowsRead.Inc()

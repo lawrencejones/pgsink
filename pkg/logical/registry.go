@@ -52,9 +52,9 @@ func (r *Registry) Register(relation *Relation) {
 
 func (r *Registry) Get(oid uint32) *Relation {
 	r.RLock()
-	relation := r.relations[oid]
-	r.RUnlock() // don't defer, as defer costs more than direct invocation
-	return relation
+	defer r.RUnlock()
+
+	return r.relations[oid]
 }
 
 // Marshal uses the schema information in the registry to marshal Golang native structures

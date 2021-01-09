@@ -28,11 +28,11 @@ import (
 func buildRaw(tableName string, schema *changelog.Schema, decoder decode.Decoder) (*bq.TableMetadata, error) {
 	fields := bq.Schema{}
 	for _, column := range schema.Spec.Columns {
-		empty, err := decoder.EmptyForOID(column.Type)
+		_, dest, err := decoder.ScannerFor(column.Type)
 		if err != nil {
 			return nil, err
 		}
-		externalType, repeated, err := fieldTypeFor(empty)
+		externalType, repeated, err := fieldTypeFor(dest)
 		if err != nil {
 			return nil, err
 		}

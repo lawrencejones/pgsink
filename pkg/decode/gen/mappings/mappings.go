@@ -229,6 +229,10 @@ var Unsupported = []decode.TypeMapping{
 		OID:  651,
 	},
 	{
+		Name: "unknown",
+		OID:  705,
+	},
+	{
 		Name: "circle",
 		OID:  718,
 	},
