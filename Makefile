@@ -50,6 +50,7 @@ createdb:
 
 dropdb:
 	$(PSQL) -U postgres postgres -c "DROP DATABASE IF EXISTS $(PGDATABASE);"
+	$(PSQL) -U postgres postgres -c "DROP ROLE IF EXISTS $(PGUSER);"
 
 recreatedb: dropdb createdb
 
