@@ -34,7 +34,7 @@ require (
 	go.opencensus.io v0.22.5
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b // indirect
-	golang.org/x/tools v0.0.0-20201229221835-b8413747bbd4 // indirect
+	golang.org/x/tools v0.0.0-20210108195828-e2f9c7f1fc8e // indirect
 	google.golang.org/api v0.36.0
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
