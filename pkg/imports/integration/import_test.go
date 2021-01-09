@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
-	"github.com/lawrencejones/pgsink/pkg/dbtest"
+	"github.com/lawrencejones/pgsink/internal/dbschema/pgsink/model"
+	"github.com/lawrencejones/pgsink/internal/dbtest"
 	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/decode/gen/mappings"
 	"github.com/lawrencejones/pgsink/pkg/imports"

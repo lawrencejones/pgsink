@@ -6,12 +6,12 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/lawrencejones/pgsink/internal/telem"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
-	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
-	. "github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/table"
+	"github.com/lawrencejones/pgsink/internal/dbschema/pgsink/model"
+	. "github.com/lawrencejones/pgsink/internal/dbschema/pgsink/table"
 	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
-	"github.com/lawrencejones/pgsink/pkg/telem"
 
 	"github.com/alecthomas/kingpin"
 	. "github.com/go-jet/jet/postgres"

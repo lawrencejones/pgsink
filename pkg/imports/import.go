@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
+	"github.com/lawrencejones/pgsink/internal/dbschema/pgsink/model"
 	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/logical"
 	"github.com/pkg/errors"

@@ -5,7 +5,7 @@ import (
 
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgx/v4"
-	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
+	"github.com/lawrencejones/pgsink/internal/dbschema/pgsink/model"
 )
 
 type importerFunc func(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, job model.ImportJobs) error
