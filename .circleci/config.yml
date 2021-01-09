@@ -3,24 +3,26 @@ version: 2
 
 references:
   docker_golang: &docker_golang
-    docker:
-      - image: golang:1.15.6
-        environment:
-          PGHOST: "127.0.0.1"
-          PGUSER: "pgsink_test"
-          PGDATABASE: "pgsink_test"
-      - image: postgres:13.1
-        command: |
-          docker-entrypoint.sh postgres -c 'wal_level=logical'
-        environment:
-          POSTGRES_USER: "postgres"
-          POSTGRES_PASSWORD: ""
-          POSTGRES_HOST_AUTH_METHOD: "trust"
-    working_directory: /app
+    image: golang:1.15.6
+    environment:
+      PGHOST: "127.0.0.1"
+      PGUSER: "pgsink_test"
+      PGDATABASE: "pgsink_test"
+  docker_postgres: &docker_postgres
+    image: postgres:13.1
+    command: |
+      docker-entrypoint.sh postgres -c 'wal_level=logical'
+    environment:
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: ""
+      POSTGRES_HOST_AUTH_METHOD: "trust"
 
 jobs:
   unit-integration:
-    <<: *docker_golang
+    docker:
+      - *docker_golang
+      - *docker_postgres
+    working_directory: /app
     steps:
       - checkout
       - run:
@@ -40,14 +42,18 @@ jobs:
           command: make test
 
   check-deps-updated:
-    <<: *docker_golang
+    docker:
+      - *docker_golang
+    working_directory: /app
     steps:
       - checkout
       - run: go mod download
       - run: env GOPROXY=off go build -mod=readonly ./...
 
   check-deps-tidy:
-    <<: *docker_golang
+    docker:
+      - *docker_golang
+    working_directory: /app
     steps:
       - checkout
       - run: go mod tidy
@@ -57,7 +63,9 @@ jobs:
           fi;
 
   check-generated-code:
-    <<: *docker_golang
+    docker:
+      - *docker_golang
+    working_directory: /app
     steps:
       - checkout
       - run: go install golang.org/x/tools/cmd/goimports
@@ -69,7 +77,8 @@ jobs:
           fi
 
   release:
-    <<: *docker_golang
+    docker:
+      - *docker_golang
     working_directory: /app
     steps:
       - checkout
