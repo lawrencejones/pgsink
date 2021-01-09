@@ -13,7 +13,7 @@ PGDATABASE ?= pgsink
 PGUSER ?= pgsink
 
 .PHONY: prog darwin linux generate clean
-.PHONY: migrate migrate-run structure.sql createdb dropdb recreatedb test docs pkg/dbschema
+.PHONY: migrate migrate-run structure.sql createdb dropdb recreatedb test docs internal/dbschema
 
 ################################################################################
 # Build
@@ -69,5 +69,5 @@ test:
 
 # Generates database types from live Postgres schema (start docker-compose for
 # this)
-pkg/dbschema:
-	jet -source=PostgreSQL -host=localhost -port=5432 -user=$(PGUSER) -dbname=$(PGDATABASE) -schema=pgsink -path=pkg/dbschema
+internal/dbschema:
+	jet -source=PostgreSQL -host=localhost -port=5432 -user=$(PGUSER) -dbname=$(PGDATABASE) -schema=pgsink -path=internal/dbschema

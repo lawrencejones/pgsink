@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/model"
-	. "github.com/lawrencejones/pgsink/pkg/dbschema/pgsink/table"
+	"github.com/lawrencejones/pgsink/internal/dbschema/pgsink/model"
+	. "github.com/lawrencejones/pgsink/internal/dbschema/pgsink/table"
 
 	"github.com/alecthomas/kingpin"
 	. "github.com/go-jet/jet/postgres"

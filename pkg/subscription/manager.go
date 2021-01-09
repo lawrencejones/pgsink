@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/lawrencejones/pgsink/pkg/changelog"
-	_ "github.com/lawrencejones/pgsink/pkg/dbschema/information_schema/model"
-	isv "github.com/lawrencejones/pgsink/pkg/dbschema/information_schema/view"
+	_ "github.com/lawrencejones/pgsink/internal/dbschema/information_schema/model"
+	isv "github.com/lawrencejones/pgsink/internal/dbschema/information_schema/view"
 
 	"github.com/alecthomas/kingpin"
 	pg "github.com/go-jet/jet/postgres"

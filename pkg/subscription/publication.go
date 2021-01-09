@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/lawrencejones/pgsink/pkg/changelog"
-	_ "github.com/lawrencejones/pgsink/pkg/dbschema/pg_catalog/model"
-	. "github.com/lawrencejones/pgsink/pkg/dbschema/pg_catalog/table"
-	. "github.com/lawrencejones/pgsink/pkg/dbschema/pg_catalog/view"
+	_ "github.com/lawrencejones/pgsink/internal/dbschema/pg_catalog/model"
+	. "github.com/lawrencejones/pgsink/internal/dbschema/pg_catalog/table"
+	. "github.com/lawrencejones/pgsink/internal/dbschema/pg_catalog/view"
 
 	. "github.com/go-jet/jet/postgres"
 	kitlog "github.com/go-kit/kit/log"
