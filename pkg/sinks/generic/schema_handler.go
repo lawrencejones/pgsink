@@ -79,7 +79,7 @@ func (s *schemaHandlerCached) Handle(ctx context.Context, logger kitlog.Logger, 
 	s.Lock()
 	defer s.Unlock()
 
-	logger = kitlog.With(logger, "schema", schema.String())
+	logger = kitlog.With(logger, "schema", schema.TableReference())
 	fingerprint := schema.GetFingerprint()
 	existing, ok := s.cache[fingerprint]
 

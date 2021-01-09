@@ -17,7 +17,7 @@ type Modification struct {
 	After     interface{} `json:"after"`     // row after modification
 }
 
-func (m Modification) String() string {
+func (m Modification) TableReference() string {
 	return fmt.Sprintf("%s.%s", m.Namespace, m.Name)
 }
 

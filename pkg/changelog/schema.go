@@ -22,7 +22,7 @@ type Schema struct {
 	Spec      SchemaSpecification `json:"spec"`      // schema definition
 }
 
-func (s Schema) String() string {
+func (s Schema) TableReference() string {
 	return fmt.Sprintf("%s.%s", s.Namespace, s.Name)
 }
 
