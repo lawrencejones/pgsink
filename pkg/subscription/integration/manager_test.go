@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/lawrencejones/pgsink/pkg/changelog"
-	"github.com/lawrencejones/pgsink/pkg/dbtest"
+	"github.com/lawrencejones/pgsink/internal/dbtest"
 	"github.com/lawrencejones/pgsink/pkg/subscription"
 
 	_ "github.com/jackc/pgx/v4/stdlib"
