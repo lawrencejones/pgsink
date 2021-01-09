@@ -75,6 +75,16 @@ $ go run internal/migration/cmd/goose.go --dir internal/migration create create_
 2019/12/29 14:59:51 Created new file: internal/migration/20191229145951_create_import_jobs_table.go
 ```
 
+Running migrations is done using the make target:
+
+```console
+$ make migrate structure.sql
+go run internal/migration/cmd/goose.go --install up
+2021/01/09 15:38:29 requested --install, so creating schema 'pgsink'
+2021/01/09 15:38:29 goose: no migrations to run. current version: 20210102200953
+docker-compose --env-file=/dev/null exec -T postgres pg_dump -U postgres pgsink --schema-only --schema=pgsink >structure.sql
+```
+
 ## Getting started
 
 Boot a Postgres database, then create an example table.

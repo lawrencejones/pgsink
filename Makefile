@@ -13,7 +13,7 @@ PGDATABASE ?= pgsink
 PGUSER ?= pgsink
 
 .PHONY: prog darwin linux clean
-.PHONY: migrate createdb dropdb recreatedb test docs pkg/dbschema
+.PHONY: migrate migrate-run structure.sql createdb dropdb recreatedb test docs pkg/dbschema
 
 ################################################################################
 # Build
@@ -40,8 +40,14 @@ clean:
 ################################################################################
 
 # Runs migrations against the ambient Postgres credentials
-migrate:
+migrate: migrate-run structure.sql
+
+migrate-run:
 	go run internal/migration/cmd/goose.go --install up
+
+# Generates a structure.sql from the docker-compose database, having run migrate
+structure.sql:
+	$(PGDUMP) -U postgres $(PGDATABASE) --schema-only --schema=pgsink >$@
 
 createdb:
 	$(PSQL) postgres -U postgres -c "CREATE ROLE $(PGUSER) WITH LOGIN CREATEDB REPLICATION;"
