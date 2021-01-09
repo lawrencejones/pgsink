@@ -56,6 +56,17 @@ jobs:
             echo "Modules not tidy; please run 'go mod tidy'";
           fi;
 
+  check-generated-code:
+    <<: *docker_golang
+    steps:
+      - checkout
+      - run: make generate
+      - run: |
+          if ! git diff --exit-code --name-only; then
+            echo "Generated code not up to date; please run 'make generate'"
+            exit 1
+          fi
+
   release:
     <<: *docker_golang
     working_directory: /app

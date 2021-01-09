@@ -12,7 +12,7 @@ PGHOST ?= localhost
 PGDATABASE ?= pgsink
 PGUSER ?= pgsink
 
-.PHONY: prog darwin linux clean
+.PHONY: prog darwin linux generate clean
 .PHONY: migrate migrate-run structure.sql createdb dropdb recreatedb test docs pkg/dbschema
 
 ################################################################################
@@ -31,6 +31,9 @@ bin/%.darwin_amd64:
 
 bin/%:
 	$(BUILD_COMMAND) -o $@ cmd/$*/*.go
+
+generate:
+	go generate ./...
 
 clean:
 	rm -rfv $(PROG)
