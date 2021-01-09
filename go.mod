@@ -1,6 +1,6 @@
 module github.com/lawrencejones/pgsink
 
-go 1.13
+go 1.15
 
 require (
 	cloud.google.com/go v0.74.0 // indirect
