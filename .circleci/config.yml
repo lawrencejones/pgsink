@@ -80,13 +80,11 @@ jobs:
               echo "Version ${CURRENT_VERSION} is already released"
               exit 0
             fi
-
-            curl -L -o /tmp/goreleaser_Linux_x86_64.tar.gz https://github.com/goreleaser/goreleaser/releases/download/v0.101.0/goreleaser_Linux_x86_64.tar.gz
+            curl -L -o /tmp/goreleaser_Linux_x86_64.tar.gz https://github.com/goreleaser/goreleaser/releases/download/v0.150.0/goreleaser_Linux_x86_64.tar.gz
             tar zxf /tmp/goreleaser_Linux_x86_64.tar.gz -C /tmp
-            git log --pretty=oneline --abbrev-commit --no-decorate --no-color "$(git describe --tags --abbrev=0)..HEAD" -- pkg cmd vendor internal > /tmp/release-notes
             git tag "${CURRENT_VERSION}"
             git push --tags
-            /tmp/goreleaser --rm-dist --release-notes /tmp/release-notes
+            /tmp/goreleaser --rm-dist
 
 workflows:
   version: 2
@@ -95,6 +93,7 @@ workflows:
       - unit-integration
       - check-deps-updated
       - check-deps-tidy
+      - check-generated-code
       - release:
           requires:
             - unit-integration

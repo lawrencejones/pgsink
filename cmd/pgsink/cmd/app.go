@@ -39,7 +39,7 @@ import (
 var logger kitlog.Logger
 
 var (
-	app = kingpin.New("pgsink", "Publish Postgres changes to pubsub").Version(versionStanza())
+	app = kingpin.New("pgsink", "Logically replicate data out of Postgres into sinks (files, Google BigQuery, etc)").Version(versionStanza())
 
 	// Global flags
 	debug               = app.Flag("debug", "Enable debug logging").Default("false").Bool()

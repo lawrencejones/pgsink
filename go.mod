@@ -24,8 +24,6 @@ require (
 	github.com/jackc/pgproto3/v2 v2.0.6
 	github.com/jackc/pgtype v1.6.2
 	github.com/jackc/pgx/v4 v4.10.1
-	github.com/labstack/gommon v0.3.0
-	github.com/linkedin/goavro/v2 v2.10.0
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/oklog/run v1.1.0
 	github.com/onsi/ginkgo v1.12.1
