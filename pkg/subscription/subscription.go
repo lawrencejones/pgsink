@@ -1,3 +1,6 @@
+// Capture changes from a Postgres database by creating and managing a publication, then
+// streaming changes over a logical replication socket. Generates a stream of changelog
+// entries that can be pushed into a sink.
 package subscription
 
 import (

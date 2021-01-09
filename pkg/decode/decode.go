@@ -1,3 +1,8 @@
+// Implements decoding of Postgres types into Golang, using mappings that are generated
+// from pgtype.
+//
+// The Decoder provides consistent scanners across pgsink components, ensuring the logical
+// subscription decodes Postgres values into the same types as the import.
 package decode
 
 //go:generate go run cmd/generate_mappings.go -- gen/mappings/mappings.go
