@@ -11,15 +11,19 @@ func init() {
 }
 
 func Up20210102200953(tx *sql.Tx) error {
-	return exec(tx, `
-	alter table pgsink.import_jobs
+	_, err := tx.Exec(`
+	alter table import_jobs
 	add column schema text not null;
 	`)
+
+	return err
 }
 
 func Down20210102200953(tx *sql.Tx) error {
-	return exec(tx, `
-	alter table pgsink.import_jobs
+	_, err := tx.Exec(`
+	alter table import_jobs
 	drop column schema text;
 	`)
+
+	return err
 }

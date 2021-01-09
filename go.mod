@@ -1,6 +1,6 @@
 module github.com/lawrencejones/pgsink
 
-go 1.13
+go 1.15
 
 require (
 	cloud.google.com/go v0.74.0 // indirect
@@ -14,6 +14,7 @@ require (
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-jet/jet v2.3.0+incompatible
+	github.com/go-jet/jet/v2 v2.4.0 // indirect
 	github.com/go-kit/kit v0.10.0
 	github.com/google/uuid v1.1.2
 	github.com/huandu/xstrings v1.3.2 // indirect
@@ -23,6 +24,7 @@ require (
 	github.com/jackc/pgproto3/v2 v2.0.6
 	github.com/jackc/pgtype v1.6.2
 	github.com/jackc/pgx/v4 v4.10.1
+	github.com/labstack/gommon v0.3.0
 	github.com/linkedin/goavro/v2 v2.10.0
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/oklog/run v1.1.0

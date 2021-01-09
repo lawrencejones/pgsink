@@ -24,14 +24,17 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Install ginkgo test runner
-          command: go get github.com/onsi/ginkgo/ginkgo
+          name: Install dependencies
+          command: go get ./...
+      - run:
+          name: Install ginkgo test runner (using go.mod)
+          command: go install github.com/onsi/ginkgo/ginkgo
       - run:
           name: Install Postgres
           command: apt-get update && apt-get install -y postgresql-client libpq-dev
       - run:
           name: Create test database
-          command: make recreatedb migrate PSQL=$(which psql)
+          command: make recreatedb migrate-run PSQL=$(which psql)
       - run:
           name: Run tests
           command: make test

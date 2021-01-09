@@ -12,7 +12,7 @@ func init() {
 
 func Up20191229145951(tx *sql.Tx) error {
 	_, err := tx.Exec(`
-	create table pgsink.import_jobs (
+	create table import_jobs (
 		id bigserial primary key,
 		publication_id text not null,
 		table_name text not null,
@@ -27,7 +27,7 @@ func Up20191229145951(tx *sql.Tx) error {
 
 func Down20191229145951(tx *sql.Tx) error {
 	_, err := tx.Exec(`
-	drop table pgsink.import_jobs;
+	drop table import_jobs;
 	`)
 
 	return err
