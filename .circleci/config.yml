@@ -33,6 +33,9 @@ jobs:
           name: Create test database
           command: make recreatedb migrate PSQL=$(which psql)
       - run:
+          name: Install dependencies
+          command: go get ./...
+      - run:
           name: Run tests
           command: make test
 
