@@ -1,4 +1,4 @@
-# pgsink [![CircleCI](https://circleci.com/gh/lawrencejones/pgsink.svg?style=svg)](https://circleci.com/gh/lawrencejones/pgsink)
+# pgsink [![CircleCI](https://circleci.com/gh/lawrencejones/pgsink.svg?style=svg)](https://circleci.com/gh/lawrencejones/pgsink) [![Go Reference](https://pkg.go.dev/badge/github.com/lawrencejones/pgsink.svg)](https://pkg.go.dev/github.com/lawrencejones/pgsink)
 
 > **Path to v1.0.0: https://github.com/lawrencejones/pgsink/projects/1**
 
