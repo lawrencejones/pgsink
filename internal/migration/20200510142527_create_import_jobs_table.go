@@ -13,7 +13,7 @@ func init() {
 // Recreate import jobs with a cleaner structure.
 func Up20200510142527(tx *sql.Tx) error {
 	_, err := tx.Exec(`
-	create table pgsink.import_jobs (
+	create table import_jobs (
 		id bigserial primary key,
 		subscription_id text not null,
 		table_name text not null,
@@ -30,7 +30,7 @@ func Up20200510142527(tx *sql.Tx) error {
 
 func Down20200510142527(tx *sql.Tx) error {
 	_, err := tx.Exec(`
-	drop table pgsink.import_jobs;
+	drop table import_jobs;
 	`)
 
 	return err

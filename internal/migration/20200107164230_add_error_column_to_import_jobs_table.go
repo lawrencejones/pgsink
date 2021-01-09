@@ -12,7 +12,7 @@ func init() {
 
 func Up20200107164230(tx *sql.Tx) error {
 	_, err := tx.Exec(`
-	alter table pgsink.import_jobs
+	alter table import_jobs
 	add column error text;
 	`)
 
@@ -21,7 +21,7 @@ func Up20200107164230(tx *sql.Tx) error {
 
 func Down20200107164230(tx *sql.Tx) error {
 	_, err := tx.Exec(`
-	alter table pgsink.import_jobs
+	alter table import_jobs
 	drop column error;
 	`)
 

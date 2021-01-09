@@ -17,7 +17,6 @@ import (
 	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/decode/gen/mappings"
 	"github.com/lawrencejones/pgsink/pkg/imports"
-	"github.com/lawrencejones/pgsink/pkg/migration"
 	sinkbigquery "github.com/lawrencejones/pgsink/pkg/sinks/bigquery"
 	sinkfile "github.com/lawrencejones/pgsink/pkg/sinks/file"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
@@ -51,6 +50,7 @@ var (
 
 	// Each subscription has a name and a unique identifier
 	subscriptionName = app.Flag("subscription-name", "Subscription name, matches Postgres publication").Default("pgsink").String()
+	schemaName       = app.Flag("schema", "Postgres schema name, in which we store pgsink resources").Default("pgsink").String()
 
 	stream           = app.Command("stream", "Stream changes into sink")
 	streamConsume    = stream.Flag("consume", "Consume messages from the subscription").Default("true").Bool()
@@ -137,7 +137,7 @@ func Run() (err error) {
 		cancel()
 	}()
 
-	db, cfg, repCfg, err := buildDBConfig(fmt.Sprintf(""), buildDBLogger(logger))
+	db, cfg, repCfg, err := buildDBConfig(fmt.Sprintf("search_path=%s,public", *schemaName), buildDBLogger(logger))
 	if err != nil {
 		kingpin.Fatalf("invalid postgres configuration: %v", err.Error())
 	}
@@ -147,11 +147,8 @@ func Run() (err error) {
 		"port", cfg.Port,
 		"database", cfg.Database,
 		"user", cfg.User,
+		"schema", *schemaName,
 	)
-
-	if err := migration.Migrate(ctx, logger, db); err != nil {
-		return fmt.Errorf("failed to migrate database: %w", err)
-	}
 
 	var g run.Group
 

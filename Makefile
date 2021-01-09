@@ -41,7 +41,7 @@ clean:
 
 # Runs migrations against the ambient Postgres credentials
 migrate:
-	go run pkg/migration/run/main.go
+	go run internal/migration/cmd/goose.go --install up
 
 createdb:
 	$(PSQL) postgres -U postgres -c "CREATE ROLE $(PGUSER) WITH LOGIN CREATEDB REPLICATION;"
