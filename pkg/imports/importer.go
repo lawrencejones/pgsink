@@ -6,10 +6,10 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/lawrencejones/pgsink/internal/telem"
-	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/internal/dbschema/pgsink/model"
 	. "github.com/lawrencejones/pgsink/internal/dbschema/pgsink/table"
+	"github.com/lawrencejones/pgsink/internal/telem"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
@@ -86,7 +86,7 @@ func (i importer) Do(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, job m
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	ctx, span, logger := telem.Logger(logger)(trace.StartSpan(ctx, "pkg/imports.importer.Do"))
+	ctx, span, logger := telem.Logger(ctx, logger)(trace.StartSpan(ctx, "pkg/imports.importer.Do"))
 	defer span.End()
 	span.AddAttributes(
 		trace.Int64Attribute("job_id", job.ID),

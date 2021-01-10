@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lawrencejones/pgsink/internal/dbschema/pgsink/model"
+	"github.com/lawrencejones/pgsink/internal/telem"
 	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/logical"
 	"github.com/pkg/errors"
@@ -48,6 +49,9 @@ type Import struct {
 // Build queries the database for information required to perform an import, given an
 // import job to process.
 func Build(ctx context.Context, logger kitlog.Logger, decoder decode.Decoder, tx querier, job model.ImportJobs) (*Import, error) {
+	ctx, span, logger := telem.Logger(ctx, logger)(trace.StartSpan(ctx, "pkg/imports.Build"))
+	defer span.End()
+
 	// We should query for the primary key as the first thing we do, as this may fail if the
 	// table is misconfigured. It's better to fail here, before we've pushed anything into
 	// the changelog, than after pushing the schema when we discover the table is

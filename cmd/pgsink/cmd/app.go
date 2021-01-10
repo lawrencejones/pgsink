@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lawrencejones/pgsink/internal/telem"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/decode/gen/mappings"
@@ -104,7 +105,7 @@ func Run() (err error) {
 		cancel()
 	}()
 
-	db, cfg, repCfg, err := buildDBConfig(fmt.Sprintf("search_path=%s,public", *schemaName), buildDBLogger(logger))
+	db, cfg, repCfg, err := buildDBConfig(fmt.Sprintf("search_path=%s,public", *schemaName), buildDBLogger(debug))
 	if err != nil {
 		app.FatalUsage("invalid postgres configuration: %v", err.Error())
 	}
@@ -324,18 +325,25 @@ func (f pgxLoggerFunc) Log(ctx context.Context, level pgx.LogLevel, msg string, 
 
 // buildDBLogger produces a pgx.Logger that can trace SQL operations at the connection
 // level, which is important when the ocsql package can only support commands going via
-// sql.DB.
+// sql.DB. It logs using the context logger, meaning the logs appear with the right
+// correlation IDs.
 //
 // We also log queries, in debug mode, helping to locally reproduce issues.
-func buildDBLogger(logger kitlog.Logger) pgx.Logger {
+func buildDBLogger(enabled *bool) pgx.Logger {
 	return pgxLoggerFunc(func(ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{}) {
+		// Only log if the enabled flag is set to true. This allows an operator to toggle
+		// database logging in realtime.
+		if !*enabled {
+			return
+		}
+
 		queryPID, _ := data["pid"].(uint32)
 		queryCommandTag, _ := data["commandTag"].(pgconn.CommandTag)
 		querySQL, _ := data["sql"].(string)
 		queryArgs, _ := data["args"].([]string)
 
 		// Alias the logger, so we can add fields to it without altering the closured logger
-		logger := logger
+		logger := telem.LoggerFrom(ctx)
 
 		span := trace.FromContext(ctx)
 		if span != nil {
