@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/internal/dbtest"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/subscription"
 
 	_ "github.com/jackc/pgx/v4/stdlib"
@@ -42,7 +42,7 @@ var _ = Describe("Manager", func() {
 	)
 
 	JustBeforeEach(func() {
-		manager = subscription.NewManager(logger, db.GetDB(), *opts)
+		manager = subscription.NewManager(db.GetDB(), *opts)
 	})
 
 	BeforeEach(func() {

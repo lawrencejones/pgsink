@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lawrencejones/pgsink/internal/telem"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/decode/gen/mappings"
@@ -76,8 +77,9 @@ func Run() (err error) {
 	command := kingpin.MustParse(app.Parse(os.Args[1:]))
 
 	logger = kitlog.NewLogfmtLogger(kitlog.NewSyncWriter(os.Stderr))
-	logger = level.NewFilter(logger, level.AllowInfo())
 	if *debug {
+		logger = level.NewFilter(logger, level.AllowInfo())
+	} else {
 		logger = level.NewFilter(logger, level.AllowDebug())
 	}
 	logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", kitlog.DefaultCaller)
@@ -87,6 +89,14 @@ func Run() (err error) {
 	// started should also finish.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// We stash loggers into the context parameter of each function. This allows logs to be
+	// annotated with operation-specific information, so that we may associate logs with
+	// their original cause.
+	//
+	// This means we need to stash a logger onto our root context, so methods can reliably
+	// fetch it even if we haven't set it for the current operation.
+	ctx, logger = telem.WithLogger(ctx, logger)
 
 	// Stage our shutdown to first request termination, then cancel contexts if downstream
 	// workers haven't responded.
@@ -104,7 +114,9 @@ func Run() (err error) {
 		cancel()
 	}()
 
-	db, cfg, repCfg, err := buildDBConfig(fmt.Sprintf("search_path=%s,public", *schemaName), buildDBLogger(logger))
+	// Don't allow us to use the default search path, as we'd rather fail-fast than
+	// accidentally misreference a table and find it in the public schema.
+	db, cfg, repCfg, err := buildDBConfig(fmt.Sprintf("search_path=%s", *schemaName), buildDBLogger(debug))
 	if err != nil {
 		app.FatalUsage("invalid postgres configuration: %v", err.Error())
 	}
@@ -188,6 +200,20 @@ func Run() (err error) {
 			return err
 		}
 
+		defer func() {
+			done := make(chan struct{})
+			go func() {
+				jexporter.Flush()
+				close(done)
+			}()
+
+			select {
+			case <-time.After(3 * time.Second):
+				logger.Log("event", "jaeger_timeout", "msg", "timed out waiting to flush jaeger exporter")
+			case <-done:
+			}
+		}()
+
 		trace.RegisterExporter(jexporter)
 		trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
 	}
@@ -203,9 +229,9 @@ func Run() (err error) {
 
 		switch *streamSinkType {
 		case "file":
-			sink, err = sinkfile.New(logger, *streamSinkFileOptions)
+			sink, err = sinkfile.New(*streamSinkFileOptions)
 		case "bigquery":
-			sink, err = sinkbigquery.New(ctx, logger, decoder, *streamSinkBigQueryOptions)
+			sink, err = sinkbigquery.New(ctx, decoder, *streamSinkBigQueryOptions)
 		default:
 			app.FatalUsage(fmt.Sprintf("unsupported sink type: %s", *streamSinkType))
 		}
@@ -230,7 +256,7 @@ func Run() (err error) {
 		}
 
 		if *streamConsume {
-			logger := kitlog.With(logger, "component", "subscription")
+			ctx, logger := telem.WithLogger(ctx, logger, "component", "subscription")
 
 			stream, err = sub.Start(ctx, logger, repconn, *streamOptions)
 			if err != nil {
@@ -261,13 +287,12 @@ func Run() (err error) {
 		}
 
 		if *streamSubscriptionManager {
-			logger := kitlog.With(logger, "component", "subscription_manager")
-
-			manager := subscription.NewManager(logger, db, *streamSubscriptionManagerOptions)
+			ctx, logger := telem.WithLogger(ctx, logger, "component", "subscription_manager")
+			manager := subscription.NewManager(db, *streamSubscriptionManagerOptions)
 
 			g.Add(
 				func() error {
-					return manager.Manage(ctx, *sub)
+					return manager.Manage(ctx, logger, *sub)
 				},
 				func(error) {
 					manager.Shutdown(ctx)
@@ -276,8 +301,7 @@ func Run() (err error) {
 		}
 
 		if *streamImportManager {
-			logger := kitlog.With(logger, "component", "import_manager")
-
+			ctx, logger := telem.WithLogger(ctx, logger, "component", "import_manager")
 			manager := imports.NewManager(logger, db, *streamImportManagerOptions)
 
 			g.Add(
@@ -291,7 +315,7 @@ func Run() (err error) {
 		}
 
 		for idx := 0; idx < *streamImportWorkerCount; idx++ {
-			logger := kitlog.With(logger, "component", "import_worker", "worker_id", idx)
+			ctx, logger := telem.WithLogger(ctx, logger, "component", "import_worker", "worker_id", idx)
 
 			// Assign the subscription ID from what we generated on boot
 			streamImportWorkerOptions.SubscriptionID = sub.ID
@@ -325,18 +349,19 @@ func (f pgxLoggerFunc) Log(ctx context.Context, level pgx.LogLevel, msg string, 
 
 // buildDBLogger produces a pgx.Logger that can trace SQL operations at the connection
 // level, which is important when the ocsql package can only support commands going via
-// sql.DB.
+// sql.DB. It logs using the context logger, meaning the logs appear with the right
+// correlation IDs.
 //
 // We also log queries, in debug mode, helping to locally reproduce issues.
-func buildDBLogger(logger kitlog.Logger) pgx.Logger {
+func buildDBLogger(enableLogs *bool) pgx.Logger {
 	return pgxLoggerFunc(func(ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{}) {
 		queryPID, _ := data["pid"].(uint32)
 		queryCommandTag, _ := data["commandTag"].(pgconn.CommandTag)
 		querySQL, _ := data["sql"].(string)
 		queryArgs, _ := data["args"].([]string)
 
-		// Alias the logger, so we can add fields to it without altering the closured logger
-		logger := logger
+		// Fetch the logger from the current context
+		logger := telem.LoggerFrom(ctx)
 
 		span := trace.FromContext(ctx)
 		if span != nil {
@@ -346,6 +371,12 @@ func buildDBLogger(logger kitlog.Logger) pgx.Logger {
 				trace.StringAttribute("query_command_tag", queryCommandTag.String()),
 				trace.StringAttribute("query_sql", querySQL),
 			}, msg)
+		}
+
+		// Only log if the enabled flag is set to true. This allows an operator to toggle
+		// database logging in realtime.
+		if !*enableLogs {
+			return
 		}
 
 		logger.Log("event", "pgx", "msg", msg,

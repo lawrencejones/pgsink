@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lawrencejones/pgsink/internal/telem"
 	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
 	bq "cloud.google.com/go/bigquery"
 	"github.com/alecthomas/kingpin"
-	kitlog "github.com/go-kit/kit/log"
 	"google.golang.org/api/googleapi"
 )
 
@@ -34,13 +34,11 @@ func (opt *Options) Bind(cmd *kingpin.CmdClause, prefix string) *Options {
 	return opt
 }
 
-func New(ctx context.Context, logger kitlog.Logger, decoder decode.Decoder, opts Options) (generic.Sink, error) {
+func New(ctx context.Context, decoder decode.Decoder, opts Options) (generic.Sink, error) {
 	client, err := bq.NewClient(ctx, opts.ProjectID)
 	if err != nil {
 		return nil, err
 	}
-
-	kitlog.With(logger, "project", opts.ProjectID, "dataset", opts.Dataset, "location", opts.Location)
 
 	dataset := client.Dataset(opts.Dataset)
 	md, err := dataset.Metadata(ctx)
@@ -48,6 +46,7 @@ func New(ctx context.Context, logger kitlog.Logger, decoder decode.Decoder, opts
 		return nil, err
 	}
 
+	logger := telem.LoggerFrom(ctx, "project", opts.ProjectID, "dataset", opts.Dataset, "location", opts.Location)
 	if md == nil {
 		logger.Log("event", "dataset.create", "msg", "dataset does not exist, creating")
 		md = &bq.DatasetMetadata{
@@ -62,7 +61,6 @@ func New(ctx context.Context, logger kitlog.Logger, decoder decode.Decoder, opts
 	}
 
 	sink := generic.SinkBuilder(
-		logger,
 		generic.SinkBuilder.WithBuffer(opts.BufferSize),
 		generic.SinkBuilder.WithInstrumentation(opts.Instrument),
 		generic.SinkBuilder.WithFlushInterval(opts.FlushInterval),

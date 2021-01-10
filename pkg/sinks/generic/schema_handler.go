@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/lawrencejones/pgsink/internal/telem"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 
 	kitlog "github.com/go-kit/kit/log"
@@ -13,7 +14,7 @@ import (
 // to receive corresponding modifications. It returns an Inserter that can be used to
 // handle modification associated with the given schema.
 type SchemaHandler interface {
-	Handle(context.Context, kitlog.Logger, *changelog.Schema) (Inserter, SchemaHandlerOutcome, error)
+	Handle(context.Context, *changelog.Schema) (Inserter, SchemaHandlerOutcome, error)
 }
 
 type SchemaHandlerOutcome string
@@ -25,20 +26,20 @@ const (
 )
 
 // SchemaHandlerFunc is shorthand for creating a handler from a function
-type SchemaHandlerFunc func(context.Context, kitlog.Logger, *changelog.Schema) (Inserter, SchemaHandlerOutcome, error)
+type SchemaHandlerFunc func(context.Context, *changelog.Schema) (Inserter, SchemaHandlerOutcome, error)
 
-func (s SchemaHandlerFunc) Handle(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) (Inserter, SchemaHandlerOutcome, error) {
-	return s(ctx, logger, schema)
+func (s SchemaHandlerFunc) Handle(ctx context.Context, schema *changelog.Schema) (Inserter, SchemaHandlerOutcome, error) {
+	return s(ctx, schema)
 }
 
 // SchemaHandlerGlobalInserter is used to register a single global inserter for all
 // modifications to this sink, along with a handler function that is used to respond to
 // new schemas but is not expected to return a modified inserter.
-func SchemaHandlerGlobalInserter(inserter Inserter, schemaHandler func(context.Context, kitlog.Logger, *changelog.Schema) error) SchemaHandler {
+func SchemaHandlerGlobalInserter(inserter Inserter, schemaHandler func(context.Context, *changelog.Schema) error) SchemaHandler {
 	var hasRun bool
 	return SchemaHandlerFunc(
-		func(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) (Inserter, SchemaHandlerOutcome, error) {
-			if err := schemaHandler(ctx, logger, schema); err != nil {
+		func(ctx context.Context, schema *changelog.Schema) (Inserter, SchemaHandlerOutcome, error) {
+			if err := schemaHandler(ctx, schema); err != nil {
 				return nil, SchemaHandlerFailed, err
 			}
 
@@ -75,7 +76,10 @@ type fingerprintedInserter struct {
 	fingerprint uint64
 }
 
-func (s *schemaHandlerCached) Handle(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) (Inserter, SchemaHandlerOutcome, error) {
+func (s *schemaHandlerCached) Handle(ctx context.Context, schema *changelog.Schema) (Inserter, SchemaHandlerOutcome, error) {
+	ctx, span, logger := telem.StartSpan(ctx, "pkg/sinks/generic.schemaHandlerCached.Handle")
+	defer span.End()
+
 	s.Lock()
 	defer s.Unlock()
 
@@ -91,7 +95,7 @@ func (s *schemaHandlerCached) Handle(ctx context.Context, logger kitlog.Logger, 
 
 	logger.Log("event", "schema.new_fingerprint", "fingerprint", fingerprint,
 		"msg", "fingerprint seen for the first time, calling schema handler")
-	inserter, outcome, err := s.handler.Handle(ctx, logger, schema)
+	inserter, outcome, err := s.handler.Handle(ctx, schema)
 
 	// Cache the inserter. Callers need to be aware that we'll do this even if we fail to
 	// handle the schema.

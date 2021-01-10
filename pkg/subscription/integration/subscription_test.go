@@ -217,7 +217,7 @@ var _ = Describe("Subscription", func() {
 				// confirm receipt up-to the new LSN. If we respect the confirmed flush position,
 				// we expect Postgres won't send us the original insert.
 				By("make many changes to advance the wal position")
-				db.MustExec(ctx, `insert into two (message) (select uuid_generate_v4() from generate_series(0, 1000, 1))`)
+				db.MustExec(ctx, `insert into two (message) (select gen_random_uuid() from generate_series(0, 1000, 1))`)
 
 				By("wait for a confirmed heartbeat")
 				Eventually(stream.Confirm(getCurrentWalLSN())).Should(Receive())

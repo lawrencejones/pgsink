@@ -27,7 +27,7 @@ var _ = Describe("router", func() {
 			// We don't use the provided fakeBackend here, as we connect the router to the
 			// individual inserters using Register
 			New: func(_ fakeBackend) generic.AsyncInserter {
-				router = generic.NewRouter(logger)
+				router = generic.NewRouter()
 
 				exampleResult := router.Register(ctx, exampleRoute, generic.NewAsyncInserter(example))
 				ExpectResolveSuccess(exampleResult.Get(ctx))

@@ -3,7 +3,7 @@ package generic
 import (
 	"context"
 
-	kitlog "github.com/go-kit/kit/log"
+	"github.com/lawrencejones/pgsink/internal/telem"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -31,20 +31,17 @@ var (
 
 type instrumentedInserter struct {
 	Inserter
-	logger                     kitlog.Logger
 	route                      string
 	durationSeconds, batchSize prometheus.ObserverVec
 }
 
 // NewInstrumentedInserter wraps an existing synchronous inserter, causing every insert to
 // be logged, capture batch size and duration in metrics, and create new spans.
-func NewInstrumentedInserter(logger kitlog.Logger, route Route, i Inserter) Inserter {
+func NewInstrumentedInserter(route Route, i Inserter) Inserter {
 	labels := prometheus.Labels(map[string]string{"route": string(route)})
-	logger = kitlog.With(logger, "route", string(route))
 
 	return &instrumentedInserter{
 		Inserter:        i,
-		logger:          logger,
 		route:           string(route),
 		durationSeconds: sinkInsertDurationSeconds.MustCurryWith(labels),
 		batchSize:       sinkInsertBatchSize.MustCurryWith(labels),
@@ -52,7 +49,7 @@ func NewInstrumentedInserter(logger kitlog.Logger, route Route, i Inserter) Inse
 }
 
 func (i *instrumentedInserter) Insert(ctx context.Context, modifications []*changelog.Modification) (count int, lsn *uint64, err error) {
-	ctx, span := trace.StartSpan(ctx, "pkg/sinks/generic.Inserter.Insert()")
+	ctx, span, logger := telem.StartSpan(ctx, "pkg/sinks/generic.Inserter.Insert")
 	defer span.End()
 
 	batchSize := len(modifications)
@@ -62,7 +59,13 @@ func (i *instrumentedInserter) Insert(ctx context.Context, modifications []*chan
 	)
 
 	defer prometheus.NewTimer(prometheus.ObserverFunc(func(v float64) {
-		i.logger.Log("event", "insert", "duration", v, "batch_size", batchSize, "count", count, "lsn", lsn, "error", err)
+		logger.Log("event", "insert",
+			"route", i.route,
+			"duration", v,
+			"batch_size", batchSize,
+			"count", count,
+			"lsn", lsn,
+			"error", err)
 		i.durationSeconds.WithLabelValues().Observe(v)
 		i.batchSize.WithLabelValues().Observe(float64(batchSize))
 	})).ObserveDuration()
