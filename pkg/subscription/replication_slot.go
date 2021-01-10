@@ -9,7 +9,7 @@ import (
 	_ "github.com/lawrencejones/pgsink/internal/dbschema/pg_catalog/table"
 	. "github.com/lawrencejones/pgsink/internal/dbschema/pg_catalog/view"
 
-	. "github.com/go-jet/jet/postgres"
+	. "github.com/go-jet/jet/v2/postgres"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pglogrepl"

@@ -10,7 +10,7 @@ import (
 	. "github.com/lawrencejones/pgsink/internal/dbschema/pgsink/table"
 
 	"github.com/alecthomas/kingpin"
-	. "github.com/go-jet/jet/postgres"
+	. "github.com/go-jet/jet/v2/postgres"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/stdlib"
@@ -156,8 +156,8 @@ func (w Worker) acquire(ctx context.Context, tx pgx.Tx) (*model.ImportJobs, erro
 
 func (w Worker) setError(ctx context.Context, job model.ImportJobs, workErr error) error {
 	stmt := ImportJobs.
-		UPDATE(ImportJobs.Error).
-		SET(workErr.Error()).
+		UPDATE(ImportJobs.Error, ImportJobs.UpdatedAt).
+		SET(workErr.Error(), Raw("now()")).
 		WHERE(ImportJobs.ID.EQ(Int(job.ID)))
 
 	_, err := stmt.ExecContext(ctx, w.db)

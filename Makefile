@@ -70,4 +70,8 @@ test:
 # Generates database types from live Postgres schema (start docker-compose for
 # this)
 internal/dbschema:
-	jet -source=PostgreSQL -host=localhost -port=5432 -user=$(PGUSER) -dbname=$(PGDATABASE) -schema=pgsink -path=internal/dbschema
+	jet -source=PostgreSQL -host=localhost -port=5432 -user=$(PGUSER) -dbname=$(PGDATABASE) -schema=pgsink -path=tmp/dbschema
+	jet -source=PostgreSQL -host=localhost -port=5432 -user=$(PGUSER) -dbname=$(PGDATABASE) -schema=pg_catalog -path=tmp/dbschema
+	jet -source=PostgreSQL -host=localhost -port=5432 -user=$(PGUSER) -dbname=$(PGDATABASE) -schema=information_schema -path=tmp/dbschema
+	rm -rf $@
+	mv tmp/dbschema/pgsink $@

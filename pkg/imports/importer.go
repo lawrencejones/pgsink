@@ -14,7 +14,7 @@ import (
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
 	"github.com/alecthomas/kingpin"
-	. "github.com/go-jet/jet/postgres"
+	. "github.com/go-jet/jet/v2/postgres"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4"

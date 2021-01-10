@@ -10,7 +10,7 @@ import (
 	"github.com/lawrencejones/pgsink/internal/dbtest"
 	"github.com/lawrencejones/pgsink/pkg/imports"
 
-	. "github.com/go-jet/jet/postgres"
+	. "github.com/go-jet/jet/v2/postgres"
 	_ "github.com/jackc/pgx/v4/stdlib"
 
 	. "github.com/onsi/ginkgo"

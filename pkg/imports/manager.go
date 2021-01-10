@@ -12,7 +12,7 @@ import (
 	"github.com/lawrencejones/pgsink/pkg/subscription"
 
 	"github.com/alecthomas/kingpin"
-	. "github.com/go-jet/jet/postgres"
+	. "github.com/go-jet/jet/v2/postgres"
 	kitlog "github.com/go-kit/kit/log"
 )
 

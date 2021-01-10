@@ -13,7 +13,7 @@ import (
 	"go.opencensus.io/trace"
 
 	"github.com/alecthomas/kingpin"
-	pg "github.com/go-jet/jet/postgres"
+	pg "github.com/go-jet/jet/v2/postgres"
 	kitlog "github.com/go-kit/kit/log"
 )
 
