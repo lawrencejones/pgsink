@@ -91,7 +91,7 @@ func (m *Manager) Manage(ctx context.Context, logger kitlog.Logger, sub Subscrip
 
 // manage implements the Manage loop, allowing us to generate a new trace per iteration.
 func (m *Manager) manage(ctx context.Context, logger kitlog.Logger, sub Subscription) error {
-	ctx, span, logger := telem.Logger(ctx, logger)(trace.StartSpan(ctx, "pkg/subscription.Manager.manage"))
+	ctx, span, logger := telem.StartSpan(ctx, "pkg/subscription.Manager.manage")
 	defer span.End()
 
 	logger.Log("event", "reconcile_tables")

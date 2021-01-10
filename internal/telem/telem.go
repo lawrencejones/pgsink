@@ -13,12 +13,12 @@ import (
 type ctxKey string
 
 const (
-	LoggerKey = ctxKey("LoggerKey")
+	loggerKey = ctxKey("loggerKey")
 )
 
-// LoggerFrom retrieves the stashed logger from a context, as put there by loggerSet
+// LoggerFrom retrieves the stashed logger from a context, as put there by WithLogger
 func LoggerFrom(ctx context.Context) kitlog.Logger {
-	logger, ok := ctx.Value(LoggerKey).(kitlog.Logger)
+	logger, ok := ctx.Value(loggerKey).(kitlog.Logger)
 	if !ok {
 		return kitlog.NewNopLogger()
 	}
@@ -26,34 +26,37 @@ func LoggerFrom(ctx context.Context) kitlog.Logger {
 	return logger
 }
 
-// loggerSet configures a logger that can be retrived with LoggerFrom.
-func loggerSet(ctx context.Context, logger kitlog.Logger) context.Context {
-	return context.WithValue(ctx, LoggerKey, logger)
+// WithLogger configures a logger that can be retrived with LoggerFrom.
+func WithLogger(ctx context.Context, logger kitlog.Logger, keyvals ...interface{}) (context.Context, kitlog.Logger) {
+	if len(keyvals) > 0 {
+		logger = kitlog.With(logger, keyvals...)
+	}
+
+	return context.WithValue(ctx, loggerKey, logger), logger
 }
 
-// Logger can be used to tie logs to an on-going span. It is intended to wrap a
-// trace.StartSpan call, like so:
-//
-//	telem.Logger(ctx, logger)(trace.StartSpan(ctx, "pkg/imports.importer.Do"))
-//
-// The logs will be decorated with a trace_id. Root context is provided to avoid doubly
-// annotating the trace ID onto the same logger.
-func Logger(rootCtx context.Context, logger kitlog.Logger) func(context.Context, *trace.Span) (context.Context, *trace.Span, kitlog.Logger) {
-	return func(ctx context.Context, span *trace.Span) (context.Context, *trace.Span, kitlog.Logger) {
-		// If the root context already has a trace, assume our logger has been tagged and do
-		// nothing.
-		if trace.FromContext(rootCtx) != nil {
-			return loggerSet(ctx, logger), span, logger
-		}
+// StartSpan extends the opencensus method so it stashes a logger into the context, and
+// annotates the logger with the current trace ID. If a logger was never provided, we use
+// a no-op logger.
+func StartSpan(ctx context.Context, name string, opts ...trace.StartOption) (context.Context, *trace.Span, kitlog.Logger) {
+	logger := LoggerFrom(ctx)
+	parent := trace.FromContext(ctx)
 
-		// If there's no span, we can assume no tracing is configured. No point annotating the
-		// logger with a nil trace ID.
-		if span == nil {
-			return loggerSet(ctx, logger), span, logger
-		}
+	ctx, span := trace.StartSpan(ctx, name, opts...)
 
-		logger = kitlog.With(logger, "trace_id", span.SpanContext().TraceID)
-
-		return loggerSet(ctx, logger), span, logger
+	// If there's no span, we can assume no tracing is configured. No point annotating the
+	// logger with a nil trace ID, so return everything unchanged.
+	if span == nil {
+		return ctx, span, logger
 	}
+
+	// If the original context was already being traced, assume our logger has been tagged
+	// and do nothing.
+	if parent == nil {
+		return ctx, span, logger
+	}
+
+	ctx, logger = WithLogger(ctx, logger, "trace_id", span.SpanContext().TraceID)
+
+	return ctx, span, logger
 }

@@ -231,7 +231,7 @@ func Run() (err error) {
 		}
 
 		if *streamConsume {
-			logger := kitlog.With(logger, "component", "subscription")
+			ctx, logger := telem.WithLogger(ctx, logger, "component", "subscription")
 
 			stream, err = sub.Start(ctx, logger, repconn, *streamOptions)
 			if err != nil {
@@ -262,7 +262,7 @@ func Run() (err error) {
 		}
 
 		if *streamSubscriptionManager {
-			logger := kitlog.With(logger, "component", "subscription_manager")
+			ctx, logger := telem.WithLogger(ctx, logger, "component", "subscription_manager")
 			manager := subscription.NewManager(db, *streamSubscriptionManagerOptions)
 
 			g.Add(
@@ -276,8 +276,7 @@ func Run() (err error) {
 		}
 
 		if *streamImportManager {
-			logger := kitlog.With(logger, "component", "import_manager")
-
+			ctx, logger := telem.WithLogger(ctx, logger, "component", "import_manager")
 			manager := imports.NewManager(logger, db, *streamImportManagerOptions)
 
 			g.Add(
@@ -291,7 +290,7 @@ func Run() (err error) {
 		}
 
 		for idx := 0; idx < *streamImportWorkerCount; idx++ {
-			logger := kitlog.With(logger, "component", "import_worker", "worker_id", idx)
+			ctx, logger := telem.WithLogger(ctx, logger, "component", "import_worker", "worker_id", idx)
 
 			// Assign the subscription ID from what we generated on boot
 			streamImportWorkerOptions.SubscriptionID = sub.ID
@@ -342,7 +341,7 @@ func buildDBLogger(enabled *bool) pgx.Logger {
 		querySQL, _ := data["sql"].(string)
 		queryArgs, _ := data["args"].([]string)
 
-		// Alias the logger, so we can add fields to it without altering the closured logger
+		// Fetch the logger from the current context
 		logger := telem.LoggerFrom(ctx)
 
 		span := trace.FromContext(ctx)
