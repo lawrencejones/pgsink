@@ -30,42 +30,6 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: goose_db_version; Type: TABLE; Schema: pgsink; Owner: pgsink
---
-
-CREATE TABLE pgsink.goose_db_version (
-    id integer NOT NULL,
-    version_id bigint NOT NULL,
-    is_applied boolean NOT NULL,
-    tstamp timestamp without time zone DEFAULT now()
-);
-
-
-ALTER TABLE pgsink.goose_db_version OWNER TO pgsink;
-
---
--- Name: goose_db_version_id_seq; Type: SEQUENCE; Schema: pgsink; Owner: pgsink
---
-
-CREATE SEQUENCE pgsink.goose_db_version_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER TABLE pgsink.goose_db_version_id_seq OWNER TO pgsink;
-
---
--- Name: goose_db_version_id_seq; Type: SEQUENCE OWNED BY; Schema: pgsink; Owner: pgsink
---
-
-ALTER SEQUENCE pgsink.goose_db_version_id_seq OWNED BY pgsink.goose_db_version.id;
-
-
---
 -- Name: import_jobs; Type: TABLE; Schema: pgsink; Owner: pgsink
 --
 
@@ -79,7 +43,9 @@ CREATE TABLE pgsink.import_jobs (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     error text,
-    schema text NOT NULL
+    schema text NOT NULL,
+    error_count bigint DEFAULT 0 NOT NULL,
+    last_error_at timestamp with time zone
 );
 
 
@@ -143,13 +109,6 @@ ALTER SEQUENCE pgsink.schema_migrations_id_seq OWNED BY pgsink.schema_migrations
 
 
 --
--- Name: goose_db_version id; Type: DEFAULT; Schema: pgsink; Owner: pgsink
---
-
-ALTER TABLE ONLY pgsink.goose_db_version ALTER COLUMN id SET DEFAULT nextval('pgsink.goose_db_version_id_seq'::regclass);
-
-
---
 -- Name: import_jobs id; Type: DEFAULT; Schema: pgsink; Owner: pgsink
 --
 
@@ -161,14 +120,6 @@ ALTER TABLE ONLY pgsink.import_jobs ALTER COLUMN id SET DEFAULT nextval('pgsink.
 --
 
 ALTER TABLE ONLY pgsink.schema_migrations ALTER COLUMN id SET DEFAULT nextval('pgsink.schema_migrations_id_seq'::regclass);
-
-
---
--- Name: goose_db_version goose_db_version_pkey; Type: CONSTRAINT; Schema: pgsink; Owner: pgsink
---
-
-ALTER TABLE ONLY pgsink.goose_db_version
-    ADD CONSTRAINT goose_db_version_pkey PRIMARY KEY (id);
 
 
 --

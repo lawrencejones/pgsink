@@ -23,4 +23,5 @@ type ImportJobs struct {
 	Error          *string
 	Schema         string
 	ErrorCount     int64
+	LastErrorAt    *time.Time
 }
