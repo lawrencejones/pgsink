@@ -262,12 +262,11 @@ func Run() (err error) {
 
 		if *streamSubscriptionManager {
 			logger := kitlog.With(logger, "component", "subscription_manager")
-
-			manager := subscription.NewManager(logger, db, *streamSubscriptionManagerOptions)
+			manager := subscription.NewManager(db, *streamSubscriptionManagerOptions)
 
 			g.Add(
 				func() error {
-					return manager.Manage(ctx, *sub)
+					return manager.Manage(ctx, logger, *sub)
 				},
 				func(error) {
 					manager.Shutdown(ctx)

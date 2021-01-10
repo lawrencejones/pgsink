@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lawrencejones/pgsink/pkg/changelog"
 	_ "github.com/lawrencejones/pgsink/internal/dbschema/information_schema/model"
 	isv "github.com/lawrencejones/pgsink/internal/dbschema/information_schema/view"
+	"github.com/lawrencejones/pgsink/internal/telem"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
+	"go.opencensus.io/trace"
 
 	"github.com/alecthomas/kingpin"
 	pg "github.com/go-jet/jet/postgres"
@@ -34,16 +36,14 @@ func (opt *ManagerOptions) Bind(cmd *kingpin.CmdClause, prefix string) *ManagerO
 // Manager supervises a subscription, adding and removing tables into the publication
 // according to the white/blacklist.
 type Manager struct {
-	logger   kitlog.Logger
-	db       *sql.DB
-	shutdown chan struct{}
-	done     chan error
-	opts     ManagerOptions
+	db       *sql.DB        // handle the the database, used query and modify the subscription resources
+	shutdown chan struct{}  // closed when shutdown requested, allowing each component to terminate gracefully
+	done     chan error     // closed when all components have shutdown, with an error if any failed
+	opts     ManagerOptions // options provided when constructing the manager
 }
 
-func NewManager(logger kitlog.Logger, db *sql.DB, opts ManagerOptions) *Manager {
+func NewManager(db *sql.DB, opts ManagerOptions) *Manager {
 	return &Manager{
-		logger:   logger,
 		db:       db,
 		shutdown: make(chan struct{}),
 		done:     make(chan error, 1), // buffered by 1, to ensure progress when reporting an error
@@ -64,25 +64,16 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 
 // Manage begins syncing tables into publication using the rules configured on the manager
 // options. It will run until the context expires.
-func (m *Manager) Manage(ctx context.Context, sub Subscription) (err error) {
+func (m *Manager) Manage(ctx context.Context, logger kitlog.Logger, sub Subscription) (err error) {
 	defer func() {
+		m.done <- err
 		close(m.done)
 	}()
 
-	logger := kitlog.With(m.logger, "subscription_id", sub.GetID(), "publication_name", sub.Publication.Name)
+	logger = kitlog.With(logger, "subscription_id", sub.GetID(), "publication_name", sub.Publication.Name)
 	for {
-		logger.Log("event", "reconcile_tables")
-		added, removed, err := m.Reconcile(ctx, sub)
-		if err != nil {
+		if err := m.manage(ctx, logger, sub); err != nil {
 			return err
-		}
-
-		for _, tableName := range added {
-			logger.Log("event", "alter_publication.add", "table", tableName)
-		}
-
-		for _, tableName := range removed {
-			logger.Log("event", "alter_publication.remove", "table", tableName)
 		}
 
 		select {
@@ -96,6 +87,32 @@ func (m *Manager) Manage(ctx context.Context, sub Subscription) (err error) {
 			// continue
 		}
 	}
+}
+
+// manage implements the Manage loop, allowing us to generate a new trace per iteration.
+func (m *Manager) manage(ctx context.Context, logger kitlog.Logger, sub Subscription) error {
+	ctx, span, logger := telem.Logger(ctx, logger)(trace.StartSpan(ctx, "pkg/subscription.Manager.manage"))
+	defer span.End()
+
+	logger.Log("event", "reconcile_tables")
+	added, removed, err := m.Reconcile(ctx, sub)
+	if err != nil {
+		span.SetStatus(trace.Status{
+			Code:    trace.StatusCodeUnknown,
+			Message: err.Error(),
+		})
+		return err
+	}
+
+	for _, tableName := range added {
+		logger.Log("event", "alter_publication.add", "table", tableName)
+	}
+
+	for _, tableName := range removed {
+		logger.Log("event", "alter_publication.remove", "table", tableName)
+	}
+
+	return nil
 }
 
 // Reconcile ensures all watched tables are added to the subscription, through the
