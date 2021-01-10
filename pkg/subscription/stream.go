@@ -24,7 +24,8 @@ type StreamOptions struct {
 }
 
 func (opt *StreamOptions) Bind(cmd *kingpin.CmdClause, prefix string) *StreamOptions {
-	cmd.Flag(fmt.Sprintf("%sheartbeat-interval", prefix), "Interval at which to heartbeat Postgres, must be < wal_sender_timeout").Default("30s").DurationVar(&opt.HeartbeatInterval)
+	cmd.Flag(fmt.Sprintf("%sheartbeat-interval", prefix), "Interval at which to heartbeat Postgres, must be < wal_sender_timeout").
+		Default("30s").DurationVar(&opt.HeartbeatInterval)
 
 	return opt
 }
@@ -32,11 +33,11 @@ func (opt *StreamOptions) Bind(cmd *kingpin.CmdClause, prefix string) *StreamOpt
 // Stream represents an on-going replication stream, managed by a subscription. Consumers
 // of the stream can acknowledge processing messages using the Confirm() method.
 type Stream struct {
-	position   pglogrepl.LSN
-	messages   chan interface{}
-	heartbeats chan pglogrepl.LSN
-	shutdown   chan struct{}
-	done       chan error
+	position   pglogrepl.LSN      // updated by stream confirmations, this is the last known confirmed LSN postition
+	messages   chan interface{}   // arbitrary messages received from the replication slot
+	heartbeats chan pglogrepl.LSN // input channel for LSN updates provided by the server keepalive heartbeats
+	shutdown   chan struct{}      // closed whenever the stream should be shutdown, allowing each component to terminate safely
+	done       chan error         // closed when all components have been terminated, after shutdown is complete
 }
 
 func (s *Stream) Messages() <-chan interface{} {
@@ -173,6 +174,11 @@ func stream(ctx context.Context, logger kitlog.Logger, conn *pgconn.PgConn, sysi
 				return errors.Wrap(err, "failed to receive message")
 			}
 
+			// See the Postgres docs for the type of messages that are provided via the
+			// replication stream.
+			//
+			// Look under 'START REPLICATION', in:
+			// https://www.postgresql.org/docs/current/protocol-replication.html
 			switch msg := msg.(type) {
 			case *pgproto3.CopyData:
 				switch msg.Data[0] {
@@ -212,9 +218,10 @@ func stream(ctx context.Context, logger kitlog.Logger, conn *pgconn.PgConn, sysi
 						return errors.Wrap(err, "failed to deocde wal")
 					}
 
-					receiveMessageTotal.WithLabelValues(msgType).Inc()
+					receiveMessageTotal.WithLabelValues(string(msgType)).Inc()
 					stream.messages <- decoded // send message down our received channel
 				}
+
 			default:
 				logger.Log("event", "unrecognised_message", "message", reflect.TypeOf(msg))
 			}
