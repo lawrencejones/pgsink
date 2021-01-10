@@ -4,7 +4,6 @@ import (
 	"context"
 
 	bq "cloud.google.com/go/bigquery"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 )
 
@@ -59,8 +58,6 @@ func (i *Table) Insert(ctx context.Context, modifications []*changelog.Modificat
 			highestLSN = modification.LSN
 		}
 	}
-
-	spew.Dump(rows)
 
 	return len(rows), highestLSN, i.Raw.Inserter().Put(ctx, rows)
 }
