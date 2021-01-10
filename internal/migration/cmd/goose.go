@@ -43,7 +43,7 @@ Commands:
 		app.FatalUsage(err.Error())
 	}
 
-	db, err := sql.Open("pgx", fmt.Sprintf("search_path=%s,public", *schema))
+	db, err := sql.Open("pgx", fmt.Sprintf("search_path=%s", *schema))
 	if err != nil {
 		app.Fatalf("failed to open DB: %v\n", err)
 	}

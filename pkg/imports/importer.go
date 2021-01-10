@@ -91,7 +91,8 @@ func (i importer) Do(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, job m
 	span.AddAttributes(
 		trace.Int64Attribute("job_id", job.ID),
 		trace.StringAttribute("subscription_id", job.SubscriptionID),
-		trace.StringAttribute("table", job.TableName),
+		trace.StringAttribute("table_name", job.TableName),
+		trace.StringAttribute("table_schema", job.Schema),
 		trace.StringAttribute("cursor", fmt.Sprintf("%v", job.Cursor)),
 		trace.Int64Attribute("buffer_size", int64(i.opts.BufferSize)),
 		trace.Int64Attribute("batch_limit", int64(i.opts.BatchLimit)),

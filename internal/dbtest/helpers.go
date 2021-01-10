@@ -77,10 +77,10 @@ func (d *DB) Setup(ctx context.Context, timeout time.Duration) (context.Context,
 	// Re-open connection pools with a search_path that matches our schema, preventing
 	// accidental creation/querying of resources in the public namespace.
 	var err error
-	d.db, err = sql.Open("pgx", fmt.Sprintf("search_path=%s,public", d.schema))
+	d.db, err = sql.Open("pgx", fmt.Sprintf("search_path=%s", d.schema))
 	Expect(err).NotTo(HaveOccurred(), "failed to open database connection")
 
-	d.repdb, err = sql.Open("pgx", fmt.Sprintf("search_path=%s,public replication=database", d.schema))
+	d.repdb, err = sql.Open("pgx", fmt.Sprintf("search_path=%s replication=database", d.schema))
 	Expect(err).NotTo(HaveOccurred(), "failed to open replication database connection")
 
 	// In case previous tests exited abruptly, clean-up before we begin

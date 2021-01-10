@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/lawrencejones/pgsink/internal/dbschema/pgsink/model"
 	"github.com/lawrencejones/pgsink/internal/telem"
 	"github.com/lawrencejones/pgsink/pkg/decode"
@@ -13,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 
 	kitlog "github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4"
 	"go.opencensus.io/trace"
@@ -51,6 +53,9 @@ type Import struct {
 func Build(ctx context.Context, logger kitlog.Logger, decoder decode.Decoder, tx querier, job model.ImportJobs) (*Import, error) {
 	ctx, span, logger := telem.StartSpan(ctx, "pkg/imports.Build")
 	defer span.End()
+
+	// If we're in debug, we want to see the entire import job
+	level.Debug(logger).Log("event", "build_import", "import_job", spew.Sprint(job))
 
 	// We should query for the primary key as the first thing we do, as this may fail if the
 	// table is misconfigured. It's better to fail here, before we've pushed anything into
@@ -228,6 +233,10 @@ var NoPrimaryKeyError = fmt.Errorf("no primary key found")
 func getPrimaryKeyColumn(ctx context.Context, tx querier, schema, tableName string) (string, error) {
 	ctx, span := trace.StartSpan(ctx, "pkg/imports.getPrimaryKeyColumn")
 	defer span.End()
+	span.AddAttributes(
+		trace.StringAttribute("table_schema", schema),
+		trace.StringAttribute("table_name", tableName),
+	)
 
 	query := `
 	select array_agg(pg_attribute.attname)
@@ -238,7 +247,7 @@ func getPrimaryKeyColumn(ctx context.Context, tx querier, schema, tableName stri
 	`
 
 	primaryKeysTextArray := pgtype.TextArray{}
-	err := tx.QueryRow(ctx, query, tableName).Scan(&primaryKeysTextArray)
+	err := tx.QueryRow(ctx, query, fmt.Sprintf("%s.%s", schema, tableName)).Scan(&primaryKeysTextArray)
 	if err != nil {
 		return "", err
 	}

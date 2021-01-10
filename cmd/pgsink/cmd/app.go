@@ -77,8 +77,9 @@ func Run() (err error) {
 	command := kingpin.MustParse(app.Parse(os.Args[1:]))
 
 	logger = kitlog.NewLogfmtLogger(kitlog.NewSyncWriter(os.Stderr))
-	logger = level.NewFilter(logger, level.AllowInfo())
 	if *debug {
+		logger = level.NewFilter(logger, level.AllowInfo())
+	} else {
 		logger = level.NewFilter(logger, level.AllowDebug())
 	}
 	logger = kitlog.With(logger, "ts", kitlog.DefaultTimestampUTC, "caller", kitlog.DefaultCaller)
@@ -113,7 +114,9 @@ func Run() (err error) {
 		cancel()
 	}()
 
-	db, cfg, repCfg, err := buildDBConfig(fmt.Sprintf("search_path=%s,public", *schemaName), buildDBLogger(debug))
+	// Don't allow us to use the default search path, as we'd rather fail-fast than
+	// accidentally misreference a table and find it in the public schema.
+	db, cfg, repCfg, err := buildDBConfig(fmt.Sprintf("search_path=%s", *schemaName), buildDBLogger(debug))
 	if err != nil {
 		app.FatalUsage("invalid postgres configuration: %v", err.Error())
 	}
@@ -196,6 +199,20 @@ func Run() (err error) {
 		if err != nil {
 			return err
 		}
+
+		defer func() {
+			done := make(chan struct{})
+			go func() {
+				jexporter.Flush()
+				close(done)
+			}()
+
+			select {
+			case <-time.After(3 * time.Second):
+				logger.Log("event", "jaeger_timeout", "msg", "timed out waiting to flush jaeger exporter")
+			case <-done:
+			}
+		}()
 
 		trace.RegisterExporter(jexporter)
 		trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
@@ -336,14 +353,8 @@ func (f pgxLoggerFunc) Log(ctx context.Context, level pgx.LogLevel, msg string, 
 // correlation IDs.
 //
 // We also log queries, in debug mode, helping to locally reproduce issues.
-func buildDBLogger(enabled *bool) pgx.Logger {
+func buildDBLogger(enableLogs *bool) pgx.Logger {
 	return pgxLoggerFunc(func(ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{}) {
-		// Only log if the enabled flag is set to true. This allows an operator to toggle
-		// database logging in realtime.
-		if !*enabled {
-			return
-		}
-
 		queryPID, _ := data["pid"].(uint32)
 		queryCommandTag, _ := data["commandTag"].(pgconn.CommandTag)
 		querySQL, _ := data["sql"].(string)
@@ -360,6 +371,12 @@ func buildDBLogger(enabled *bool) pgx.Logger {
 				trace.StringAttribute("query_command_tag", queryCommandTag.String()),
 				trace.StringAttribute("query_sql", querySQL),
 			}, msg)
+		}
+
+		// Only log if the enabled flag is set to true. This allows an operator to toggle
+		// database logging in realtime.
+		if !*enableLogs {
+			return
 		}
 
 		logger.Log("event", "pgx", "msg", msg,
