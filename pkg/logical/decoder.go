@@ -4,10 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"reflect"
 	"time"
-
-	"github.com/lawrencejones/pgsink/pkg/decode"
 )
 
 // PGOutput is the Postgres recognised name of our desired encoding
@@ -17,7 +14,7 @@ const PGOutput = "pgoutput"
 // specification at:
 //
 // https://www.postgresql.org/docs/current/static/protocol-logicalrep-message-formats.html
-func DecodePGOutput(src []byte) (Message, string, error) {
+func DecodePGOutput(src []byte) (Message, MessageType, error) {
 	dec := decoder{bytes.NewBuffer(src[1:])}
 
 	switch src[0] {
@@ -27,7 +24,7 @@ func DecodePGOutput(src []byte) (Message, string, error) {
 		m.Timestamp = dec.Time()
 		m.XID = dec.Uint32()
 
-		return m, "Begin", nil
+		return m, MessageTypeBegin, nil
 
 	case 'C':
 		m := &Commit{}
@@ -36,14 +33,14 @@ func DecodePGOutput(src []byte) (Message, string, error) {
 		m.TransactionLSN = dec.Uint64()
 		m.Timestamp = dec.Time()
 
-		return m, "Commit", nil
+		return m, MessageTypeCommit, nil
 
 	case 'O':
 		m := &Origin{}
 		m.LSN = dec.Uint64()
 		m.Name = dec.String()
 
-		return m, "Origin", nil
+		return m, MessageTypeOrigin, nil
 
 	case 'R':
 		m := &Relation{}
@@ -63,7 +60,7 @@ func DecodePGOutput(src []byte) (Message, string, error) {
 			m.Columns = append(m.Columns, c)
 		}
 
-		return m, "Relation", nil
+		return m, MessageTypeRelation, nil
 
 	case 'Y':
 		m := &Type{}
@@ -71,7 +68,7 @@ func DecodePGOutput(src []byte) (Message, string, error) {
 		m.Namespace = dec.String()
 		m.Name = dec.String()
 
-		return m, "Relation", nil
+		return m, MessageTypeType, nil
 
 	case 'I':
 		m := &Insert{}
@@ -83,7 +80,7 @@ func DecodePGOutput(src []byte) (Message, string, error) {
 
 		m.Row = dec.TupleData()
 
-		return m, "Insert", nil
+		return m, MessageTypeInsert, nil
 
 	case 'U':
 		m := &Update{}
@@ -104,7 +101,7 @@ func DecodePGOutput(src []byte) (Message, string, error) {
 
 		m.Row = dec.TupleData()
 
-		return m, "Update", nil
+		return m, MessageTypeUpdate, nil
 
 	case 'D':
 		m := &Delete{}
@@ -121,46 +118,17 @@ func DecodePGOutput(src []byte) (Message, string, error) {
 
 		m.OldRow = dec.TupleData()
 
-		return m, "Delete", nil
+		return m, MessageTypeDelete, nil
 	}
 
-	return new(Message), "Unknown", fmt.Errorf("decoding not implemented: %c", src[0])
-}
-
-// Marshal converts a tuple into a dynamic Golang map type. Values are represented in Go
-// native types.
-//
-// TODO: We should try moving this, as the behaviour it implements must match how we
-// decode import content and is best unified.
-func (r *Relation) Marshal(decoder decode.Decoder, tuple []Element) (map[string]interface{}, error) {
-	// TODO: Should we be ignoring this? I haven't investigated why this happens, though it
-	// appears to have little effect on correctness.
-	if len(tuple) != len(r.Columns) {
-		return nil, nil
-	}
-
-	row := map[string]interface{}{}
-	for idx, column := range r.Columns {
-		scanner, dest, err := decoder.ScannerFor(column.Type)
-		if err != nil {
-			return nil, err
-		}
-
-		if tuple[idx].Type != 'n' {
-			if err := scanner.Scan(tuple[idx].Value); err != nil {
-				return nil, err
-			}
-		}
-
-		if err := scanner.AssignTo(dest); err != nil {
-			return nil, err
-		}
-
-		// Dereference the value we get from our destination, to remove double pointer-ing
-		row[column.Name] = reflect.ValueOf(dest).Elem().Interface()
-	}
-
-	return row, nil
+	// There is a strong argument for this error being a panic, rather than something the
+	// caller might accidentally ignore. This is because any message we don't understand
+	// could have consequences for the data inside of Postgres that might be important for
+	// us to push to our sinks.
+	//
+	// In the spirit of pkg/logical being a generic interface, we won't panic here. But
+	// pgsink will always want to die on this error.
+	return nil, "", fmt.Errorf("decoding not implemented: %c", src[0])
 }
 
 // decoder provides stateful methods that advance the given buffer, parsing the contents

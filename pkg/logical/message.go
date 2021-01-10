@@ -5,6 +5,40 @@ import "time"
 // Message is a parsed pgoutput message received from the replication stream
 type Message interface{}
 
+// MessageType provides an enum string representing the type of message. It can be used to
+// easily label metrics, or for logging.
+type MessageType string
+
+const (
+	MessageTypeBegin    MessageType = "Begin"
+	MessageTypeCommit   MessageType = "Commit"
+	MessageTypeOrigin   MessageType = "Origin"
+	MessageTypeRelation MessageType = "Relation"
+	MessageTypeType     MessageType = "Type"
+	MessageTypeInsert   MessageType = "Insert"
+	MessageTypeUpdate   MessageType = "Update"
+	MessageTypeDelete   MessageType = "Delete"
+	MessageTypeTruncate MessageType = "Truncate"
+)
+
+// Modification is a common interface satisfied by messages that have altered data. These
+// are inserts, updates, and deletes.
+type Modification interface {
+	GetModification() (reloid uint32, before, after []Element)
+}
+
+func (m Insert) GetModification() (reloid uint32, before []Element, after []Element) {
+	return m.ID, nil, m.Row
+}
+
+func (m Update) GetModification() (reloid uint32, before []Element, after []Element) {
+	return m.ID, m.OldRow, m.Row
+}
+
+func (m Delete) GetModification() (reloid uint32, before []Element, after []Element) {
+	return m.ID, m.OldRow, nil
+}
+
 type (
 	Begin struct {
 		LSN       uint64    // The final LSN of the transaction.
