@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lawrencejones/pgsink/internal/telem"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
@@ -31,6 +32,7 @@ func (s AsyncInserterSuite) Bind(ctx *context.Context, async *generic.AsyncInser
 
 	BeforeEach(func() {
 		*ctx, *cancel = context.WithTimeout(context.Background(), time.Second)
+		*ctx, _ = telem.WithLogger(*ctx, logger)
 		*backend = s.NewBackend()
 	})
 

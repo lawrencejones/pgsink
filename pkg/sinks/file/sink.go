@@ -11,7 +11,6 @@ import (
 	"github.com/lawrencejones/pgsink/pkg/changelog/serialize"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
-	kitlog "github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
 
@@ -33,7 +32,7 @@ func (opt *Options) Bind(cmd *kingpin.CmdClause, prefix string) *Options {
 	return opt
 }
 
-func New(logger kitlog.Logger, opts Options) (generic.Sink, error) {
+func New(opts Options) (generic.Sink, error) {
 	schemas, err := openFile(opts.SchemasPath)
 	if err != nil {
 		return nil, err
@@ -50,14 +49,13 @@ func New(logger kitlog.Logger, opts Options) (generic.Sink, error) {
 	inserter := &inserter{file: modifications, serializer: serializer}
 
 	sink := generic.SinkBuilder(
-		logger,
 		generic.SinkBuilder.WithBuffer(opts.BufferSize),
 		generic.SinkBuilder.WithInstrumentation(opts.Instrument),
 		generic.SinkBuilder.WithFlushInterval(opts.FlushInterval),
 		generic.SinkBuilder.WithSchemaHandler(
 			generic.SchemaHandlerGlobalInserter(
 				inserter,
-				func(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) error {
+				func(ctx context.Context, schema *changelog.Schema) error {
 					if _, err := fmt.Fprintln(schemas, string(serializer.Register(schema))); err != nil {
 						return errors.Wrap(err, "failed to write schema")
 					}

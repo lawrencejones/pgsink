@@ -89,6 +89,14 @@ func Run() (err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// We stash loggers into the context parameter of each function. This allows logs to be
+	// annotated with operation-specific information, so that we may associate logs with
+	// their original cause.
+	//
+	// This means we need to stash a logger onto our root context, so methods can reliably
+	// fetch it even if we haven't set it for the current operation.
+	ctx, logger = telem.WithLogger(ctx, logger)
+
 	// Stage our shutdown to first request termination, then cancel contexts if downstream
 	// workers haven't responded.
 	sigc := make(chan os.Signal, 1)
@@ -204,9 +212,9 @@ func Run() (err error) {
 
 		switch *streamSinkType {
 		case "file":
-			sink, err = sinkfile.New(logger, *streamSinkFileOptions)
+			sink, err = sinkfile.New(*streamSinkFileOptions)
 		case "bigquery":
-			sink, err = sinkbigquery.New(ctx, logger, decoder, *streamSinkBigQueryOptions)
+			sink, err = sinkbigquery.New(ctx, decoder, *streamSinkBigQueryOptions)
 		default:
 			app.FatalUsage(fmt.Sprintf("unsupported sink type: %s", *streamSinkType))
 		}

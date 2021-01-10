@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	kitlog "github.com/go-kit/kit/log"
+	"github.com/lawrencejones/pgsink/internal/telem"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 )
 
@@ -27,21 +28,22 @@ type Router interface {
 }
 
 type router struct {
-	logger kitlog.Logger
 	routes map[Route]AsyncInserter
 	result InsertResult
 	sync.RWMutex
 }
 
-func NewRouter(logger kitlog.Logger) Router {
+func NewRouter() Router {
 	return &router{
-		logger: logger,
 		routes: map[Route]AsyncInserter{},
 		result: EmptyInsertResult,
 	}
 }
 
 func (r *router) Register(ctx context.Context, route Route, i AsyncInserter) InsertResult {
+	ctx, span, logger := telem.StartSpan(ctx, "pkg/sinks/generic.Router.Register")
+	defer span.End()
+
 	r.Lock()
 	defer r.Unlock()
 
@@ -49,7 +51,7 @@ func (r *router) Register(ctx context.Context, route Route, i AsyncInserter) Ins
 	// route was never registered.
 	flushResult := EmptyInsertResult
 
-	logger := kitlog.With(r.logger, "route", route)
+	logger = kitlog.With(logger, "route", route)
 	existing, ok := r.routes[route]
 	if ok && existing != nil {
 		logger.Log("event", "existing_route.flush", "msg", "inserter already registered, flushing")

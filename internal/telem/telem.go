@@ -17,10 +17,14 @@ const (
 )
 
 // LoggerFrom retrieves the stashed logger from a context, as put there by WithLogger
-func LoggerFrom(ctx context.Context) kitlog.Logger {
+func LoggerFrom(ctx context.Context, keyvals ...interface{}) kitlog.Logger {
 	logger, ok := ctx.Value(loggerKey).(kitlog.Logger)
 	if !ok {
 		return kitlog.NewNopLogger()
+	}
+
+	if len(keyvals) > 0 {
+		logger = kitlog.With(logger, keyvals...)
 	}
 
 	return logger
@@ -52,7 +56,7 @@ func StartSpan(ctx context.Context, name string, opts ...trace.StartOption) (con
 
 	// If the original context was already being traced, assume our logger has been tagged
 	// and do nothing.
-	if parent == nil {
+	if parent != nil {
 		return ctx, span, logger
 	}
 

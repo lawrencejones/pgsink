@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 
-	kitlog "github.com/go-kit/kit/log"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
@@ -38,7 +37,7 @@ var _ = Describe("SchemaHandler", func() {
 		calls                   []callStub
 		example, exampleAnother *changelog.Schema
 		handler                 generic.SchemaHandler
-		handlerFunc             = func(context.Context, kitlog.Logger, *changelog.Schema) (generic.Inserter, generic.SchemaHandlerOutcome, error) {
+		handlerFunc             = func(context.Context, *changelog.Schema) (generic.Inserter, generic.SchemaHandlerOutcome, error) {
 			var call callStub
 			call, calls = calls[0], calls[1:]
 			return call.inserter, call.outcome, call.err
@@ -74,19 +73,19 @@ var _ = Describe("SchemaHandler", func() {
 		})
 
 		It("returns inserter from the wrapped handler", func() {
-			inserter, _, _ := handler.Handle(context.Background(), logger, example)
+			inserter, _, _ := handler.Handle(context.Background(), example)
 			Expect(inserter).To(Equal(inserterOnce))
 
-			inserter, _, _ = handler.Handle(context.Background(), logger, exampleAnother)
+			inserter, _, _ = handler.Handle(context.Background(), exampleAnother)
 			Expect(inserter).To(Equal(inserterTwice))
 		})
 
 		Context("when schema has same fingerprint", func() {
 			It("returns cached inserter", func() {
-				_, _, err := handler.Handle(context.Background(), logger, example)
+				_, _, err := handler.Handle(context.Background(), example)
 				Expect(err).NotTo(HaveOccurred())
 
-				inserter, _, _ := handler.Handle(context.Background(), logger, example)
+				inserter, _, _ := handler.Handle(context.Background(), example)
 				Expect(inserter).To(Equal(inserterOnce))
 			})
 		})

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/lawrencejones/pgsink/internal/telem"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 
 	kitlog "github.com/go-kit/kit/log"
@@ -26,11 +27,10 @@ type Sink interface {
 
 // SinkBuilder allows sink implementations to easily compose the sink-specific
 // implementations into a generic sink implementation that fulfils the Sink contract.
-var SinkBuilder = sinkBuilderFunc(func(logger kitlog.Logger, opts ...func(*sink)) Sink {
+var SinkBuilder = sinkBuilderFunc(func(opts ...func(*sink)) Sink {
 	s := &sink{
-		logger:   logger,
 		builders: []func(AsyncInserter) AsyncInserter{},
-		router:   NewRouter(logger),
+		router:   NewRouter(),
 	}
 
 	for _, opt := range opts {
@@ -40,7 +40,7 @@ var SinkBuilder = sinkBuilderFunc(func(logger kitlog.Logger, opts ...func(*sink)
 	return s
 })
 
-type sinkBuilderFunc func(logger kitlog.Logger, opts ...func(*sink)) Sink
+type sinkBuilderFunc func(opts ...func(*sink)) Sink
 
 func (b sinkBuilderFunc) WithSchemaHandler(schemaHandler SchemaHandler) func(*sink) {
 	return func(s *sink) {
@@ -67,7 +67,6 @@ func (b sinkBuilderFunc) WithBuffer(size int) func(*sink) {
 }
 
 type sink struct {
-	logger        kitlog.Logger
 	builders      []func(AsyncInserter) AsyncInserter
 	instrument    bool
 	flushInterval time.Duration
@@ -100,7 +99,7 @@ func (s *sink) Consume(ctx context.Context, entries changelog.Changelog, ack Ack
 			return s.startConsume(ctx, entries, ack)
 		},
 		func(err error) {
-			s.logger.Log("msg", "finished consume", "error", err)
+			telem.LoggerFrom(ctx).Log("msg", "finished consume", "error", err)
 		},
 	)
 
@@ -123,10 +122,13 @@ func (s *sink) startConsume(ctx context.Context, entries changelog.Changelog, ac
 }
 
 func (s *sink) handleSchema(ctx context.Context, schema *changelog.Schema) error {
-	logger := kitlog.With(s.logger, "event", "handle_schema", "schema", schema.TableReference())
+	ctx, span, logger := telem.StartSpan(ctx, "pkg/sinks/generic.Sink.handleSchema")
+	defer span.End()
+
+	logger = kitlog.With(logger, "event", "handle_schema", "schema", schema.TableReference())
 	defer logger.Log()
 
-	inserter, outcome, err := s.schemaHandler.Handle(ctx, s.logger, schema)
+	inserter, outcome, err := s.schemaHandler.Handle(ctx, schema)
 	logger = kitlog.With(logger, "outcome", string(outcome))
 	if err != nil {
 		return err
@@ -144,7 +146,7 @@ func (s *sink) buildInserter(route Route, sync Inserter) AsyncInserter {
 	// If instrumentation is enabled, we want to instrument the sync interface. This ensures
 	// we track the lowest level operation, which is often what we'll be interested in.
 	if s.instrument {
-		sync = NewInstrumentedInserter(s.logger, route, sync)
+		sync = NewInstrumentedInserter(route, sync)
 	}
 
 	inserter := NewAsyncInserter(sync)
@@ -156,16 +158,18 @@ func (s *sink) buildInserter(route Route, sync Inserter) AsyncInserter {
 }
 
 func (s *sink) startFlush(ctx context.Context, ack AckCallback, done chan struct{}) error {
+	logger := telem.LoggerFrom(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-done:
-			s.logger.Log("event", "triggering_final_flush", "msg", "told to finish, trying one more flush")
+			logger.Log("event", "triggering_final_flush", "msg", "told to finish, trying one more flush")
 			return s.flush(ctx, ack)
 		case <-time.After(s.flushInterval):
 			if err := s.flush(ctx, ack); err != nil {
-				s.logger.Log("event", "flush_fail", "msg", "failed to flush, cannot recover")
+				logger.Log("event", "flush_fail", "msg", "failed to flush, cannot recover")
 				return err
 			}
 		}
@@ -173,8 +177,11 @@ func (s *sink) startFlush(ctx context.Context, ack AckCallback, done chan struct
 }
 
 func (s *sink) flush(ctx context.Context, ack AckCallback) error {
+	ctx, span, logger := telem.StartSpan(ctx, "pkg/sinks/generic.Sink.flush")
+	defer span.End()
+
 	count, lsn, err := s.router.Flush(ctx).Get(ctx)
-	s.logger.Log("event", "flush", "count", count, "lsn", lsn, "error", err)
+	logger.Log("event", "flush", "count", count, "lsn", lsn, "error", err)
 	if err != nil {
 		return err
 	}

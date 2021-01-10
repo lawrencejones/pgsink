@@ -5,18 +5,17 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lawrencejones/pgsink/pkg/changelog"
-	. "github.com/lawrencejones/pgsink/pkg/changelog/matchers"
 	"github.com/lawrencejones/pgsink/internal/dbschema/pgsink/model"
 	. "github.com/lawrencejones/pgsink/internal/dbschema/pgsink/table"
 	"github.com/lawrencejones/pgsink/internal/dbtest"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
+	. "github.com/lawrencejones/pgsink/pkg/changelog/matchers"
 	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/decode/gen/mappings"
 	"github.com/lawrencejones/pgsink/pkg/imports"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
 
 	. "github.com/go-jet/jet/postgres"
-	kitlog "github.com/go-kit/kit/log"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -41,8 +40,8 @@ func (m *memoryStore) Inserter() generic.Inserter {
 	)
 }
 
-func (m *memoryStore) SchemaHandler() func(context.Context, kitlog.Logger, *changelog.Schema) error {
-	return func(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) error {
+func (m *memoryStore) SchemaHandler() func(context.Context, *changelog.Schema) error {
+	return func(ctx context.Context, schema *changelog.Schema) error {
 		m.schemas = append(m.schemas, *schema)
 		return nil
 	}
@@ -83,7 +82,6 @@ var _ = Describe("Importer", func() {
 	JustBeforeEach(func() {
 		importer = imports.NewImporter(
 			generic.SinkBuilder(
-				logger,
 				// Not setting an interval means we continually flush, which isn't a good test
 				generic.SinkBuilder.WithFlushInterval(time.Second),
 				// An atypical schema handler that stores every schema we receive in the memory
@@ -91,7 +89,7 @@ var _ = Describe("Importer", func() {
 				generic.SinkBuilder.WithSchemaHandler(
 					generic.SchemaHandlerGlobalInserter(
 						store.Inserter(),
-						func(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) error {
+						func(ctx context.Context, schema *changelog.Schema) error {
 							store.schemas = append(store.schemas, *schema)
 							return nil
 						},

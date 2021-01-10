@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/lawrencejones/pgsink/internal/telem"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/sinks/generic"
@@ -11,7 +12,6 @@ import (
 	bq "cloud.google.com/go/bigquery"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
 )
 
 type schemaHandler struct {
@@ -29,8 +29,8 @@ func newSchemaHandler(dataset *bq.Dataset, decoder decode.Decoder) *schemaHandle
 // Handle attempts to reconcile the incoming schema against the BigQuery table it tracks.
 // If the schema is unchanged since it was last synced, we do nothing. Once synced, the
 // table is available via the GetSyncedTable method.
-func (d *schemaHandler) Handle(ctx context.Context, logger kitlog.Logger, schema *changelog.Schema) (generic.Inserter, generic.SchemaHandlerOutcome, error) {
-	ctx, span := trace.StartSpan(ctx, "pkg/sinks/bigquery/schemaHandler.Handle")
+func (d *schemaHandler) Handle(ctx context.Context, schema *changelog.Schema) (generic.Inserter, generic.SchemaHandlerOutcome, error) {
+	ctx, span, logger := telem.StartSpan(ctx, "pkg/sinks/bigquery/schemaHandler.Handle")
 	defer span.End()
 
 	logger = kitlog.With(logger, "schema", schema.TableReference())
