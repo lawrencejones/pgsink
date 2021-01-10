@@ -28,6 +28,7 @@ type importJobsTable struct {
 	Error          postgres.ColumnString
 	Schema         postgres.ColumnString
 	ErrorCount     postgres.ColumnInteger
+	LastErrorAt    postgres.ColumnTimestampz
 
 	AllColumns     postgres.ColumnList
 	MutableColumns postgres.ColumnList
@@ -66,8 +67,9 @@ func newImportJobsTableImpl(schemaName, tableName string) importJobsTable {
 		ErrorColumn          = postgres.StringColumn("error")
 		SchemaColumn         = postgres.StringColumn("schema")
 		ErrorCountColumn     = postgres.IntegerColumn("error_count")
-		allColumns           = postgres.ColumnList{IDColumn, SubscriptionIDColumn, TableNameColumn, CursorColumn, CompletedAtColumn, ExpiredAtColumn, UpdatedAtColumn, CreatedAtColumn, ErrorColumn, SchemaColumn, ErrorCountColumn}
-		mutableColumns       = postgres.ColumnList{SubscriptionIDColumn, TableNameColumn, CursorColumn, CompletedAtColumn, ExpiredAtColumn, UpdatedAtColumn, CreatedAtColumn, ErrorColumn, SchemaColumn, ErrorCountColumn}
+		LastErrorAtColumn    = postgres.TimestampzColumn("last_error_at")
+		allColumns           = postgres.ColumnList{IDColumn, SubscriptionIDColumn, TableNameColumn, CursorColumn, CompletedAtColumn, ExpiredAtColumn, UpdatedAtColumn, CreatedAtColumn, ErrorColumn, SchemaColumn, ErrorCountColumn, LastErrorAtColumn}
+		mutableColumns       = postgres.ColumnList{SubscriptionIDColumn, TableNameColumn, CursorColumn, CompletedAtColumn, ExpiredAtColumn, UpdatedAtColumn, CreatedAtColumn, ErrorColumn, SchemaColumn, ErrorCountColumn, LastErrorAtColumn}
 	)
 
 	return importJobsTable{
@@ -85,6 +87,7 @@ func newImportJobsTableImpl(schemaName, tableName string) importJobsTable {
 		Error:          ErrorColumn,
 		Schema:         SchemaColumn,
 		ErrorCount:     ErrorCountColumn,
+		LastErrorAt:    LastErrorAtColumn,
 
 		AllColumns:     allColumns,
 		MutableColumns: mutableColumns,

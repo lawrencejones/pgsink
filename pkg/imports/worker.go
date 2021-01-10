@@ -17,12 +17,22 @@ import (
 )
 
 type WorkerOptions struct {
-	SubscriptionID string // provided by other flags
-	PollInterval   time.Duration
+	SubscriptionID   string        // fixes this worker to only work jobs associated with the current subscription
+	PollInterval     time.Duration // interval between polling for new jobs
+	RetryInterval    time.Duration // retry interval for the exponential backoff
+	RetryExponent    int           // retry exponent to calculate backoff
+	MaxRetryInterval time.Duration // maximum interval between retries
 }
 
 func (opt *WorkerOptions) Bind(cmd *kingpin.CmdClause, prefix string) *WorkerOptions {
-	cmd.Flag(fmt.Sprintf("%spoll-interval", prefix), "Interval to check for new import jobs").Default("15s").DurationVar(&opt.PollInterval)
+	cmd.Flag(fmt.Sprintf("%spoll-interval", prefix), "Interval to check for new import jobs").
+		Default("15s").DurationVar(&opt.PollInterval)
+	cmd.Flag(fmt.Sprintf("%sretry-interval", prefix), "Retry interval for the exponential backoff").
+		Default("5s").DurationVar(&opt.RetryInterval)
+	cmd.Flag(fmt.Sprintf("%sretry-exponent", prefix), "Retry exponent to calculate backoff").
+		Default("3").IntVar(&opt.RetryExponent)
+	cmd.Flag(fmt.Sprintf("%smax-retry-interval", prefix), "Maximum interval between retry attempts").
+		Default("1h").DurationVar(&opt.MaxRetryInterval)
 
 	return opt
 }
@@ -127,15 +137,50 @@ func (w Worker) AcquireAndWork(ctx context.Context, importer Importer) (*model.I
 }
 
 func (w Worker) acquire(ctx context.Context, tx pgx.Tx) (*model.ImportJobs, error) {
+	// We use an exponential backoff calculation of:
+	//
+	//	delay = retryInterval * (retryExponent ^ errorCount)
+	//	delay = maxRetryInterval if delay > maxRetryInterval
+	//
+	// It is useful to have the retry parameters in Postgres Int expressions, hence the
+	// alias.
+	retryIntervalSeconds := Int(int64(w.opts.RetryInterval.Seconds()))
+	retryExponent := Int(int64(w.opts.RetryExponent))
+	maxRetryInterval := Int(int64(w.opts.MaxRetryInterval.Seconds()))
+
+	// Note that the retry delay is capped at the max retry interval, so we avoid silly
+	// situations like a job being retried only a year from the last error.
+	retryDelaySeconds := LEAST(
+		maxRetryInterval,
+		retryIntervalSeconds.MUL(
+			retryExponent.POW(ImportJobs.ErrorCount),
+		),
+	)
+
+	// Cast the seconds into an interval, as it's easier to use in the next query
+	retryDelayInterval := IntervalExp(Raw("'1 second'::interval")).MUL(CAST(retryDelaySeconds).AS_NUMERIC())
+
 	// Each import worker locks an import_jobs row while that job is being processed. This
 	// allows running concurrent workers without doubly running the jobs.
 	query, args := ImportJobs.
-		SELECT(ImportJobs.ID, ImportJobs.SubscriptionID, ImportJobs.Schema, ImportJobs.TableName, ImportJobs.Cursor).
+		SELECT(
+			ImportJobs.ID,
+			ImportJobs.SubscriptionID,
+			ImportJobs.Schema,
+			ImportJobs.TableName,
+			ImportJobs.Cursor,
+		).
 		FOR(UPDATE().SKIP_LOCKED()). // conflict against any other workers
 		WHERE(
 			ImportJobs.SubscriptionID.EQ(String(w.opts.SubscriptionID)).
 				AND(ImportJobs.CompletedAt.IS_NULL()). // incomplete
-				AND(ImportJobs.ExpiredAt.IS_NULL()),   // still active
+				AND(ImportJobs.ExpiredAt.IS_NULL()).   // still active
+				AND(
+					// The job has no errors, or we should respect the backoff delay
+					ImportJobs.ErrorCount.LT(Int(1)).OR(
+						TimestampzExp(Raw("now()")).GT(ImportJobs.LastErrorAt.ADD(retryDelayInterval)),
+					),
+				),
 		).
 		ORDER_BY(ImportJobs.Error.IS_NULL().DESC()).
 		LIMIT(1).
@@ -155,9 +200,13 @@ func (w Worker) acquire(ctx context.Context, tx pgx.Tx) (*model.ImportJobs, erro
 }
 
 func (w Worker) setError(ctx context.Context, job model.ImportJobs, workErr error) error {
-	stmt := ImportJobs.
-		UPDATE(ImportJobs.Error, ImportJobs.UpdatedAt).
-		SET(workErr.Error(), Raw("now()")).
+	stmt := ImportJobs.UPDATE().
+		SET(
+			ImportJobs.Error.SET(String(workErr.Error())),
+			ImportJobs.ErrorCount.SET(Int(1).ADD(ImportJobs.ErrorCount)),
+			ImportJobs.LastErrorAt.SET(TimestampzExp(Raw("now()"))),
+			ImportJobs.UpdatedAt.SET(TimestampzExp(Raw("now()"))),
+		).
 		WHERE(ImportJobs.ID.EQ(Int(job.ID)))
 
 	_, err := stmt.ExecContext(ctx, w.db)

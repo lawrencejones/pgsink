@@ -141,10 +141,17 @@ func (i importer) Do(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, job m
 		completedAt = Raw("now()")
 	}
 
-	query, args := ImportJobs.
-		UPDATE(ImportJobs.Cursor, ImportJobs.CompletedAt).
-		SET(lastCursor, completedAt).
-		WHERE(ImportJobs.ID.EQ(Int(job.ID))).
+	query, args := ImportJobs.UPDATE().
+		SET(
+			ImportJobs.Cursor.SET(String(string(lastCursor))),
+			ImportJobs.CompletedAt.SET(TimestampzExp(completedAt)),
+			ImportJobs.UpdatedAt.SET(TimestampzExp(Raw("now()"))),
+			ImportJobs.Error.SET(CAST(NULL).AS_TEXT()),
+			ImportJobs.ErrorCount.SET(Int(0)),
+		).
+		WHERE(
+			ImportJobs.ID.EQ(Int(job.ID)),
+		).
 		Sql()
 	if _, err := tx.Exec(ctx, query, args...); err != nil {
 		return fmt.Errorf("failed to update job: %w", err)
