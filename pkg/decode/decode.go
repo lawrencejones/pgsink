@@ -69,7 +69,7 @@ func (t TypeMapping) NewScanner() Scanner {
 // It will return a handle to the exact type of Empty. This means something like a string
 // will be given as a *string, likewise with *[]string, etc.
 func (t TypeMapping) NewEmpty() interface{} {
-	return reflect.New(reflect.TypeOf(t.Empty).Elem()).Interface()
+	return reflect.New(reflect.TypeOf(t.Empty)).Interface()
 }
 
 // Scanner defines what pgtypes must support to be included in the decoder. It is used to

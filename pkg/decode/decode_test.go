@@ -7,6 +7,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gstruct"
 )
 
 var _ = Describe("Decoder", func() {
@@ -37,7 +38,7 @@ var _ = Describe("Decoder", func() {
 
 			Expect(scanner.Scan(raw)).To(Succeed())
 			Expect(scanner.AssignTo(dest)).To(Succeed())
-			Expect(dest).To(BeEquivalentTo(&[]string{"peek", "a", "boo"}))
+			Expect(dest).To(PointTo(PointTo(BeEquivalentTo([]string{"peek", "a", "boo"}))))
 		})
 	})
 })
