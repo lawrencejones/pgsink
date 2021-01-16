@@ -3,7 +3,6 @@ package imports
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"time"
 
 	"github.com/lawrencejones/pgsink/internal/dbschema/pgsink/model"
@@ -219,7 +218,7 @@ forEachRow:
 			}
 
 			// Dereference the value we get from our destination, to remove double pointer-ing
-			row[column.Name] = reflect.ValueOf(dest).Elem().Elem().Interface()
+			row[column.Name] = decode.Unpack(dest)
 		}
 
 		tableRowsRead.Inc()

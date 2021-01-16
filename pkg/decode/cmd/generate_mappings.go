@@ -45,6 +45,14 @@ type Config struct {
 	Templates   map[string]TemplatedTypeMapping
 }
 
+func init() {
+	for _, name := range cfg.Unsupported {
+		if _, ok := cfg.Templates[name]; ok {
+			log.Fatalf("type '%s' is both supported and unsupported", name)
+		}
+	}
+}
+
 var cfg = Config{
 	Unsupported: []string{
 		"tid",
@@ -64,7 +72,6 @@ var cfg = Config{
 		"_aclitem",
 		"_inet",
 		"bpchar",
-		"date",
 		"interval",
 		"_numeric",
 		"bit",
@@ -112,7 +119,7 @@ var cfg = Config{
 			Empty: "new(uint32)",
 		},
 		"json": {
-			Empty: "new([]byte)",
+			Empty: "new(interface{})",
 		},
 		"float4": {
 			Empty: "new(float32)",
@@ -127,7 +134,7 @@ var cfg = Config{
 			Empty: "new([]int16)",
 		},
 		"_int4": {
-			Empty: "new([]int64)",
+			Empty: "new([]int32)",
 		},
 		"_text": {
 			Empty: "new([]string)",
@@ -151,7 +158,7 @@ var cfg = Config{
 			Empty: "new(time.Time)",
 		},
 		"time": {
-			Empty: "new(int64)",
+			Empty: "new(time.Time)",
 		},
 		"timestamp": {
 			Empty: "new(time.Time)",
@@ -169,7 +176,7 @@ var cfg = Config{
 			Empty: "new([]time.Time)",
 		},
 		"jsonb": {
-			Empty: "new(string)",
+			Empty: "new(interface{})",
 		},
 	},
 }
