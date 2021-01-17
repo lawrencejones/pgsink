@@ -12,6 +12,10 @@ services:
       - postgres
       - -c
       - config_file=/etc/postgresql/postgresql.conf
+      # Turn fsync off, so we can run tests faster (not to be used in
+      # production)
+      - -c
+      - fsync=off
     volumes:
       - ./docker/postgres/postgresql.conf:/etc/postgresql/postgresql.conf
       - postgres-data:/var/lib/postgresql
