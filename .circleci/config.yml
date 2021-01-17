@@ -11,7 +11,7 @@ references:
   docker_postgres: &docker_postgres
     image: postgres:13.1
     command: |
-      docker-entrypoint.sh postgres -c 'wal_level=logical'
+      docker-entrypoint.sh postgres -c 'wal_level=logical' -c 'fsync=off'
     environment:
       POSTGRES_USER: "postgres"
       POSTGRES_PASSWORD: ""
