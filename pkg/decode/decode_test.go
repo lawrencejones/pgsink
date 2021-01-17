@@ -128,20 +128,22 @@ var _ = Describe("Decoder", func() {
 				match: Equal(uint32(11)),
 			},
 		},
+		// Both JSON types are taken as strings, for now. We might want to parse it properly
+		// in future, but we need support in the sinks to decide how best to handle them.
 		"json": {
 			{
 				value: `'{"It is the east": "and Juliet is the sun"}'`,
-				match: Equal(map[string]interface{}{
-					"It is the east": "and Juliet is the sun",
-				}),
+				match: MatchJSON(`{
+					"It is the east": "and Juliet is the sun"
+				}`),
 			},
 		},
 		"jsonb": {
 			{
 				value: `'{"O happy dagger!": "This is thy sheath"}'`,
-				match: Equal(map[string]interface{}{
-					"O happy dagger!": "This is thy sheath",
-				}),
+				match: MatchJSON(`{
+					"O happy dagger!": "This is thy sheath"
+				}`),
 			},
 		},
 		"float4": {

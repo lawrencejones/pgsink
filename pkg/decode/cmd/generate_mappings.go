@@ -119,7 +119,7 @@ var cfg = Config{
 			Empty: "new(uint32)",
 		},
 		"json": {
-			Empty: "new(interface{})",
+			Empty: "new(string)",
 		},
 		"float4": {
 			Empty: "new(float32)",
@@ -176,7 +176,7 @@ var cfg = Config{
 			Empty: "new([]time.Time)",
 		},
 		"jsonb": {
-			Empty: "new(interface{})",
+			Empty: "new(string)",
 		},
 	},
 }

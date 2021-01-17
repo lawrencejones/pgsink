@@ -81,7 +81,7 @@ var Mappings = []decode.TypeMapping{
 		Name:    "json",
 		OID:     114,
 		Scanner: &pgtype.JSON{},
-		Empty:   new(interface{}),
+		Empty:   new(string),
 	},
 	{
 		Name:    "float4",
@@ -195,7 +195,7 @@ var Mappings = []decode.TypeMapping{
 		Name:    "jsonb",
 		OID:     3802,
 		Scanner: &pgtype.JSONB{},
-		Empty:   new(interface{}),
+		Empty:   new(string),
 	},
 }
 
