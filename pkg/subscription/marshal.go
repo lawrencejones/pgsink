@@ -1,8 +1,6 @@
 package subscription
 
 import (
-	"reflect"
-
 	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/logical"
 )
@@ -39,7 +37,7 @@ func MarshalTuple(decoder decode.Decoder, relation *logical.Relation, tuple []lo
 		}
 
 		// Dereference the value we get from our destination, to remove double pointer-ing
-		row[column.Name] = reflect.ValueOf(dest).Elem().Interface()
+		row[column.Name] = decode.Unpack(dest)
 	}
 
 	return row, nil

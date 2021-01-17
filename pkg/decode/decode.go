@@ -18,6 +18,17 @@ type Decoder interface {
 	ScannerFor(oid uint32) (scanner Scanner, dest interface{}, err error)
 }
 
+// Unpack extracts the value from a scanner destination, should it be present. Otherwise
+// we return nil.
+func Unpack(dest interface{}) interface{} {
+	elem := reflect.ValueOf(dest).Elem()
+	if elem.IsNil() {
+		return nil
+	}
+
+	return elem.Elem().Interface()
+}
+
 // UnregisteredType is returned whenever we see a Postgres OID that has no associated type
 // mapping. How we handle this depends on the caller.
 type UnregisteredType struct {
@@ -69,7 +80,7 @@ func (t TypeMapping) NewScanner() Scanner {
 // It will return a handle to the exact type of Empty. This means something like a string
 // will be given as a *string, likewise with *[]string, etc.
 func (t TypeMapping) NewEmpty() interface{} {
-	return reflect.New(reflect.TypeOf(t.Empty).Elem()).Interface()
+	return reflect.New(reflect.TypeOf(t.Empty)).Interface()
 }
 
 // Scanner defines what pgtypes must support to be included in the decoder. It is used to

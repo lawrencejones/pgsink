@@ -81,7 +81,7 @@ var Mappings = []decode.TypeMapping{
 		Name:    "json",
 		OID:     114,
 		Scanner: &pgtype.JSON{},
-		Empty:   new([]byte),
+		Empty:   new(string),
 	},
 	{
 		Name:    "float4",
@@ -111,7 +111,7 @@ var Mappings = []decode.TypeMapping{
 		Name:    "_int4",
 		OID:     1007,
 		Scanner: &pgtype.Int4Array{},
-		Empty:   new([]int64),
+		Empty:   new([]int32),
 	},
 	{
 		Name:    "_text",
@@ -150,10 +150,16 @@ var Mappings = []decode.TypeMapping{
 		Empty:   new(string),
 	},
 	{
+		Name:    "date",
+		OID:     1082,
+		Scanner: &pgtype.Date{},
+		Empty:   new(time.Time),
+	},
+	{
 		Name:    "time",
 		OID:     1083,
 		Scanner: &pgtype.Time{},
-		Empty:   new(int64),
+		Empty:   new(time.Time),
 	},
 	{
 		Name:    "timestamp",
@@ -267,10 +273,6 @@ var Unsupported = []decode.TypeMapping{
 	{
 		Name: "bpchar",
 		OID:  1042,
-	},
-	{
-		Name: "date",
-		OID:  1082,
 	},
 	{
 		Name: "interval",
