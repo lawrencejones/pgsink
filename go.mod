@@ -28,7 +28,7 @@ require (
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.4
 	github.com/pkg/errors v0.9.1
-	github.com/pressly/goose v2.6.0+incompatible
+	github.com/pressly/goose v2.7.0+incompatible
 	github.com/prometheus/client_golang v1.9.0
 	go.opencensus.io v0.22.5
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
