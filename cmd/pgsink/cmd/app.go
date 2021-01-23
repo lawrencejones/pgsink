@@ -12,10 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/getsentry/sentry-go"
 	"github.com/lawrencejones/pgsink/api"
 	"github.com/lawrencejones/pgsink/api/gen/health"
 	"github.com/lawrencejones/pgsink/api/gen/tables"
+	middleware "github.com/lawrencejones/pgsink/internal/middleware"
 	"github.com/lawrencejones/pgsink/internal/telem"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/decode"
@@ -30,6 +30,7 @@ import (
 	"contrib.go.opencensus.io/integrations/ocsql"
 	"github.com/alecthomas/kingpin"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/getsentry/sentry-go"
 	kitlog "github.com/go-kit/kit/log"
 	level "github.com/go-kit/kit/log/level"
 	"github.com/jackc/pgconn"
@@ -39,6 +40,7 @@ import (
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opencensus.io/trace"
+	goa "goa.design/goa/v3/pkg"
 )
 
 var logger kitlog.Logger
@@ -264,6 +266,18 @@ func Run() (err error) {
 			tablesEndpoints = tables.NewEndpoints(tablesService)
 			healthEndpoints = health.NewEndpoints(healthService)
 		)
+
+		// Apply application middlewares to all the endpoint groups
+		{
+			for _, endpoints := range []interface {
+				Use(m func(goa.Endpoint) goa.Endpoint)
+			}{
+				tablesEndpoints,
+				healthEndpoints,
+			} {
+				endpoints.Use(middleware.Observe())
+			}
+		}
 
 		{
 			logger := kitlog.With(logger, "component", "http")
