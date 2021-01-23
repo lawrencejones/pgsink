@@ -15,6 +15,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/lawrencejones/pgsink/api"
 	"github.com/lawrencejones/pgsink/api/gen/health"
+	"github.com/lawrencejones/pgsink/api/gen/tables"
 	"github.com/lawrencejones/pgsink/internal/telem"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/decode"
@@ -254,17 +255,19 @@ func Run() (err error) {
 	case serveCmd.FullCommand():
 		// Initialise services
 		var (
+			tablesService = api.NewTables(db)
 			healthService = api.NewHealth()
 		)
 
 		// Wrap services in endpoints, a calling abstraction that is transport independent
 		var (
+			tablesEndpoints = tables.NewEndpoints(tablesService)
 			healthEndpoints = health.NewEndpoints(healthService)
 		)
 
 		{
 			logger := kitlog.With(logger, "component", "http")
-			srv := buildHTTPServer(logger, *serveAddress, healthEndpoints, *debug)
+			srv := buildHTTPServer(logger, *serveAddress, tablesEndpoints, healthEndpoints, *debug)
 
 			g.Add(
 				func() error {

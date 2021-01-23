@@ -30,6 +30,29 @@ paths:
             - status
       schemes:
       - http
+  /tables:
+    get:
+      tags:
+      - Tables
+      summary: List Tables
+      description: List all tables
+      operationId: Tables#List
+      parameters:
+      - name: schema
+        in: query
+        description: Comma separated list of Postgres schemas to filter by
+        required: false
+        type: string
+        default: public
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/TableResponse'
+      schemes:
+      - http
 definitions:
   HealthCheckResponseBody:
     title: HealthCheckResponseBody
@@ -45,3 +68,22 @@ definitions:
       status: healthy
     required:
     - status
+  TableResponse:
+    title: TableResponse
+    type: object
+    properties:
+      name:
+        type: string
+        description: Postgres table name
+        example: payments
+      schema:
+        type: string
+        description: Postgres table schema
+        example: public
+    description: Postgres table, with sync and import status
+    example:
+      name: payments
+      schema: public
+    required:
+    - schema
+    - name

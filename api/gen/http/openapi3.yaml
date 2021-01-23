@@ -23,6 +23,51 @@ paths:
                 $ref: '#/components/schemas/CheckResponseBody'
               example:
                 status: healthy
+  /tables:
+    get:
+      tags:
+      - Tables
+      summary: List Tables
+      description: List all tables
+      operationId: Tables#List
+      parameters:
+      - name: schema
+        in: query
+        description: Comma separated list of Postgres schemas to filter by
+        allowEmptyValue: true
+        schema:
+          type: string
+          description: Comma separated list of Postgres schemas to filter by
+          default: public
+          example: public,payments
+        example: public,payments
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Table'
+                example:
+                - name: payments
+                  schema: public
+                - name: payments
+                  schema: public
+                - name: payments
+                  schema: public
+                - name: payments
+                  schema: public
+              example:
+              - name: payments
+                schema: public
+              - name: payments
+                schema: public
+              - name: payments
+                schema: public
+              - name: payments
+                schema: public
 components:
   schemas:
     CheckResponseBody:
@@ -38,3 +83,21 @@ components:
         status: healthy
       required:
       - status
+    Table:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Postgres table name
+          example: payments
+        schema:
+          type: string
+          description: Postgres table schema
+          example: public
+      description: Postgres table, with sync and import status
+      example:
+        name: payments
+        schema: public
+      required:
+      - schema
+      - name

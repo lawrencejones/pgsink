@@ -14,6 +14,7 @@ import (
 	"os"
 
 	healthc "github.com/lawrencejones/pgsink/api/gen/http/health/client"
+	tablesc "github.com/lawrencejones/pgsink/api/gen/http/tables/client"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -24,12 +25,14 @@ import (
 //
 func UsageCommands() string {
 	return `health check
+tables list
 `
 }
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + ` health check` + "\n" +
+		os.Args[0] + ` tables list --schema "public,payments"` + "\n" +
 		""
 }
 
@@ -46,9 +49,17 @@ func ParseEndpoint(
 		healthFlags = flag.NewFlagSet("health", flag.ContinueOnError)
 
 		healthCheckFlags = flag.NewFlagSet("check", flag.ExitOnError)
+
+		tablesFlags = flag.NewFlagSet("tables", flag.ContinueOnError)
+
+		tablesListFlags      = flag.NewFlagSet("list", flag.ExitOnError)
+		tablesListSchemaFlag = tablesListFlags.String("schema", "public", "")
 	)
 	healthFlags.Usage = healthUsage
 	healthCheckFlags.Usage = healthCheckUsage
+
+	tablesFlags.Usage = tablesUsage
+	tablesListFlags.Usage = tablesListUsage
 
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
 		return nil, nil, err
@@ -67,6 +78,8 @@ func ParseEndpoint(
 		switch svcn {
 		case "health":
 			svcf = healthFlags
+		case "tables":
+			svcf = tablesFlags
 		default:
 			return nil, nil, fmt.Errorf("unknown service %q", svcn)
 		}
@@ -86,6 +99,13 @@ func ParseEndpoint(
 			switch epn {
 			case "check":
 				epf = healthCheckFlags
+
+			}
+
+		case "tables":
+			switch epn {
+			case "list":
+				epf = tablesListFlags
 
 			}
 
@@ -116,6 +136,13 @@ func ParseEndpoint(
 				endpoint = c.Check()
 				data = nil
 			}
+		case "tables":
+			c := tablesc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list":
+				endpoint = c.List()
+				data, err = tablesc.BuildListPayload(*tablesListSchemaFlag)
+			}
 		}
 	}
 	if err != nil {
@@ -145,5 +172,29 @@ Health check for probes
 
 Example:
     `+os.Args[0]+` health check
+`, os.Args[0])
+}
+
+// tablesUsage displays the usage of the tables command and its subcommands.
+func tablesUsage() {
+	fmt.Fprintf(os.Stderr, `Expose Postgres tables, and their import/sync status
+Usage:
+    %s [globalflags] tables COMMAND [flags]
+
+COMMAND:
+    list: List all tables
+
+Additional help:
+    %s tables COMMAND --help
+`, os.Args[0], os.Args[0])
+}
+func tablesListUsage() {
+	fmt.Fprintf(os.Stderr, `%s [flags] tables list -schema STRING
+
+List all tables
+    -schema STRING: 
+
+Example:
+    `+os.Args[0]+` tables list --schema "public,payments"
 `, os.Args[0])
 }
