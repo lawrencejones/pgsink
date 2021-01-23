@@ -13,7 +13,8 @@ PGDATABASE ?= pgsink
 PGUSER ?= pgsink
 
 .PHONY: prog darwin linux generate clean
-.PHONY: migrate migrate-run structure.sql createdb dropdb recreatedb test docs internal/dbschema
+.PHONY: migrate migrate-run structure.sql createdb dropdb recreatedb test docs
+.PHONY: api/gen internal/dbschema
 
 ################################################################################
 # Build
@@ -66,6 +67,17 @@ recreatedb: dropdb createdb
 # go get -u github.com/onsi/ginkgo/ginkgo
 test:
 	PGUSER=pgsink_test PGDATABASE=pgsink_test ginkgo -r pkg
+
+docs:
+	swagger serve --port=3000 api/gen/http/openapi.json
+
+################################################################################
+# Codegen
+################################################################################
+
+# Generate API code, from server to client and service stubs
+api/gen:
+	goa gen github.com/lawrencejones/pgsink/api/design -o api
 
 # Generates database types from live Postgres schema (start docker-compose for
 # this)
