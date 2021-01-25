@@ -15,7 +15,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-jet/jet/v2 v2.4.0
 	github.com/go-kit/kit v0.10.0
-	github.com/google/uuid v1.1.5
+	github.com/google/uuid v1.2.0
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/imdario/mergo v0.3.11 // indirect
 	github.com/jackc/pgconn v1.8.0
