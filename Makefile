@@ -87,3 +87,24 @@ internal/dbschema:
 	jet -source=PostgreSQL -host=localhost -port=5432 -user=$(PGUSER) -dbname=$(PGDATABASE) -schema=information_schema -path=tmp/dbschema
 	rm -rf $@
 	mv tmp/dbschema/pgsink $@
+
+############################################################
+# Our clients, for other languages
+############################################################
+
+# We can't use the version installed by brew as this generates a different
+# client format to what is integrated so we must use v5 or later.
+openapi-generator-cli.jar:
+	curl https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/5.0.0-beta3/openapi-generator-cli-5.0.0-beta3.jar \
+		--output $@
+
+# https://openapi-generator.tech/docs/generators/typescript-fetch/
+clients/typescript:
+	rm -rfv $@
+	java -jar openapi-generator-cli.jar \
+		generate \
+			--generator-name typescript-fetch \
+			--input-spec api/gen/http/openapi3.json \
+			--additional-properties npmName=pgsink \
+			--additional-properties npmRepository=https://github.com/lawrencejones/pgsink \
+			--output $@

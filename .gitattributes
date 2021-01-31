@@ -1,2 +1,3 @@
-internal/dbschema linguist-generated
 api/gen linguist-generated
+clients/typescript linguist-generated
+internal/dbschema linguist-generated
