@@ -1,6 +1,6 @@
 {
   "name": "pgsink",
-  "version": "1.0",
+  "version": "1.0.0",
   "description": "OpenAPI client for pgsink",
   "author": "OpenAPI-Generator",
   "main": "./dist/index.js",

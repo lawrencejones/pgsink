@@ -9,6 +9,7 @@ import (
 
 var _ = API("pgsink", func() {
 	Title("pgsink")
+	Version("1.0.0")
 	Server("api", func() {
 		Host("direct", func() {
 			Description("Direct access to an instance")
