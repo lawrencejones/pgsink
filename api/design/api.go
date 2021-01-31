@@ -90,15 +90,96 @@ var Table = Type("Table", func() {
 	Attribute("name", String, "Postgres table name", func() {
 		Example("payments")
 	})
-	Attribute("published", Boolean, "True if this table is already streaming", func() {
-		Example("The table is active on the Postgres publication", true)
-		Example("Table is not being streamed", false)
+	Attribute("publication_status", String, "Status of the publication, set to active when table is streaming", func() {
+		Enum("inactive", "active")
+		Example("Table is not in publication", "inactive")
+		Example("The table is published and is streaming", "active")
+	})
+	Attribute("import_status", String, "Status of table imports", func() {
+		Enum("inactive", "scheduled", "active", "error", "complete", "expired", "unknown")
+		Example("Table has never been imported", "inactive")
+		Example("Import has been scheduled but no work has been completed", "scheduled")
+		Example("Import has thrown an error", "error")
+		Example("Import has completed successfully", "complete")
+		Example("Import has been expired", "expired")
+		Example("Import is in an unexpected and unknown state", "unknown")
 	})
 
 	Required(
 		"schema",
 		"name",
-		"published",
+		"publication_status",
+		"import_status",
+	)
+})
+
+var _ = Service("Subscriptions", func() {
+	Description("Manage a pgsink subscription")
+
+	HTTP(func() {
+		Path("/api/subscriptions")
+	})
+
+	Method("Get", func() {
+		Description("Get current subscription data")
+
+		Result(Subscription)
+
+		HTTP(func() {
+			GET("/current")
+			Response(StatusCreated)
+		})
+	})
+
+	Method("AddTable", func() {
+		Description("Add table to publication, relying on an import manager to schedule the job")
+
+		Payload(SubscriptionPublishedTable)
+
+		Result(Subscription)
+
+		HTTP(func() {
+			POST("/current/actions/add-table")
+			Response(StatusCreated)
+		})
+	})
+
+	Method("StopTable", func() {
+		Description("Stop a table by removing it from the publication, and expiring any import jobs")
+
+		Payload(SubscriptionPublishedTable)
+
+		Result(Subscription)
+
+		HTTP(func() {
+			POST("/current/actions/stop-table")
+			Response(StatusAccepted)
+		})
+	})
+})
+
+var Subscription = Type("Subscription", func() {
+	Description("Subscription configuration")
+	Attribute("id", String, "ID of subscription", func() {
+		Example("e32ur90j2r")
+	})
+	Attribute("published_tables", ArrayOf(SubscriptionPublishedTable), "List of published tables")
+
+	Required(
+		"id",
+		"published_tables",
+	)
+})
+
+var SubscriptionPublishedTable = Type("SubscriptionPublishedTable", func() {
+	Description("Table on subscription that is published")
+	Reference(Table)
+	Attribute("schema")
+	Attribute("name")
+
+	Required(
+		"schema",
+		"name",
 	)
 })
 

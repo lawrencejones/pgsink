@@ -15,6 +15,7 @@ import (
 	"github.com/lawrencejones/pgsink/api"
 	"github.com/lawrencejones/pgsink/api/gen/health"
 	apiimports "github.com/lawrencejones/pgsink/api/gen/imports"
+	apisubscriptions "github.com/lawrencejones/pgsink/api/gen/subscriptions"
 	"github.com/lawrencejones/pgsink/api/gen/tables"
 	middleware "github.com/lawrencejones/pgsink/internal/middleware"
 	"github.com/lawrencejones/pgsink/internal/telem"
@@ -268,16 +269,18 @@ func Run() (err error) {
 
 		// Initialise services
 		var (
-			tablesService  = api.NewTables(db, pub)
-			importsService = api.NewImports(db, pub)
-			healthService  = api.NewHealth()
+			tablesService        = api.NewTables(db, pub)
+			importsService       = api.NewImports(db, pub)
+			subscriptionsService = api.NewSubscriptions(db, pub)
+			healthService        = api.NewHealth()
 		)
 
 		// Wrap services in endpoints, a calling abstraction that is transport independent
 		var (
-			tablesEndpoints  = tables.NewEndpoints(tablesService)
-			importsEndpoints = apiimports.NewEndpoints(importsService)
-			healthEndpoints  = health.NewEndpoints(healthService)
+			tablesEndpoints        = tables.NewEndpoints(tablesService)
+			importsEndpoints       = apiimports.NewEndpoints(importsService)
+			subscriptionsEndpoints = apisubscriptions.NewEndpoints(subscriptionsService)
+			healthEndpoints        = health.NewEndpoints(healthService)
 		)
 
 		// Apply application middlewares to all the endpoint groups
@@ -287,6 +290,7 @@ func Run() (err error) {
 			}{
 				tablesEndpoints,
 				importsEndpoints,
+				subscriptionsEndpoints,
 				healthEndpoints,
 			} {
 				endpoints.Use(middleware.Observe())
@@ -295,7 +299,12 @@ func Run() (err error) {
 
 		{
 			logger := kitlog.With(logger, "component", "http")
-			srv := buildHTTPServer(logger, *serveAddress, tablesEndpoints, importsEndpoints, healthEndpoints, *debug)
+			srv := buildHTTPServer(logger, *serveAddress,
+				tablesEndpoints,
+				importsEndpoints,
+				subscriptionsEndpoints,
+				healthEndpoints,
+				*debug)
 
 			g.Add(
 				func() error {

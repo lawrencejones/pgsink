@@ -39,6 +39,8 @@ type Table struct {
 	Schema string
 	// Postgres table name
 	Name string
-	// True if this table is already streaming
-	Published bool
+	// Status of the publication, set to active when table is streaming
+	PublicationStatus string
+	// Status of table imports
+	ImportStatus string
 }

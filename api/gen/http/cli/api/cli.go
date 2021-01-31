@@ -15,6 +15,7 @@ import (
 
 	healthc "github.com/lawrencejones/pgsink/api/gen/http/health/client"
 	importsc "github.com/lawrencejones/pgsink/api/gen/http/imports/client"
+	subscriptionsc "github.com/lawrencejones/pgsink/api/gen/http/subscriptions/client"
 	tablesc "github.com/lawrencejones/pgsink/api/gen/http/tables/client"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
@@ -27,6 +28,7 @@ import (
 func UsageCommands() string {
 	return `health check
 tables list
+subscriptions (get|add-table|stop-table)
 imports list
 `
 }
@@ -35,6 +37,7 @@ imports list
 func UsageExamples() string {
 	return os.Args[0] + ` health check` + "\n" +
 		os.Args[0] + ` tables list --schema "public,payments"` + "\n" +
+		os.Args[0] + ` subscriptions get` + "\n" +
 		os.Args[0] + ` imports list` + "\n" +
 		""
 }
@@ -58,6 +61,16 @@ func ParseEndpoint(
 		tablesListFlags      = flag.NewFlagSet("list", flag.ExitOnError)
 		tablesListSchemaFlag = tablesListFlags.String("schema", "public", "")
 
+		subscriptionsFlags = flag.NewFlagSet("subscriptions", flag.ContinueOnError)
+
+		subscriptionsGetFlags = flag.NewFlagSet("get", flag.ExitOnError)
+
+		subscriptionsAddTableFlags    = flag.NewFlagSet("add-table", flag.ExitOnError)
+		subscriptionsAddTableBodyFlag = subscriptionsAddTableFlags.String("body", "REQUIRED", "")
+
+		subscriptionsStopTableFlags    = flag.NewFlagSet("stop-table", flag.ExitOnError)
+		subscriptionsStopTableBodyFlag = subscriptionsStopTableFlags.String("body", "REQUIRED", "")
+
 		importsFlags = flag.NewFlagSet("imports", flag.ContinueOnError)
 
 		importsListFlags = flag.NewFlagSet("list", flag.ExitOnError)
@@ -67,6 +80,11 @@ func ParseEndpoint(
 
 	tablesFlags.Usage = tablesUsage
 	tablesListFlags.Usage = tablesListUsage
+
+	subscriptionsFlags.Usage = subscriptionsUsage
+	subscriptionsGetFlags.Usage = subscriptionsGetUsage
+	subscriptionsAddTableFlags.Usage = subscriptionsAddTableUsage
+	subscriptionsStopTableFlags.Usage = subscriptionsStopTableUsage
 
 	importsFlags.Usage = importsUsage
 	importsListFlags.Usage = importsListUsage
@@ -90,6 +108,8 @@ func ParseEndpoint(
 			svcf = healthFlags
 		case "tables":
 			svcf = tablesFlags
+		case "subscriptions":
+			svcf = subscriptionsFlags
 		case "imports":
 			svcf = importsFlags
 		default:
@@ -118,6 +138,19 @@ func ParseEndpoint(
 			switch epn {
 			case "list":
 				epf = tablesListFlags
+
+			}
+
+		case "subscriptions":
+			switch epn {
+			case "get":
+				epf = subscriptionsGetFlags
+
+			case "add-table":
+				epf = subscriptionsAddTableFlags
+
+			case "stop-table":
+				epf = subscriptionsStopTableFlags
 
 			}
 
@@ -161,6 +194,19 @@ func ParseEndpoint(
 			case "list":
 				endpoint = c.List()
 				data, err = tablesc.BuildListPayload(*tablesListSchemaFlag)
+			}
+		case "subscriptions":
+			c := subscriptionsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get":
+				endpoint = c.Get()
+				data = nil
+			case "add-table":
+				endpoint = c.AddTable()
+				data, err = subscriptionsc.BuildAddTablePayload(*subscriptionsAddTableBodyFlag)
+			case "stop-table":
+				endpoint = c.StopTable()
+				data, err = subscriptionsc.BuildStopTablePayload(*subscriptionsStopTableBodyFlag)
 			}
 		case "imports":
 			c := importsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -222,6 +268,60 @@ List all tables
 
 Example:
     `+os.Args[0]+` tables list --schema "public,payments"
+`, os.Args[0])
+}
+
+// subscriptionsUsage displays the usage of the subscriptions command and its
+// subcommands.
+func subscriptionsUsage() {
+	fmt.Fprintf(os.Stderr, `Manage a pgsink subscription
+Usage:
+    %s [globalflags] subscriptions COMMAND [flags]
+
+COMMAND:
+    get: Get current subscription data
+    add-table: Add table to publication, relying on an import manager to schedule the job
+    stop-table: Stop a table by removing it from the publication, and expiring any import jobs
+
+Additional help:
+    %s subscriptions COMMAND --help
+`, os.Args[0], os.Args[0])
+}
+func subscriptionsGetUsage() {
+	fmt.Fprintf(os.Stderr, `%s [flags] subscriptions get
+
+Get current subscription data
+
+Example:
+    `+os.Args[0]+` subscriptions get
+`, os.Args[0])
+}
+
+func subscriptionsAddTableUsage() {
+	fmt.Fprintf(os.Stderr, `%s [flags] subscriptions add-table -body JSON
+
+Add table to publication, relying on an import manager to schedule the job
+    -body JSON: 
+
+Example:
+    `+os.Args[0]+` subscriptions add-table --body '{
+      "name": "payments",
+      "schema": "public"
+   }'
+`, os.Args[0])
+}
+
+func subscriptionsStopTableUsage() {
+	fmt.Fprintf(os.Stderr, `%s [flags] subscriptions stop-table -body JSON
+
+Stop a table by removing it from the publication, and expiring any import jobs
+    -body JSON: 
+
+Example:
+    `+os.Args[0]+` subscriptions stop-table --body '{
+      "name": "payments",
+      "schema": "public"
+   }'
 `, os.Args[0])
 }
 

@@ -8,8 +8,10 @@ import (
 	"github.com/lawrencejones/pgsink/api/gen/health"
 	healthserver "github.com/lawrencejones/pgsink/api/gen/http/health/server"
 	importsserver "github.com/lawrencejones/pgsink/api/gen/http/imports/server"
+	subscriptionsserver "github.com/lawrencejones/pgsink/api/gen/http/subscriptions/server"
 	tablesserver "github.com/lawrencejones/pgsink/api/gen/http/tables/server"
 	"github.com/lawrencejones/pgsink/api/gen/imports"
+	"github.com/lawrencejones/pgsink/api/gen/subscriptions"
 	"github.com/lawrencejones/pgsink/api/gen/tables"
 	middleware "github.com/lawrencejones/pgsink/internal/middleware"
 	goahttp "goa.design/goa/v3/http"
@@ -17,7 +19,12 @@ import (
 )
 
 // buildHTTPServer instantiates a new HTTP server with Goa endpoints
-func buildHTTPServer(logger kitlog.Logger, addr string, tablesEndpoints *tables.Endpoints, importsEndpoints *imports.Endpoints, healthEndpoints *health.Endpoints, debug bool) *http.Server {
+func buildHTTPServer(logger kitlog.Logger, addr string,
+	tablesEndpoints *tables.Endpoints,
+	importsEndpoints *imports.Endpoints,
+	subscriptionsEndpoints *subscriptions.Endpoints,
+	healthEndpoints *health.Endpoints,
+	debug bool) *http.Server {
 	// Provide the transport specific request decoder and response encoder.
 	// The goa http package has built-in support for JSON, XML and gob.
 	// Other encodings can be used by providing the corresponding functions,
@@ -36,18 +43,21 @@ func buildHTTPServer(logger kitlog.Logger, addr string, tablesEndpoints *tables.
 	// the service input and output data structures to HTTP requests and
 	// responses.
 	var (
-		tablesServer  *tablesserver.Server
-		importsServer *importsserver.Server
-		healthServer  *healthserver.Server
+		tablesServer        *tablesserver.Server
+		importsServer       *importsserver.Server
+		subscriptionsServer *subscriptionsserver.Server
+		healthServer        *healthserver.Server
 	)
 	{
 		tablesServer = tablesserver.New(tablesEndpoints, mux, dec, enc, nil, nil)
 		importsServer = importsserver.New(importsEndpoints, mux, dec, enc, nil, nil)
+		subscriptionsServer = subscriptionsserver.New(subscriptionsEndpoints, mux, dec, enc, nil, nil)
 		healthServer = healthserver.New(healthEndpoints, mux, dec, enc, nil, nil)
 		if debug {
 			servers := goahttp.Servers{
 				tablesServer,
 				importsServer,
+				subscriptionsServer,
 				healthServer,
 			}
 			servers.Use(httpmw.Debug(mux, os.Stderr))
@@ -56,6 +66,7 @@ func buildHTTPServer(logger kitlog.Logger, addr string, tablesEndpoints *tables.
 		// Mount the server
 		tablesserver.Mount(mux, tablesServer)
 		importsserver.Mount(mux, importsServer)
+		subscriptionsserver.Mount(mux, subscriptionsServer)
 		healthserver.Mount(mux, healthServer)
 	}
 
@@ -74,6 +85,9 @@ func buildHTTPServer(logger kitlog.Logger, addr string, tablesEndpoints *tables.
 		logger.Log("event", "mount", "method", m.Method, "verb", m.Verb, "pattern", m.Pattern)
 	}
 	for _, m := range importsServer.Mounts {
+		logger.Log("event", "mount", "method", m.Method, "verb", m.Verb, "pattern", m.Pattern)
+	}
+	for _, m := range subscriptionsServer.Mounts {
 		logger.Log("event", "mount", "method", m.Method, "verb", m.Verb, "pattern", m.Pattern)
 	}
 	for _, m := range healthServer.Mounts {

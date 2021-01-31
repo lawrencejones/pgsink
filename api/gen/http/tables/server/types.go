@@ -21,8 +21,10 @@ type TableResponse struct {
 	Schema string `form:"schema" json:"schema" xml:"schema"`
 	// Postgres table name
 	Name string `form:"name" json:"name" xml:"name"`
-	// True if this table is already streaming
-	Published bool `form:"published" json:"published" xml:"published"`
+	// Status of the publication, set to active when table is streaming
+	PublicationStatus string `form:"publication_status" json:"publication_status" xml:"publication_status"`
+	// Status of table imports
+	ImportStatus string `form:"import_status" json:"import_status" xml:"import_status"`
 }
 
 // NewListResponseBody builds the HTTP response body from the result of the

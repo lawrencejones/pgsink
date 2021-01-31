@@ -38,62 +38,173 @@ paths:
                 items:
                   $ref: '#/components/schemas/Import'
                 example:
-                - completed_at: "1995-08-12T12:39:00Z"
-                  created_at: "1977-03-20T23:49:50Z"
+                - completed_at: "1975-04-12T22:30:25Z"
+                  created_at: "2009-06-05T22:54:25Z"
                   error: failed to parse primary key
                   error_count: 2
-                  expired_at: "2013-04-29T19:38:32Z"
+                  expired_at: "1998-12-14T22:10:24Z"
                   id: 3
-                  last_error_at: "2001-01-09T01:20:29Z"
+                  last_error_at: "1978-02-15T19:04:44Z"
                   schema: public
                   subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
                   table_name: payments
-                  updated_at: "2005-07-25T23:32:25Z"
-                - completed_at: "1995-08-12T12:39:00Z"
-                  created_at: "1977-03-20T23:49:50Z"
+                  updated_at: "1994-11-27T12:06:47Z"
+                - completed_at: "1975-04-12T22:30:25Z"
+                  created_at: "2009-06-05T22:54:25Z"
                   error: failed to parse primary key
                   error_count: 2
-                  expired_at: "2013-04-29T19:38:32Z"
+                  expired_at: "1998-12-14T22:10:24Z"
                   id: 3
-                  last_error_at: "2001-01-09T01:20:29Z"
+                  last_error_at: "1978-02-15T19:04:44Z"
                   schema: public
                   subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
                   table_name: payments
-                  updated_at: "2005-07-25T23:32:25Z"
+                  updated_at: "1994-11-27T12:06:47Z"
+                - completed_at: "1975-04-12T22:30:25Z"
+                  created_at: "2009-06-05T22:54:25Z"
+                  error: failed to parse primary key
+                  error_count: 2
+                  expired_at: "1998-12-14T22:10:24Z"
+                  id: 3
+                  last_error_at: "1978-02-15T19:04:44Z"
+                  schema: public
+                  subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
+                  table_name: payments
+                  updated_at: "1994-11-27T12:06:47Z"
+                - completed_at: "1975-04-12T22:30:25Z"
+                  created_at: "2009-06-05T22:54:25Z"
+                  error: failed to parse primary key
+                  error_count: 2
+                  expired_at: "1998-12-14T22:10:24Z"
+                  id: 3
+                  last_error_at: "1978-02-15T19:04:44Z"
+                  schema: public
+                  subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
+                  table_name: payments
+                  updated_at: "1994-11-27T12:06:47Z"
               example:
-              - completed_at: "1995-08-12T12:39:00Z"
-                created_at: "1977-03-20T23:49:50Z"
+              - completed_at: "1975-04-12T22:30:25Z"
+                created_at: "2009-06-05T22:54:25Z"
                 error: failed to parse primary key
                 error_count: 2
-                expired_at: "2013-04-29T19:38:32Z"
+                expired_at: "1998-12-14T22:10:24Z"
                 id: 3
-                last_error_at: "2001-01-09T01:20:29Z"
+                last_error_at: "1978-02-15T19:04:44Z"
                 schema: public
                 subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
                 table_name: payments
-                updated_at: "2005-07-25T23:32:25Z"
-              - completed_at: "1995-08-12T12:39:00Z"
-                created_at: "1977-03-20T23:49:50Z"
+                updated_at: "1994-11-27T12:06:47Z"
+              - completed_at: "1975-04-12T22:30:25Z"
+                created_at: "2009-06-05T22:54:25Z"
                 error: failed to parse primary key
                 error_count: 2
-                expired_at: "2013-04-29T19:38:32Z"
+                expired_at: "1998-12-14T22:10:24Z"
                 id: 3
-                last_error_at: "2001-01-09T01:20:29Z"
+                last_error_at: "1978-02-15T19:04:44Z"
                 schema: public
                 subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
                 table_name: payments
-                updated_at: "2005-07-25T23:32:25Z"
-              - completed_at: "1995-08-12T12:39:00Z"
-                created_at: "1977-03-20T23:49:50Z"
+                updated_at: "1994-11-27T12:06:47Z"
+              - completed_at: "1975-04-12T22:30:25Z"
+                created_at: "2009-06-05T22:54:25Z"
                 error: failed to parse primary key
                 error_count: 2
-                expired_at: "2013-04-29T19:38:32Z"
+                expired_at: "1998-12-14T22:10:24Z"
                 id: 3
-                last_error_at: "2001-01-09T01:20:29Z"
+                last_error_at: "1978-02-15T19:04:44Z"
                 schema: public
                 subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
                 table_name: payments
-                updated_at: "2005-07-25T23:32:25Z"
+                updated_at: "1994-11-27T12:06:47Z"
+  /api/subscriptions/current:
+    get:
+      tags:
+      - Subscriptions
+      summary: Get Subscriptions
+      description: Get current subscription data
+      operationId: Subscriptions#Get
+      responses:
+        "201":
+          description: Created response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+              example:
+                id: e32ur90j2r
+                published_tables:
+                - name: payments
+                  schema: public
+                - name: payments
+                  schema: public
+  /api/subscriptions/current/actions/add-table:
+    post:
+      tags:
+      - Subscriptions
+      summary: AddTable Subscriptions
+      description: Add table to publication, relying on an import manager to schedule
+        the job
+      operationId: Subscriptions#AddTable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionPublishedTable'
+            example:
+              name: payments
+              schema: public
+      responses:
+        "201":
+          description: Created response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+              example:
+                id: e32ur90j2r
+                published_tables:
+                - name: payments
+                  schema: public
+                - name: payments
+                  schema: public
+                - name: payments
+                  schema: public
+  /api/subscriptions/current/actions/stop-table:
+    post:
+      tags:
+      - Subscriptions
+      summary: StopTable Subscriptions
+      description: Stop a table by removing it from the publication, and expiring
+        any import jobs
+      operationId: Subscriptions#StopTable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionPublishedTable'
+            example:
+              name: payments
+              schema: public
+      responses:
+        "202":
+          description: Accepted response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+              example:
+                id: e32ur90j2r
+                published_tables:
+                - name: payments
+                  schema: public
+                - name: payments
+                  schema: public
+                - name: payments
+                  schema: public
+                - name: payments
+                  schema: public
   /api/tables:
     get:
       tags:
@@ -122,18 +233,34 @@ paths:
                 items:
                   $ref: '#/components/schemas/Table'
                 example:
-                - name: payments
-                  published: false
+                - import_status: unknown
+                  name: payments
+                  publication_status: active
                   schema: public
-                - name: payments
-                  published: false
+                - import_status: unknown
+                  name: payments
+                  publication_status: active
+                  schema: public
+                - import_status: unknown
+                  name: payments
+                  publication_status: active
                   schema: public
               example:
-              - name: payments
-                published: false
+              - import_status: unknown
+                name: payments
+                publication_status: active
                 schema: public
-              - name: payments
-                published: false
+              - import_status: unknown
+                name: payments
+                publication_status: active
+                schema: public
+              - import_status: unknown
+                name: payments
+                publication_status: active
+                schema: public
+              - import_status: unknown
+                name: payments
+                publication_status: active
                 schema: public
 components:
   schemas:
@@ -156,12 +283,12 @@ components:
         completed_at:
           type: string
           description: Import was completed at this time
-          example: "1995-05-15T14:37:55Z"
+          example: "2014-04-04T03:50:30Z"
           format: date-time
         created_at:
           type: string
           description: Import was created at this time
-          example: "1993-06-15T04:15:46Z"
+          example: "1979-02-09T18:20:24Z"
           format: date-time
         error:
           type: string
@@ -175,7 +302,7 @@ components:
         expired_at:
           type: string
           description: Import was expired at this time
-          example: "1996-12-17T16:38:47Z"
+          example: "1997-09-04T01:50:58Z"
           format: date-time
         id:
           type: integer
@@ -185,7 +312,7 @@ components:
         last_error_at:
           type: string
           description: Timestamp of last error, only reset on error
-          example: "1978-06-23T15:03:23Z"
+          example: "2006-04-24T06:15:56Z"
           format: date-time
         schema:
           type: string
@@ -203,21 +330,21 @@ components:
         updated_at:
           type: string
           description: Import was last updated at this time
-          example: "2010-07-31T19:22:13Z"
+          example: "2011-12-13T18:08:19Z"
           format: date-time
       description: Import job for a Postgres table
       example:
-        completed_at: "1986-04-06T20:58:08Z"
-        created_at: "1973-04-22T15:17:46Z"
+        completed_at: "1975-09-21T05:38:42Z"
+        created_at: "2009-05-21T10:06:30Z"
         error: failed to parse primary key
         error_count: 2
-        expired_at: "1999-08-28T10:27:27Z"
+        expired_at: "2001-10-16T00:49:54Z"
         id: 3
-        last_error_at: "1975-08-15T07:07:27Z"
+        last_error_at: "1975-09-16T13:06:59Z"
         schema: public
         subscription_id: CEF3CAF7-AB82-083A-2F08-9497BE6B7488
         table_name: payments
-        updated_at: "1970-08-18T22:09:13Z"
+        updated_at: "2012-02-14T03:31:00Z"
       required:
       - id
       - subscription_id
@@ -226,27 +353,93 @@ components:
       - created_at
       - updated_at
       - error_count
-    Table:
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID of subscription
+          example: e32ur90j2r
+        published_tables:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubscriptionPublishedTable'
+          description: List of published tables
+          example:
+          - name: payments
+            schema: public
+          - name: payments
+            schema: public
+          - name: payments
+            schema: public
+      example:
+        id: e32ur90j2r
+        published_tables:
+        - name: payments
+          schema: public
+        - name: payments
+          schema: public
+      required:
+      - id
+      - published_tables
+    SubscriptionPublishedTable:
       type: object
       properties:
         name:
           type: string
           description: Postgres table name
           example: payments
-        published:
-          type: boolean
-          description: True if this table is already streaming
-          example: false
+        schema:
+          type: string
+          description: Postgres table schema
+          example: public
+      description: Table on subscription that is published
+      example:
+        name: payments
+        schema: public
+      required:
+      - schema
+      - name
+      - publication_status
+      - import_status
+    Table:
+      type: object
+      properties:
+        import_status:
+          type: string
+          description: Status of table imports
+          example: unknown
+          enum:
+          - inactive
+          - scheduled
+          - active
+          - error
+          - complete
+          - expired
+          - unknown
+        name:
+          type: string
+          description: Postgres table name
+          example: payments
+        publication_status:
+          type: string
+          description: Status of the publication, set to active when table is streaming
+          example: active
+          enum:
+          - inactive
+          - active
         schema:
           type: string
           description: Postgres table schema
           example: public
       description: Postgres table, with sync and import status
       example:
+        import_status: unknown
         name: payments
-        published: false
+        publication_status: active
         schema: public
       required:
       - schema
       - name
-      - published
+      - publication_status
+      - import_status

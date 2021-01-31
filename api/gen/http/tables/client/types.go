@@ -22,8 +22,10 @@ type TableResponse struct {
 	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
 	// Postgres table name
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// True if this table is already streaming
-	Published *bool `form:"published,omitempty" json:"published,omitempty" xml:"published,omitempty"`
+	// Status of the publication, set to active when table is streaming
+	PublicationStatus *string `form:"publication_status,omitempty" json:"publication_status,omitempty" xml:"publication_status,omitempty"`
+	// Status of table imports
+	ImportStatus *string `form:"import_status,omitempty" json:"import_status,omitempty" xml:"import_status,omitempty"`
 }
 
 // NewListTableOK builds a "Tables" service "List" endpoint result from a HTTP
@@ -44,8 +46,21 @@ func ValidateTableResponse(body *TableResponse) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
-	if body.Published == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("published", "body"))
+	if body.PublicationStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("publication_status", "body"))
+	}
+	if body.ImportStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("import_status", "body"))
+	}
+	if body.PublicationStatus != nil {
+		if !(*body.PublicationStatus == "inactive" || *body.PublicationStatus == "active") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.publication_status", *body.PublicationStatus, []interface{}{"inactive", "active"}))
+		}
+	}
+	if body.ImportStatus != nil {
+		if !(*body.ImportStatus == "inactive" || *body.ImportStatus == "scheduled" || *body.ImportStatus == "active" || *body.ImportStatus == "error" || *body.ImportStatus == "complete" || *body.ImportStatus == "expired" || *body.ImportStatus == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.import_status", *body.ImportStatus, []interface{}{"inactive", "scheduled", "active", "error", "complete", "expired", "unknown"}))
+		}
 	}
 	return
 }
