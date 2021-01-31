@@ -12,7 +12,7 @@ produces:
 - application/xml
 - application/gob
 paths:
-  /health/check:
+  /api/health/check:
     get:
       tags:
       - Health
@@ -28,7 +28,7 @@ paths:
             - status
       schemes:
       - http
-  /imports:
+  /api/imports:
     get:
       tags:
       - Imports
@@ -44,7 +44,7 @@ paths:
               $ref: '#/definitions/ImportResponse'
       schemes:
       - http
-  /tables:
+  /api/tables:
     get:
       tags:
       - Tables

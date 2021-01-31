@@ -5,7 +5,7 @@ info:
 servers:
 - url: http://localhost:8000
 paths:
-  /health/check:
+  /api/health/check:
     get:
       tags:
       - Health
@@ -21,7 +21,7 @@ paths:
                 $ref: '#/components/schemas/CheckResponseBody'
               example:
                 status: healthy
-  /imports:
+  /api/imports:
     get:
       tags:
       - Imports
@@ -94,7 +94,7 @@ paths:
                 subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
                 table_name: payments
                 updated_at: "2005-07-25T23:32:25Z"
-  /tables:
+  /api/tables:
     get:
       tags:
       - Tables

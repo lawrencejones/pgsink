@@ -9,5 +9,5 @@ package server
 
 // ListImportsPath returns the URL path to the Imports service List HTTP endpoint.
 func ListImportsPath() string {
-	return "/imports"
+	return "/api/imports"
 }

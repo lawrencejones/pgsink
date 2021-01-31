@@ -29,7 +29,7 @@ var _ = Service("Health", func() {
 	Description("Provide service health information")
 
 	HTTP(func() {
-		Path("/health")
+		Path("/api/health")
 	})
 
 	Method("Check", func() {
@@ -54,7 +54,7 @@ var _ = Service("Tables", func() {
 	Description("Expose Postgres tables, and their import/sync status")
 
 	HTTP(func() {
-		Path("/tables")
+		Path("/api/tables")
 	})
 
 	Method("List", func() {
@@ -105,7 +105,7 @@ var _ = Service("Imports", func() {
 	Description("Manage table imports, scoped to the server subscription ID")
 
 	HTTP(func() {
-		Path("/imports")
+		Path("/api/imports")
 	})
 
 	Method("List", func() {

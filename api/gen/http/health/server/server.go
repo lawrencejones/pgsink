@@ -55,7 +55,7 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
-			{"Check", "GET", "/health/check"},
+			{"Check", "GET", "/api/health/check"},
 		},
 		Check: NewCheckHandler(e.Check, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -83,7 +83,7 @@ func MountCheckHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/health/check", f)
+	mux.Handle("GET", "/api/health/check", f)
 }
 
 // NewCheckHandler creates a HTTP handler which loads the HTTP request and

@@ -9,5 +9,5 @@ package client
 
 // CheckHealthPath returns the URL path to the Health service Check HTTP endpoint.
 func CheckHealthPath() string {
-	return "/health/check"
+	return "/api/health/check"
 }

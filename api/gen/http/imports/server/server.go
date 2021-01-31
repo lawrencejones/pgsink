@@ -55,7 +55,7 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
-			{"List", "GET", "/imports"},
+			{"List", "GET", "/api/imports"},
 		},
 		List: NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -83,7 +83,7 @@ func MountListHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/imports", f)
+	mux.Handle("GET", "/api/imports", f)
 }
 
 // NewListHandler creates a HTTP handler which loads the HTTP request and calls
