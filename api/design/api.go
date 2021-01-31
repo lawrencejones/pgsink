@@ -26,6 +26,12 @@ var _ = API("pgsink", func() {
 	Description(string(desc))
 })
 
+var _ = Service("Web", func() {
+	Description("Web static web content for the UI")
+
+	Files("/web/{*filepath}", "web/build")
+})
+
 var _ = Service("Health", func() {
 	Description("Provide service health information")
 

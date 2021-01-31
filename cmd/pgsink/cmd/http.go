@@ -10,6 +10,7 @@ import (
 	importsserver "github.com/lawrencejones/pgsink/api/gen/http/imports/server"
 	subscriptionsserver "github.com/lawrencejones/pgsink/api/gen/http/subscriptions/server"
 	tablesserver "github.com/lawrencejones/pgsink/api/gen/http/tables/server"
+	webserver "github.com/lawrencejones/pgsink/api/gen/http/web/server"
 	"github.com/lawrencejones/pgsink/api/gen/imports"
 	"github.com/lawrencejones/pgsink/api/gen/subscriptions"
 	"github.com/lawrencejones/pgsink/api/gen/tables"
@@ -69,6 +70,10 @@ func buildHTTPServer(logger kitlog.Logger, addr string,
 		subscriptionsserver.Mount(mux, subscriptionsServer)
 		healthserver.Mount(mux, healthServer)
 	}
+
+	// Small exception, which is our web file server. This doesn't need endpoint
+	// configuration, as it's just a dumb webserver.
+	webserver.Mount(mux)
 
 	// Wrap the multiplexer with additional middlewares. Middlewares mounted
 	// here apply to all the service endpoints, and run in reverse order.
