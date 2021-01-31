@@ -14,7 +14,7 @@ PGUSER ?= pgsink
 
 .PHONY: prog darwin linux generate clean
 .PHONY: migrate migrate-run structure.sql createdb dropdb recreatedb test docs
-.PHONY: api/gen internal/dbschema
+.PHONY: api/gen internal/dbschema openapi-generator.jar clients/typescript
 
 ################################################################################
 # Build
@@ -103,8 +103,9 @@ clients/typescript:
 	rm -rfv $@
 	java -jar openapi-generator-cli.jar \
 		generate \
-			--generator-name typescript-fetch \
+			--generator-name typescript \
 			--input-spec api/gen/http/openapi3.json \
-			--additional-properties npmName=pgsink \
+			--additional-properties npmName=pgsink-client \
 			--additional-properties npmRepository=https://github.com/lawrencejones/pgsink \
+			--additional-properties platform=browser \
 			--output $@
