@@ -14,6 +14,7 @@ import (
 	"os"
 
 	healthc "github.com/lawrencejones/pgsink/api/gen/http/health/client"
+	importsc "github.com/lawrencejones/pgsink/api/gen/http/imports/client"
 	tablesc "github.com/lawrencejones/pgsink/api/gen/http/tables/client"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
@@ -26,6 +27,7 @@ import (
 func UsageCommands() string {
 	return `health check
 tables list
+imports list
 `
 }
 
@@ -33,6 +35,7 @@ tables list
 func UsageExamples() string {
 	return os.Args[0] + ` health check` + "\n" +
 		os.Args[0] + ` tables list --schema "public,payments"` + "\n" +
+		os.Args[0] + ` imports list` + "\n" +
 		""
 }
 
@@ -54,12 +57,19 @@ func ParseEndpoint(
 
 		tablesListFlags      = flag.NewFlagSet("list", flag.ExitOnError)
 		tablesListSchemaFlag = tablesListFlags.String("schema", "public", "")
+
+		importsFlags = flag.NewFlagSet("imports", flag.ContinueOnError)
+
+		importsListFlags = flag.NewFlagSet("list", flag.ExitOnError)
 	)
 	healthFlags.Usage = healthUsage
 	healthCheckFlags.Usage = healthCheckUsage
 
 	tablesFlags.Usage = tablesUsage
 	tablesListFlags.Usage = tablesListUsage
+
+	importsFlags.Usage = importsUsage
+	importsListFlags.Usage = importsListUsage
 
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
 		return nil, nil, err
@@ -80,6 +90,8 @@ func ParseEndpoint(
 			svcf = healthFlags
 		case "tables":
 			svcf = tablesFlags
+		case "imports":
+			svcf = importsFlags
 		default:
 			return nil, nil, fmt.Errorf("unknown service %q", svcn)
 		}
@@ -106,6 +118,13 @@ func ParseEndpoint(
 			switch epn {
 			case "list":
 				epf = tablesListFlags
+
+			}
+
+		case "imports":
+			switch epn {
+			case "list":
+				epf = importsListFlags
 
 			}
 
@@ -142,6 +161,13 @@ func ParseEndpoint(
 			case "list":
 				endpoint = c.List()
 				data, err = tablesc.BuildListPayload(*tablesListSchemaFlag)
+			}
+		case "imports":
+			c := importsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list":
+				endpoint = c.List()
+				data = nil
 			}
 		}
 	}
@@ -196,5 +222,28 @@ List all tables
 
 Example:
     `+os.Args[0]+` tables list --schema "public,payments"
+`, os.Args[0])
+}
+
+// importsUsage displays the usage of the imports command and its subcommands.
+func importsUsage() {
+	fmt.Fprintf(os.Stderr, `Manage table imports, scoped to the server subscription ID
+Usage:
+    %s [globalflags] imports COMMAND [flags]
+
+COMMAND:
+    list: List all imports
+
+Additional help:
+    %s imports COMMAND --help
+`, os.Args[0], os.Args[0])
+}
+func importsListUsage() {
+	fmt.Fprintf(os.Stderr, `%s [flags] imports list
+
+List all imports
+
+Example:
+    `+os.Args[0]+` imports list
 `, os.Args[0])
 }

@@ -1,8 +1,6 @@
 openapi: 3.0.3
 info:
   title: pgsink
-  description: |
-    # pgsink
   version: "1.0"
 servers:
 - url: http://localhost:8000
@@ -23,6 +21,79 @@ paths:
                 $ref: '#/components/schemas/CheckResponseBody'
               example:
                 status: healthy
+  /imports:
+    get:
+      tags:
+      - Imports
+      summary: List Imports
+      description: List all imports
+      operationId: Imports#List
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Import'
+                example:
+                - completed_at: "1995-08-12T12:39:00Z"
+                  created_at: "1977-03-20T23:49:50Z"
+                  error: failed to parse primary key
+                  error_count: 2
+                  expired_at: "2013-04-29T19:38:32Z"
+                  id: 3
+                  last_error_at: "2001-01-09T01:20:29Z"
+                  schema: public
+                  subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
+                  table_name: payments
+                  updated_at: "2005-07-25T23:32:25Z"
+                - completed_at: "1995-08-12T12:39:00Z"
+                  created_at: "1977-03-20T23:49:50Z"
+                  error: failed to parse primary key
+                  error_count: 2
+                  expired_at: "2013-04-29T19:38:32Z"
+                  id: 3
+                  last_error_at: "2001-01-09T01:20:29Z"
+                  schema: public
+                  subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
+                  table_name: payments
+                  updated_at: "2005-07-25T23:32:25Z"
+              example:
+              - completed_at: "1995-08-12T12:39:00Z"
+                created_at: "1977-03-20T23:49:50Z"
+                error: failed to parse primary key
+                error_count: 2
+                expired_at: "2013-04-29T19:38:32Z"
+                id: 3
+                last_error_at: "2001-01-09T01:20:29Z"
+                schema: public
+                subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
+                table_name: payments
+                updated_at: "2005-07-25T23:32:25Z"
+              - completed_at: "1995-08-12T12:39:00Z"
+                created_at: "1977-03-20T23:49:50Z"
+                error: failed to parse primary key
+                error_count: 2
+                expired_at: "2013-04-29T19:38:32Z"
+                id: 3
+                last_error_at: "2001-01-09T01:20:29Z"
+                schema: public
+                subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
+                table_name: payments
+                updated_at: "2005-07-25T23:32:25Z"
+              - completed_at: "1995-08-12T12:39:00Z"
+                created_at: "1977-03-20T23:49:50Z"
+                error: failed to parse primary key
+                error_count: 2
+                expired_at: "2013-04-29T19:38:32Z"
+                id: 3
+                last_error_at: "2001-01-09T01:20:29Z"
+                schema: public
+                subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
+                table_name: payments
+                updated_at: "2005-07-25T23:32:25Z"
   /tables:
     get:
       tags:
@@ -55,15 +126,7 @@ paths:
                   schema: public
                 - name: payments
                   schema: public
-                - name: payments
-                  schema: public
-                - name: payments
-                  schema: public
               example:
-              - name: payments
-                schema: public
-              - name: payments
-                schema: public
               - name: payments
                 schema: public
               - name: payments
@@ -83,6 +146,82 @@ components:
         status: healthy
       required:
       - status
+    Import:
+      type: object
+      properties:
+        completed_at:
+          type: string
+          description: Import was completed at this time
+          example: "1995-05-15T14:37:55Z"
+          format: date-time
+        created_at:
+          type: string
+          description: Import was created at this time
+          example: "1993-06-15T04:15:46Z"
+          format: date-time
+        error:
+          type: string
+          description: Last import error
+          example: failed to parse primary key
+        error_count:
+          type: integer
+          description: Count of error attempts
+          example: 2
+          format: int64
+        expired_at:
+          type: string
+          description: Import was expired at this time
+          example: "1996-12-17T16:38:47Z"
+          format: date-time
+        id:
+          type: integer
+          description: Unique ID for the import
+          example: 3
+          format: int64
+        last_error_at:
+          type: string
+          description: Timestamp of last error, only reset on error
+          example: "1978-06-23T15:03:23Z"
+          format: date-time
+        schema:
+          type: string
+          description: Postgres table schema
+          example: public
+        subscription_id:
+          type: string
+          description: Subscription ID, associating this import to a specific subscription
+          example: 233374F1-297F-8711-5FC3-4F6B3731AD63
+          format: uuid
+        table_name:
+          type: string
+          description: Postgres table name
+          example: payments
+        updated_at:
+          type: string
+          description: Import was last updated at this time
+          example: "2010-07-31T19:22:13Z"
+          format: date-time
+      description: Import job for a Postgres table
+      example:
+        completed_at: "1986-04-06T20:58:08Z"
+        created_at: "1973-04-22T15:17:46Z"
+        error: failed to parse primary key
+        error_count: 2
+        expired_at: "1999-08-28T10:27:27Z"
+        id: 3
+        last_error_at: "1975-08-15T07:07:27Z"
+        schema: public
+        subscription_id: CEF3CAF7-AB82-083A-2F08-9497BE6B7488
+        table_name: payments
+        updated_at: "1970-08-18T22:09:13Z"
+      required:
+      - id
+      - subscription_id
+      - schema
+      - table_name
+      - created_at
+      - updated_at
+      - error_count
     Table:
       type: object
       properties:

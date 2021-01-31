@@ -14,6 +14,7 @@ import (
 
 	"github.com/lawrencejones/pgsink/api"
 	"github.com/lawrencejones/pgsink/api/gen/health"
+	apiimports "github.com/lawrencejones/pgsink/api/gen/imports"
 	"github.com/lawrencejones/pgsink/api/gen/tables"
 	middleware "github.com/lawrencejones/pgsink/internal/middleware"
 	"github.com/lawrencejones/pgsink/internal/telem"
@@ -255,16 +256,28 @@ func Run() (err error) {
 
 	switch command {
 	case serveCmd.FullCommand():
+		pub, err := subscription.FindPublication(ctx, db, *subscriptionName)
+		if err != nil {
+			return fmt.Errorf(
+				"failed to find publication for subscription name '%s': %w", *subscriptionName, err)
+		}
+		if pub == nil {
+			return fmt.Errorf(
+				"no publication for subscription name '%s', have you started a stream against this database?", *subscriptionName)
+		}
+
 		// Initialise services
 		var (
-			tablesService = api.NewTables(db)
-			healthService = api.NewHealth()
+			tablesService  = api.NewTables(db)
+			importsService = api.NewImports(db, pub.ID)
+			healthService  = api.NewHealth()
 		)
 
 		// Wrap services in endpoints, a calling abstraction that is transport independent
 		var (
-			tablesEndpoints = tables.NewEndpoints(tablesService)
-			healthEndpoints = health.NewEndpoints(healthService)
+			tablesEndpoints  = tables.NewEndpoints(tablesService)
+			importsEndpoints = apiimports.NewEndpoints(importsService)
+			healthEndpoints  = health.NewEndpoints(healthService)
 		)
 
 		// Apply application middlewares to all the endpoint groups
@@ -273,6 +286,7 @@ func Run() (err error) {
 				Use(m func(goa.Endpoint) goa.Endpoint)
 			}{
 				tablesEndpoints,
+				importsEndpoints,
 				healthEndpoints,
 			} {
 				endpoints.Use(middleware.Observe())
@@ -281,7 +295,7 @@ func Run() (err error) {
 
 		{
 			logger := kitlog.With(logger, "component", "http")
-			srv := buildHTTPServer(logger, *serveAddress, tablesEndpoints, healthEndpoints, *debug)
+			srv := buildHTTPServer(logger, *serveAddress, tablesEndpoints, importsEndpoints, healthEndpoints, *debug)
 
 			g.Add(
 				func() error {

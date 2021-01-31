@@ -67,9 +67,6 @@ var _ = Service("Tables", func() {
 				Example("public,payments")
 				Default("public")
 			})
-			Required(
-				"schema",
-			)
 		})
 
 		Result(ArrayOf(Table))
@@ -96,5 +93,71 @@ var Table = Type("Table", func() {
 	Required(
 		"schema",
 		"name",
+	)
+})
+
+var _ = Service("Imports", func() {
+	Description("Manage table imports, scoped to the server subscription ID")
+
+	HTTP(func() {
+		Path("/imports")
+	})
+
+	Method("List", func() {
+		Description("List all imports")
+
+		Result(ArrayOf(Import))
+
+		HTTP(func() {
+			GET("/")
+			Response(StatusOK)
+		})
+	})
+})
+
+var Import = Type("Import", func() {
+	Description("Import job for a Postgres table")
+	Attribute("id", Int, "Unique ID for the import", func() {
+		Example(3)
+	})
+	Attribute("subscription_id", String, "Subscription ID, associating this import to a specific subscription", func() {
+		Format(FormatUUID)
+	})
+	Attribute("schema", String, "Postgres table schema", func() {
+		Example("public")
+	})
+	Attribute("table_name", String, "Postgres table name", func() {
+		Example("payments")
+	})
+	Attribute("completed_at", String, "Import was completed at this time", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("created_at", String, "Import was created at this time", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, "Import was last updated at this time", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("expired_at", String, "Import was expired at this time", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("error", String, "Last import error", func() {
+		Example("failed to parse primary key")
+	})
+	Attribute("error_count", Int, "Count of error attempts", func() {
+		Example("Failed each of the last two times it was run", 2)
+	})
+	Attribute("last_error_at", String, "Timestamp of last error, only reset on error", func() {
+		Format(FormatDateTime)
+	})
+
+	Required(
+		"id",
+		"subscription_id",
+		"schema",
+		"table_name",
+		"created_at",
+		"updated_at",
+		"error_count",
 	)
 })
