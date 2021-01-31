@@ -69,7 +69,7 @@ test:
 	PGUSER=pgsink_test PGDATABASE=pgsink_test ginkgo -r pkg
 
 docs:
-	swagger serve --port=3000 api/gen/http/openapi.json
+	swagger serve --port=4000 api/gen/http/openapi.json
 
 ################################################################################
 # Codegen
@@ -97,15 +97,3 @@ internal/dbschema:
 openapi-generator-cli.jar:
 	curl https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/5.0.0-beta3/openapi-generator-cli-5.0.0-beta3.jar \
 		--output $@
-
-# https://openapi-generator.tech/docs/generators/typescript-fetch/
-clients/typescript:
-	rm -rfv $@
-	java -jar openapi-generator-cli.jar \
-		generate \
-			--generator-name typescript \
-			--input-spec api/gen/http/openapi3.json \
-			--additional-properties npmName=pgsink-client \
-			--additional-properties npmRepository=https://github.com/lawrencejones/pgsink \
-			--additional-properties platform=browser \
-			--output $@
