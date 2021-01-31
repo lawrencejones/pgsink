@@ -167,6 +167,10 @@ definitions:
         type: string
         description: Postgres table name
         example: payments
+      published:
+        type: boolean
+        description: True if this table is already streaming
+        example: false
       schema:
         type: string
         description: Postgres table schema
@@ -174,7 +178,9 @@ definitions:
     description: Postgres table, with sync and import status
     example:
       name: payments
+      published: false
       schema: public
     required:
     - schema
     - name
+    - published

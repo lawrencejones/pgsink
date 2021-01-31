@@ -39,4 +39,6 @@ type Table struct {
 	Schema string
 	// Postgres table name
 	Name string
+	// True if this table is already streaming
+	Published bool
 }

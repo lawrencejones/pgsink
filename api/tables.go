@@ -8,14 +8,16 @@ import (
 	pg "github.com/go-jet/jet/v2/postgres"
 	"github.com/lawrencejones/pgsink/api/gen/tables"
 	isv "github.com/lawrencejones/pgsink/internal/dbschema/information_schema/view"
+	"github.com/lawrencejones/pgsink/pkg/subscription"
 )
 
 type tablesService struct {
-	db *sql.DB
+	db  *sql.DB
+	pub *subscription.Publication
 }
 
-func NewTables(db *sql.DB) tables.Service {
-	return &tablesService{db}
+func NewTables(db *sql.DB, pub *subscription.Publication) tables.Service {
+	return &tablesService{db, pub}
 }
 
 func (s *tablesService) List(ctx context.Context, payload *tables.ListPayload) (tables []*tables.Table, err error) {
@@ -38,6 +40,21 @@ func (s *tablesService) List(ctx context.Context, payload *tables.ListPayload) (
 
 	if err := stmt.QueryContext(ctx, s.db, &tables); err != nil {
 		return nil, err
+	}
+
+	// We can calculate the published field in the SQL query, but it's easier to reuse the
+	// publication logic for now.
+	publishedTables, err := s.pub.GetTables(ctx, s.db)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, table := range tables {
+		for _, publishedTable := range publishedTables {
+			if table.Name == publishedTable.TableName && table.Schema == publishedTable.Schema {
+				table.Published = true
+			}
+		}
 	}
 
 	return

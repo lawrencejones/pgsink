@@ -21,6 +21,8 @@ type TableResponse struct {
 	Schema string `form:"schema" json:"schema" xml:"schema"`
 	// Postgres table name
 	Name string `form:"name" json:"name" xml:"name"`
+	// True if this table is already streaming
+	Published bool `form:"published" json:"published" xml:"published"`
 }
 
 // NewListResponseBody builds the HTTP response body from the result of the

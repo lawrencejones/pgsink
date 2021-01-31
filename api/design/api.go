@@ -89,10 +89,15 @@ var Table = Type("Table", func() {
 	Attribute("name", String, "Postgres table name", func() {
 		Example("payments")
 	})
+	Attribute("published", Boolean, "True if this table is already streaming", func() {
+		Example("The table is active on the Postgres publication", true)
+		Example("Table is not being streamed", false)
+	})
 
 	Required(
 		"schema",
 		"name",
+		"published",
 	)
 })
 

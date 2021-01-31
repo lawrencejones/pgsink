@@ -268,8 +268,8 @@ func Run() (err error) {
 
 		// Initialise services
 		var (
-			tablesService  = api.NewTables(db)
-			importsService = api.NewImports(db, pub.ID)
+			tablesService  = api.NewTables(db, pub)
+			importsService = api.NewImports(db, pub)
 			healthService  = api.NewHealth()
 		)
 

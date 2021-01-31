@@ -8,22 +8,23 @@ import (
 	apiimports "github.com/lawrencejones/pgsink/api/gen/imports"
 	"github.com/lawrencejones/pgsink/internal/dbschema/pgsink/model"
 	. "github.com/lawrencejones/pgsink/internal/dbschema/pgsink/table"
+	"github.com/lawrencejones/pgsink/pkg/subscription"
 )
 
 type importsService struct {
-	db             *sql.DB
-	subscriptionID string
+	db  *sql.DB
+	pub *subscription.Publication
 }
 
-func NewImports(db *sql.DB, subscriptionID string) apiimports.Service {
-	return &importsService{db, subscriptionID}
+func NewImports(db *sql.DB, pub *subscription.Publication) apiimports.Service {
+	return &importsService{db, pub}
 }
 
 func (s *importsService) List(ctx context.Context) (imports []*apiimports.Import, err error) {
 	stmt := ImportJobs.
 		SELECT(ImportJobs.AllColumns).
 		WHERE(
-			ImportJobs.SubscriptionID.EQ(pg.String(s.subscriptionID)),
+			ImportJobs.SubscriptionID.EQ(pg.String(s.pub.ID)),
 		)
 
 	var rows []model.ImportJobs

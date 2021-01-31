@@ -22,6 +22,8 @@ type TableResponse struct {
 	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
 	// Postgres table name
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// True if this table is already streaming
+	Published *bool `form:"published,omitempty" json:"published,omitempty" xml:"published,omitempty"`
 }
 
 // NewListTableOK builds a "Tables" service "List" endpoint result from a HTTP
@@ -41,6 +43,9 @@ func ValidateTableResponse(body *TableResponse) (err error) {
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Published == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("published", "body"))
 	}
 	return
 }
