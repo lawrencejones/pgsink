@@ -34,6 +34,6 @@ require (
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b // indirect
 	golang.org/x/tools v0.0.0-20210108195828-e2f9c7f1fc8e
-	google.golang.org/api v0.36.0
+	google.golang.org/api v0.38.0
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
