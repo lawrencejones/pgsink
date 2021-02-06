@@ -13,7 +13,8 @@ PGDATABASE ?= pgsink
 PGUSER ?= pgsink
 
 .PHONY: prog darwin linux generate clean
-.PHONY: migrate migrate-run structure.sql createdb dropdb recreatedb test docs internal/dbschema
+.PHONY: migrate migrate-run structure.sql createdb dropdb recreatedb test docs
+.PHONY: api/gen internal/dbschema openapi-generator.jar clients/typescript
 
 ################################################################################
 # Build
@@ -67,6 +68,17 @@ recreatedb: dropdb createdb
 test:
 	PGUSER=pgsink_test PGDATABASE=pgsink_test ginkgo -r pkg
 
+docs:
+	swagger serve --port=4000 api/gen/http/openapi.json
+
+################################################################################
+# Codegen
+################################################################################
+
+# Generate API code, from server to client and service stubs
+api/gen:
+	goa gen github.com/lawrencejones/pgsink/api/design -o api
+
 # Generates database types from live Postgres schema (start docker-compose for
 # this)
 internal/dbschema:
@@ -75,3 +87,13 @@ internal/dbschema:
 	jet -source=PostgreSQL -host=localhost -port=5432 -user=$(PGUSER) -dbname=$(PGDATABASE) -schema=information_schema -path=tmp/dbschema
 	rm -rf $@
 	mv tmp/dbschema/pgsink $@
+
+############################################################
+# Our clients, for other languages
+############################################################
+
+# We can't use the version installed by brew as this generates a different
+# client format to what is integrated so we must use v5 or later.
+openapi-generator-cli.jar:
+	curl https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/5.0.0-beta3/openapi-generator-cli-5.0.0-beta3.jar \
+		--output $@

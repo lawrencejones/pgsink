@@ -12,6 +12,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lawrencejones/pgsink/api"
+	"github.com/lawrencejones/pgsink/api/gen/health"
+	apiimports "github.com/lawrencejones/pgsink/api/gen/imports"
+	apisubscriptions "github.com/lawrencejones/pgsink/api/gen/subscriptions"
+	"github.com/lawrencejones/pgsink/api/gen/tables"
+	middleware "github.com/lawrencejones/pgsink/internal/middleware"
 	"github.com/lawrencejones/pgsink/internal/telem"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/decode"
@@ -26,6 +32,7 @@ import (
 	"contrib.go.opencensus.io/integrations/ocsql"
 	"github.com/alecthomas/kingpin"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/getsentry/sentry-go"
 	kitlog "github.com/go-kit/kit/log"
 	level "github.com/go-kit/kit/log/level"
 	"github.com/jackc/pgconn"
@@ -35,6 +42,7 @@ import (
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opencensus.io/trace"
+	goa "goa.design/goa/v3/pkg"
 )
 
 var logger kitlog.Logger
@@ -47,10 +55,14 @@ var (
 	metricsAddress      = app.Flag("metrics-address", "Address to bind HTTP metrics listener").Default("127.0.0.1").String()
 	metricsPort         = app.Flag("metrics-port", "Port to bind HTTP metrics listener").Default("9525").Uint16()
 	jaegerAgentEndpoint = app.Flag("jaeger-agent-endpoint", "Endpoint for Jaeger agent").Default("localhost:6831").String()
+	sentryDSN           = app.Flag("sentry-dsn", "DSN key for the Sentry exceptions project").Envar("PGSINK_SENTRY_DSN").String()
 
 	// Each subscription has a name and a unique identifier
 	subscriptionName = app.Flag("subscription-name", "Subscription name, matches Postgres publication").Default("pgsink").String()
 	schemaName       = app.Flag("schema", "Postgres schema name, in which we store pgsink resources").Default("pgsink").String()
+
+	serveCmd     = app.Command("serve", "Serve HTTP controls")
+	serveAddress = app.Flag("address", "Listen on this address").Default("localhost:8080").String()
 
 	stream           = app.Command("stream", "Stream changes into sink")
 	streamConsume    = stream.Flag("consume", "Consume messages from the subscription").Default("true").Bool()
@@ -154,6 +166,31 @@ func Run() (err error) {
 		)
 	}
 
+	// If we're given a Sentry DSN, we'll want to initialise the client. Sentry clients can
+	// be acquired via the sentry.Hub helpers, which manage a collection of clients on
+	// behalf of many concurrent processes.
+	//
+	// https://pkg.go.dev/github.com/getsentry/sentry-go
+	if *sentryDSN != "" {
+		// Log anything Sentry related if we're in debug mode too
+		if *debug {
+			sentry.Logger.SetOutput(kitlog.NewStdlibAdapter(logger))
+		}
+
+		err := sentry.Init(sentry.ClientOptions{
+			Dsn:              *sentryDSN,
+			AttachStacktrace: true,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to initialise Sentry: %w", err)
+		}
+
+		defer func() {
+			logger.Log("msg", "flushing any pending Sentry exceptions")
+			sentry.Flush(5 * time.Second)
+		}()
+	}
+
 	{
 		logger := kitlog.With(logger, "component", "metrics")
 
@@ -219,6 +256,76 @@ func Run() (err error) {
 	}
 
 	switch command {
+	case serveCmd.FullCommand():
+		pub, err := subscription.FindPublication(ctx, db, *subscriptionName)
+		if err != nil {
+			return fmt.Errorf(
+				"failed to find publication for subscription name '%s': %w", *subscriptionName, err)
+		}
+		if pub == nil {
+			return fmt.Errorf(
+				"no publication for subscription name '%s', have you started a stream against this database?", *subscriptionName)
+		}
+
+		// Initialise services
+		var (
+			tablesService        = api.NewTables(db, pub)
+			importsService       = api.NewImports(db, pub)
+			subscriptionsService = api.NewSubscriptions(db, pub)
+			healthService        = api.NewHealth()
+		)
+
+		// Wrap services in endpoints, a calling abstraction that is transport independent
+		var (
+			tablesEndpoints        = tables.NewEndpoints(tablesService)
+			importsEndpoints       = apiimports.NewEndpoints(importsService)
+			subscriptionsEndpoints = apisubscriptions.NewEndpoints(subscriptionsService)
+			healthEndpoints        = health.NewEndpoints(healthService)
+		)
+
+		// Apply application middlewares to all the endpoint groups
+		{
+			for _, endpoints := range []interface {
+				Use(m func(goa.Endpoint) goa.Endpoint)
+			}{
+				tablesEndpoints,
+				importsEndpoints,
+				subscriptionsEndpoints,
+				healthEndpoints,
+			} {
+				endpoints.Use(middleware.Observe())
+			}
+		}
+
+		{
+			logger := kitlog.With(logger, "component", "http")
+			srv := buildHTTPServer(logger, *serveAddress,
+				tablesEndpoints,
+				importsEndpoints,
+				subscriptionsEndpoints,
+				healthEndpoints,
+				*debug)
+
+			g.Add(
+				func() error {
+					logger.Log("event", "listen", "address", *serveAddress)
+					if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+						return err
+					}
+
+					return nil
+				},
+				func(error) {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+
+					srv.Shutdown(ctx)
+				},
+			)
+		}
+
+		return g.Run()
+
 	case stream.FullCommand():
 		var (
 			sub     *subscription.Subscription
