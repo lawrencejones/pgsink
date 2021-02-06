@@ -151,7 +151,7 @@ func Run() (err error) {
 		// If we're asked to shutdown, we use the rungroup to trigger interrupts for every
 		// component
 		g.Add(
-			func() error {
+			reportCompletion(logger, func() error {
 				select {
 				case <-shutdown:
 					logger.Log("event", "requesting_shutdown", "msg", "received signal, requesting shutdown")
@@ -159,7 +159,7 @@ func Run() (err error) {
 				}
 
 				return nil
-			},
+			}),
 			func(error) {
 				cancel() // end the shutdown select
 			},
@@ -208,14 +208,14 @@ func Run() (err error) {
 		srv.Handler = mux
 
 		g.Add(
-			func() error {
+			reportCompletion(logger, func() error {
 				logger.Log("event", "listen", "address", *metricsAddress, "port", *metricsPort)
 				if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 					return err
 				}
 
 				return nil
-			},
+			}),
 			func(error) {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
@@ -307,14 +307,14 @@ func Run() (err error) {
 				*debug)
 
 			g.Add(
-				func() error {
+				reportCompletion(logger, func() error {
 					logger.Log("event", "listen", "address", *serveAddress)
 					if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 						return err
 					}
 
 					return nil
-				},
+				}),
 				func(error) {
 					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 					defer cancel()
@@ -371,7 +371,7 @@ func Run() (err error) {
 			}
 
 			g.Add(
-				func() error {
+				reportCompletion(logger, func() error {
 					if *streamDecodeOnly {
 						for msg := range stream.Messages() {
 							spew.Dump(msg)
@@ -386,7 +386,7 @@ func Run() (err error) {
 							stream.Confirm(pglogrepl.LSN(*entry.Modification.LSN))
 						}
 					})
-				},
+				}),
 				func(error) {
 					stream.Shutdown(ctx)
 				},
@@ -398,9 +398,9 @@ func Run() (err error) {
 			manager := subscription.NewManager(db, *streamSubscriptionManagerOptions)
 
 			g.Add(
-				func() error {
+				reportCompletion(logger, func() error {
 					return manager.Manage(ctx, logger, *sub)
-				},
+				}),
 				func(error) {
 					manager.Shutdown(ctx)
 				},
@@ -412,9 +412,9 @@ func Run() (err error) {
 			manager := imports.NewManager(logger, db, *streamImportManagerOptions)
 
 			g.Add(
-				func() error {
+				reportCompletion(logger, func() error {
 					return manager.Manage(ctx, *sub)
-				},
+				}),
 				func(error) {
 					manager.Shutdown(ctx)
 				},
@@ -431,9 +431,9 @@ func Run() (err error) {
 			worker := imports.NewWorker(logger, db, *streamImportWorkerOptions)
 
 			g.Add(
-				func() error {
+				reportCompletion(logger, func() error {
 					return worker.Start(ctx, importer)
-				},
+				}),
 				func(error) {
 					worker.Shutdown(ctx)
 				},
@@ -445,6 +445,22 @@ func Run() (err error) {
 
 	app.FatalUsage(fmt.Sprintf("unsupported command: %s", command))
 	panic("unreachable")
+}
+
+// reportCompletion wraps a standard action function with a log message that triggers on
+// completion. Add actions added to a RunGroup should be wrapped thusly, to ensure
+// termination can be traced back to a specific action.
+func reportCompletion(logger kitlog.Logger, action func() error) func() error {
+	return func() error {
+		err := action()
+		if err != nil {
+			logger.Log("event", "finish_with_error", "error", err)
+		} else {
+			logger.Log("event", "finish")
+		}
+
+		return err
+	}
 }
 
 // pgxLoggerFunc wraps a function to satisfy the pgx logger interface
