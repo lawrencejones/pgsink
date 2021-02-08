@@ -27,7 +27,7 @@ require (
 	github.com/jackc/pgx/v4 v4.10.1
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/oklog/run v1.1.0
-	github.com/onsi/ginkgo v1.12.1
+	github.com/onsi/ginkgo v1.15.0
 	github.com/onsi/gomega v1.10.4
 	github.com/pkg/errors v0.9.1
 	github.com/pressly/goose v2.6.0+incompatible
