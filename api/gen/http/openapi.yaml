@@ -472,7 +472,7 @@ definitions:
         enum:
         - inactive
         - scheduled
-        - active
+        - in_progress
         - error
         - complete
         - expired

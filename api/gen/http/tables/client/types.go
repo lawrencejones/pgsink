@@ -58,8 +58,8 @@ func ValidateTableResponse(body *TableResponse) (err error) {
 		}
 	}
 	if body.ImportStatus != nil {
-		if !(*body.ImportStatus == "inactive" || *body.ImportStatus == "scheduled" || *body.ImportStatus == "active" || *body.ImportStatus == "error" || *body.ImportStatus == "complete" || *body.ImportStatus == "expired" || *body.ImportStatus == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.import_status", *body.ImportStatus, []interface{}{"inactive", "scheduled", "active", "error", "complete", "expired", "unknown"}))
+		if !(*body.ImportStatus == "inactive" || *body.ImportStatus == "scheduled" || *body.ImportStatus == "in_progress" || *body.ImportStatus == "error" || *body.ImportStatus == "complete" || *body.ImportStatus == "expired" || *body.ImportStatus == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.import_status", *body.ImportStatus, []interface{}{"inactive", "scheduled", "in_progress", "error", "complete", "expired", "unknown"}))
 		}
 	}
 	return

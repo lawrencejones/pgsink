@@ -102,9 +102,10 @@ var Table = Type("Table", func() {
 		Example("The table is published and is streaming", "active")
 	})
 	Attribute("import_status", String, "Status of table imports", func() {
-		Enum("inactive", "scheduled", "active", "error", "complete", "expired", "unknown")
+		Enum("inactive", "scheduled", "in_progress", "error", "complete", "expired", "unknown")
 		Example("Table has never been imported", "inactive")
 		Example("Import has been scheduled but no work has been completed", "scheduled")
+		Example("Import is underway, not yet complete", "in_progress")
 		Example("Import has thrown an error", "error")
 		Example("Import has completed successfully", "complete")
 		Example("Import has been expired", "expired")
