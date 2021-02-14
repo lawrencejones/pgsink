@@ -158,7 +158,12 @@ func WithReplicationSlotClean(prefix string) func(*DB) {
 func WithPublication(name string) func(*DB) {
 	return Option(WithPublicationClean(name)).And(WithLifecycle(
 		func(ctx context.Context, db, _ *sql.DB) (sql.Result, error) {
-			return db.ExecContext(ctx, fmt.Sprintf(`create publication %s;`, name))
+			result, err := db.ExecContext(ctx, fmt.Sprintf(`create publication %s;`, name))
+			if err != nil {
+				return result, err
+			}
+
+			return db.ExecContext(ctx, fmt.Sprintf(`comment on publication %s is 'short-id';`, name))
 		},
 		nil, // added by publication clean
 	))
