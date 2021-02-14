@@ -170,15 +170,19 @@ func (p Publication) UnsafeSetTables(ctx context.Context, db *sql.DB, tables ...
 	action := "set"
 
 	// There is no valid syntax for set tables that represents an empty set of tables.
-	// Instead, find all the published tables and drop them all (it should only be one
-	// table).
+	// Instead, find all the published tables and drop them all.
 	if len(fullyQualifiedTableNames) == 0 {
 		tables, err := p.GetTables(ctx, db)
 		if err != nil {
 			return err
 		}
 
-		fullyQualifiedTableNames := []string{}
+		// We wanted to set the publication to no tables, but it already had no tables
+		if len(tables) == 0 {
+			return nil // no action to take
+		}
+
+		fullyQualifiedTableNames = []string{}
 		for _, table := range tables {
 			fullyQualifiedTableNames = append(fullyQualifiedTableNames, table.String())
 		}
