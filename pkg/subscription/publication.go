@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lawrencejones/pgsink/pkg/changelog"
 	_ "github.com/lawrencejones/pgsink/internal/dbschema/pg_catalog/model"
 	. "github.com/lawrencejones/pgsink/internal/dbschema/pg_catalog/table"
 	. "github.com/lawrencejones/pgsink/internal/dbschema/pg_catalog/view"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 
 	. "github.com/go-jet/jet/v2/postgres"
 	kitlog "github.com/go-kit/kit/log"
@@ -68,6 +68,7 @@ func CreatePublication(ctx context.Context, db *sql.DB, name, id string) (*Publi
 func FindPublication(ctx context.Context, db *sql.DB, name string) (*Publication, error) {
 	query, args := PgPublication.
 		SELECT(
+			PgPublication.Oid,
 			PgPublication.Pubname.AS("name"),
 			Raw("obj_description(oid, 'pg_publication')").AS("id"),
 		).
@@ -76,7 +77,7 @@ func FindPublication(ctx context.Context, db *sql.DB, name string) (*Publication
 		Sql()
 
 	var pub Publication
-	if err := db.QueryRowContext(ctx, query, args...).Scan(&pub.Name, &pub.ID); err != nil {
+	if err := db.QueryRowContext(ctx, query, args...).Scan(&pub.OID, &pub.Name, &pub.ID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			err = nil
 		}
@@ -90,6 +91,7 @@ func FindPublication(ctx context.Context, db *sql.DB, name string) (*Publication
 // Publication represents a Postgres publication, the publishing component of a
 // subscription. It is coupled with a ReplicationSlot as a component of a Subscription.
 type Publication struct {
+	OID  uint32
 	Name string
 	ID   string
 }
@@ -104,6 +106,40 @@ func (p Publication) GetReplicationSlotName() string {
 // String provides an easy printer for anything using publications
 func (p Publication) String() string {
 	return fmt.Sprintf("%s[%s]", p.Name, p.ID)
+}
+
+// PublicationAdvisoryLockPrefix is the 64-bit bitmask we combine with the 32-bit Postgres
+// publication oid to generate an advisory lock for session control. The value has so
+// special significance.
+const PublicationAdvisoryLockPrefix = 0x0096c14500000000
+
+func (p Publication) getLockID() uint64 {
+	return PublicationAdvisoryLockPrefix | uint64(p.OID)
+}
+
+type PublicationSession struct {
+	GetTables func(ctx context.Context, db *sql.DB) (tables changelog.Tables, err error)
+	SetTables func(ctx context.Context, db *sql.DB, tables ...changelog.Table) error
+}
+
+// Begin ensures we make changes to a publication safely, with respect to other concurrent
+// actors. The methods GetTables and SetTables are often used together, and are prone to
+// racing- by exposing them only via a session, and making that session accessible only
+// around locks, we can prevent callers from accidentally hurting themselves.
+func (p Publication) Begin(ctx context.Context, db *sql.DB, action func(PublicationSession) error) error {
+	_, err := db.ExecContext(ctx, "select pg_advisory_lock($1);", p.getLockID())
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		db.ExecContext(ctx, "select pg_advisory_unlock($1);", p.getLockID())
+	}()
+
+	return action(PublicationSession{
+		GetTables: p.GetTables,
+		SetTables: p.UnsafeSetTables,
+	})
 }
 
 // GetTables returns a slice of table names that are included on the publication.
@@ -123,14 +159,34 @@ func (p Publication) GetTables(ctx context.Context, db *sql.DB) (tables changelo
 	return tables, nil
 }
 
-// SetTables resets the publication to include the given tables only
-func (p Publication) SetTables(ctx context.Context, db *sql.DB, tables ...changelog.Table) error {
+// UnsafeSetTables resets the publication to include the given tables only. It is unsafe
+// unless used through a session, as set will clobber any concurrent changes.
+func (p Publication) UnsafeSetTables(ctx context.Context, db *sql.DB, tables ...changelog.Table) error {
 	var fullyQualifiedTableNames []string
 	for _, table := range tables {
 		fullyQualifiedTableNames = append(fullyQualifiedTableNames, table.String())
 	}
 
-	query := fmt.Sprintf(`alter publication %s set table %s;`, p.Name, strings.Join(fullyQualifiedTableNames, ", "))
+	action := "set"
+
+	// There is no valid syntax for set tables that represents an empty set of tables.
+	// Instead, find all the published tables and drop them all (it should only be one
+	// table).
+	if len(fullyQualifiedTableNames) == 0 {
+		tables, err := p.GetTables(ctx, db)
+		if err != nil {
+			return err
+		}
+
+		fullyQualifiedTableNames := []string{}
+		for _, table := range tables {
+			fullyQualifiedTableNames = append(fullyQualifiedTableNames, table.String())
+		}
+
+		action = "drop"
+	}
+
+	query := fmt.Sprintf(`alter publication %s %s table %s;`, p.Name, action, strings.Join(fullyQualifiedTableNames, ", "))
 	_, err := db.ExecContext(ctx, query)
 	return err
 }

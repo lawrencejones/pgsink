@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lawrencejones/pgsink/internal/dbtest"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 	. "github.com/lawrencejones/pgsink/pkg/changelog/matchers"
-	"github.com/lawrencejones/pgsink/internal/dbtest"
 	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/decode/gen/mappings"
 	"github.com/lawrencejones/pgsink/pkg/subscription"
@@ -119,7 +119,7 @@ var _ = Describe("Subscription", func() {
 			sub, repconn = createSubscription(subscription.SubscriptionOptions{Name: schema})
 			stream, entries = createStream(sub, repconn)
 
-			err = sub.SetTables(ctx, db.GetDB(), tableOne)
+			err = sub.UnsafeSetTables(ctx, db.GetDB(), tableOne)
 			Expect(err).NotTo(HaveOccurred(), "adding table one to publication should succeed")
 
 			// We need to perform an insert to trigger changes down the replication link.
@@ -287,7 +287,7 @@ var _ = Describe("Subscription", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				By("add table two to the subscription, alongside table one")
-				err = sub.SetTables(ctx, db.GetDB(), tableOne, tableTwo)
+				err = sub.UnsafeSetTables(ctx, db.GetDB(), tableOne, tableTwo)
 				Expect(err).NotTo(HaveOccurred())
 
 				By("commit insert into table two")

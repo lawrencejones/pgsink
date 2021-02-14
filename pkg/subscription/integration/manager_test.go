@@ -84,7 +84,7 @@ var _ = Describe("Manager", func() {
 
 		Context("when tables are already added", func() {
 			BeforeEach(func() {
-				Expect(sub.SetTables(ctx, db.GetDB(), tableOne, tableTwo)).To(Succeed())
+				Expect(sub.UnsafeSetTables(ctx, db.GetDB(), tableOne, tableTwo)).To(Succeed())
 			})
 
 			It("adds and removes nothing", func() {
