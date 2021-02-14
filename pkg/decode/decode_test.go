@@ -174,6 +174,20 @@ var _ = Describe("Decoder", func() {
 				match: Equal(float64(-7.1)),
 			},
 		},
+		"numeric": {
+			{
+				value: "0.0",
+				match: Equal(float64(0.0)),
+			},
+			{
+				value: "1.33",
+				match: Equal(float64(1.33)),
+			},
+			{
+				value: "-7.1",
+				match: Equal(float64(-7.1)),
+			},
+		},
 		"_bool": {
 			{
 				value: "'{}'",
@@ -269,6 +283,20 @@ var _ = Describe("Decoder", func() {
 			},
 		},
 		"_float8": {
+			{
+				value: "'{}'",
+				match: Equal([]float64{}),
+			},
+			{
+				value: "'{1.33}'",
+				match: Equal([]float64{1.33}),
+			},
+			{
+				value: "'{-7.9}'",
+				match: Equal([]float64{-7.9}),
+			},
+		},
+		"_numeric": {
 			{
 				value: "'{}'",
 				match: Equal([]float64{}),
