@@ -52,30 +52,30 @@ func (s *subscriptionsService) AddTable(ctx context.Context, table *subscription
 	logger := middleware.LoggerFrom(ctx)
 	logger = kitlog.With(logger, "table_name", table.Name, "table_schema", table.Schema)
 
-	// Take an application lock to prevent multiple requests from modifying the publication
-	// simultaneously. This doesn't solve any races that come from anywhere other than this
-	// app, and is best implemented as a database lock in future.
-	s.Lock()
-	defer s.Unlock()
+	err := s.pub.Begin(ctx, s.db, func(session subscription.PublicationSession) error {
+		logger.Log("msg", "finding already published tables")
+		publishedTables, err := session.GetTables(ctx, s.db)
+		if err != nil {
+			return err
+		}
 
-	logger.Log("msg", "finding already published tables")
-	publishedTables, err := s.pub.GetTables(ctx, s.db)
+		for _, publishedTable := range publishedTables {
+			if publishedTable.Schema == table.Schema && publishedTable.TableName == table.Name {
+				logger.Log("msg", "already published")
+				return nil
+			}
+		}
+
+		logger.Log("msg", "table isn't already published, configuring publication")
+		alreadyPublishedWithAdded := append(publishedTables,
+			changelog.Table{Schema: table.Schema, TableName: table.Name})
+		return session.SetTables(ctx, s.db, alreadyPublishedWithAdded...)
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	for _, publishedTable := range publishedTables {
-		if publishedTable.Schema == table.Schema && publishedTable.TableName == table.Name {
-			logger.Log("msg", "already published")
-			return s.Get(ctx)
-		}
-	}
-
-	logger.Log("msg", "table isn't already published, configuring publication")
-	if err := s.pub.SetTables(ctx, s.db, append(publishedTables, changelog.Table{Schema: table.Schema, TableName: table.Name})...); err != nil {
-		return nil, err
-	}
-
+	logger.Log("msg", "added table, reloading subscription")
 	return s.Get(ctx)
 }
 
@@ -83,44 +83,23 @@ func (s *subscriptionsService) StopTable(ctx context.Context, table *subscriptio
 	logger := middleware.LoggerFrom(ctx)
 	logger = kitlog.With(logger, "table_name", table.Name, "table_schema", table.Schema)
 
-	// As with AddTable, lock. It's not foolproof, but will do for now.
-	s.Lock()
-	defer s.Unlock()
-
-	{
+	err := s.pub.Begin(ctx, s.db, func(session subscription.PublicationSession) error {
 		// Expire any active import jobs first, as this might block against any outstanding
 		// import. Better to block and fail here than remove from publication, which can't be
 		// rolled back, and die.
 		logger.Log("msg", "expiring any outstanding import jobs")
-		stmt := ImportJobs.
-			UPDATE().
-			SET(
-				ImportJobs.ExpiredAt.SET(pg.TimestampzExp(pg.Raw("now()"))),
-				ImportJobs.UpdatedAt.SET(pg.TimestampzExp(pg.Raw("now()"))),
-			).
-			WHERE(
-				ImportJobs.Schema.EQ(pg.String(table.Schema)).AND(
-					ImportJobs.TableName.EQ(pg.String(table.Name)),
-				).AND(
-					ImportJobs.ExpiredAt.IS_NULL(),
-				),
-			).
-			RETURNING(ImportJobs.AllColumns)
-
-		var jobs []model.ImportJobs
-		if err := stmt.QueryContext(ctx, s.db, &jobs); err != nil {
-			return nil, fmt.Errorf("failed to expire import jobs: %w", err)
+		expiredJobs, err := s.expireOutstandingImports(ctx, table)
+		if err != nil {
+			return err
 		}
-		for _, job := range jobs {
+		for _, job := range expiredJobs {
 			logger.Log("event", "import_expired", "import_job_id", job.ID)
 		}
-	}
 
-	{
 		logger.Log("msg", "finding already published tables")
-		publishedTables, err := s.pub.GetTables(ctx, s.db)
+		publishedTables, err := session.GetTables(ctx, s.db)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		var found bool
@@ -132,15 +111,43 @@ func (s *subscriptionsService) StopTable(ctx context.Context, table *subscriptio
 
 		if !found {
 			logger.Log("msg", "table isn't in subscription, continuing")
-			return s.Get(ctx)
+			return nil
 		}
 
-		logger.Log("msg", "table isn't already published, configuring publication")
+		logger.Log("msg", "table is published, removing it from publication")
 		publishedWithoutStop := publishedTables.Diff([]changelog.Table{{Schema: table.Schema, TableName: table.Name}})
-		if err := s.pub.SetTables(ctx, s.db, publishedWithoutStop...); err != nil {
-			return nil, err
-		}
+		return session.SetTables(ctx, s.db, publishedWithoutStop...)
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return s.Get(ctx)
+}
+
+func (s *subscriptionsService) expireOutstandingImports(ctx context.Context, table *subscriptions.SubscriptionPublishedTable) ([]*model.ImportJobs, error) {
+	// Expire any active import jobs first, as this might block against any outstanding
+	// import. Better to block and fail here than remove from publication, which can't be
+	// rolled back, and die.
+	stmt := ImportJobs.
+		UPDATE().
+		SET(
+			ImportJobs.ExpiredAt.SET(pg.TimestampzExp(pg.Raw("now()"))),
+			ImportJobs.UpdatedAt.SET(pg.TimestampzExp(pg.Raw("now()"))),
+		).
+		WHERE(
+			ImportJobs.Schema.EQ(pg.String(table.Schema)).AND(
+				ImportJobs.TableName.EQ(pg.String(table.Name)),
+			).AND(
+				ImportJobs.ExpiredAt.IS_NULL(),
+			),
+		).
+		RETURNING(ImportJobs.AllColumns)
+
+	var jobs []*model.ImportJobs
+	if err := stmt.QueryContext(ctx, s.db, &jobs); err != nil {
+		return nil, fmt.Errorf("failed to expire import jobs: %w", err)
+	}
+
+	return jobs, nil
 }

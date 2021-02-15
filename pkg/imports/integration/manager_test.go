@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/internal/dbschema/pgsink/model"
 	. "github.com/lawrencejones/pgsink/internal/dbschema/pgsink/table"
 	"github.com/lawrencejones/pgsink/internal/dbtest"
+	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/imports"
 	"github.com/lawrencejones/pgsink/pkg/subscription"
 
@@ -81,7 +81,7 @@ var _ = Describe("Manager", func() {
 
 		Context("for published table", func() {
 			BeforeEach(func() {
-				Expect(sub.SetTables(ctx, db.GetDB(), tableOne)).To(Succeed())
+				Expect(sub.UnsafeSetTables(ctx, db.GetDB(), tableOne)).To(Succeed())
 			})
 
 			Context("with no previous import", func() {

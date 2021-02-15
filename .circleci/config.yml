@@ -76,6 +76,20 @@ jobs:
             exit 1
           fi
 
+  check-api-gen:
+    docker:
+      - *docker_golang
+    working_directory: /app
+    steps:
+      - checkout
+      - run: go install goa.design/goa/v3/cmd/goa
+      - run: make api/gen
+      - run: |
+          if ! git diff --exit-code --name-only; then
+            echo "api/gen not up-to-date; please run 'make api/gen'"
+            exit 1
+          fi
+
   release:
     docker:
       - *docker_golang
@@ -104,6 +118,7 @@ workflows:
       - check-deps-updated
       - check-deps-tidy
       - check-generated-code
+      - check-api-gen
       - release:
           requires:
             - unit-integration

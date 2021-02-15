@@ -73,10 +73,8 @@ var cfg = Config{
 		"_inet",
 		"bpchar",
 		"interval",
-		"_numeric",
 		"bit",
 		"varbit",
-		"numeric",
 		"uuid",
 		"_uuid",
 		"int4range",
@@ -127,6 +125,9 @@ var cfg = Config{
 		"float8": {
 			Empty: "new(float64)",
 		},
+		"numeric": {
+			Empty: "new(float64)",
+		},
 		"_bool": {
 			Empty: "new([]bool)",
 		},
@@ -149,6 +150,9 @@ var cfg = Config{
 			Empty: "new([]float32)",
 		},
 		"_float8": {
+			Empty: "new([]float64)",
+		},
+		"_numeric": {
 			Empty: "new([]float64)",
 		},
 		"varchar": {

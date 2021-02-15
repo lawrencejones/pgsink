@@ -192,6 +192,18 @@ var Mappings = []decode.TypeMapping{
 		Empty:   new([]time.Time),
 	},
 	{
+		Name:    "_numeric",
+		OID:     1231,
+		Scanner: &pgtype.NumericArray{},
+		Empty:   new([]float64),
+	},
+	{
+		Name:    "numeric",
+		OID:     1700,
+		Scanner: &pgtype.Numeric{},
+		Empty:   new(float64),
+	},
+	{
 		Name:    "jsonb",
 		OID:     3802,
 		Scanner: &pgtype.JSONB{},
@@ -279,20 +291,12 @@ var Unsupported = []decode.TypeMapping{
 		OID:  1186,
 	},
 	{
-		Name: "_numeric",
-		OID:  1231,
-	},
-	{
 		Name: "bit",
 		OID:  1560,
 	},
 	{
 		Name: "varbit",
 		OID:  1562,
-	},
-	{
-		Name: "numeric",
-		OID:  1700,
 	},
 	{
 		Name: "uuid",
