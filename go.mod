@@ -35,6 +35,6 @@ require (
 	goa.design/goa/v3 v3.2.6
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
 	golang.org/x/tools v0.0.0-20210114065538-d78b04bdf963
-	google.golang.org/api v0.36.0
+	google.golang.org/api v0.40.0
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
