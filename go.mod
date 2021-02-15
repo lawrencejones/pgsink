@@ -3,8 +3,7 @@ module github.com/lawrencejones/pgsink
 go 1.15
 
 require (
-	cloud.google.com/go v0.74.0 // indirect
-	cloud.google.com/go/bigquery v1.14.0
+	cloud.google.com/go/bigquery v1.15.0
 	contrib.go.opencensus.io/exporter/jaeger v0.2.0
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.4
 	contrib.go.opencensus.io/integrations/ocsql v0.1.7
@@ -35,8 +34,7 @@ require (
 	go.opencensus.io v0.22.5
 	goa.design/goa/v3 v3.2.6
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
-	golang.org/x/net v0.0.0-20201224014010-6772e930b67b // indirect
-	golang.org/x/tools v0.0.0-20210108195828-e2f9c7f1fc8e
+	golang.org/x/tools v0.0.0-20210114065538-d78b04bdf963
 	google.golang.org/api v0.36.0
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
