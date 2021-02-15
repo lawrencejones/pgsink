@@ -1,23 +1,20 @@
 import React from 'react';
-import _ from "lodash"
+import _ from 'lodash';
 import Fuse from 'fuse.js';
 
-import {Table} from '../api';
+import { Table } from '../api';
 import TableListRow from './TableListRow';
 
 type TableListProps = {
   tables: Table[];
   searchFilter: string;
   triggerRefresh: () => void;
-}
-
-type TableListState = {
-}
+};
 
 // Renders a table of all the Postgres tables, fetching content from the pgsink
 // API.
-class TableList extends React.Component<TableListProps, TableListState> {
-  render() {
+class TableList extends React.Component<TableListProps> {
+  render(): JSX.Element {
     return (
       <table className="table table-hover">
         <thead>
@@ -30,9 +27,13 @@ class TableList extends React.Component<TableListProps, TableListState> {
         </thead>
         <tbody>
           {this.getFilteredTables().map((table) => {
-            return <TableListRow
-              key={`${table.schema}.${table.name}`}
-              table={table} triggerRefresh={this.props.triggerRefresh}/>;
+            return (
+              <TableListRow
+                key={`${table.schema}.${table.name}`}
+                table={table}
+                triggerRefresh={this.props.triggerRefresh}
+              />
+            );
           })}
         </tbody>
       </table>
@@ -40,11 +41,11 @@ class TableList extends React.Component<TableListProps, TableListState> {
   }
 
   // Filter the tables by the search term, as provided by the search bar
-  getFilteredTables() {
+  getFilteredTables(): Table[] {
     let tables = _.orderBy(this.props.tables, ['schema', 'name']);
 
     // Only filter if we have a filter!
-    if (this.props.searchFilter !== "") {
+    if (this.props.searchFilter !== '') {
       const filter = new Fuse(tables, {
         keys: ['name'],
         minMatchCharLength: Math.min(this.props.searchFilter.length, 5),
@@ -54,7 +55,7 @@ class TableList extends React.Component<TableListProps, TableListState> {
       tables = filter.search(this.props.searchFilter).map((result) => result.item);
     }
 
-    return tables
+    return tables;
   }
 }
 

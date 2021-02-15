@@ -6,4 +6,4 @@ export type Table = {
   name: string;
   publication_status: string;
   import_status: string;
-}
+};
