@@ -3,7 +3,7 @@ version: 2
 
 references:
   docker_golang: &docker_golang
-    image: golang:1.15.6
+    image: golang:1.16rc1
     environment:
       PGHOST: "127.0.0.1"
       PGUSER: "pgsink_test"
