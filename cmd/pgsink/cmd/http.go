@@ -10,11 +10,11 @@ import (
 	importsserver "github.com/lawrencejones/pgsink/api/gen/http/imports/server"
 	subscriptionsserver "github.com/lawrencejones/pgsink/api/gen/http/subscriptions/server"
 	tablesserver "github.com/lawrencejones/pgsink/api/gen/http/tables/server"
-	webserver "github.com/lawrencejones/pgsink/api/gen/http/web/server"
 	"github.com/lawrencejones/pgsink/api/gen/imports"
 	"github.com/lawrencejones/pgsink/api/gen/subscriptions"
 	"github.com/lawrencejones/pgsink/api/gen/tables"
 	middleware "github.com/lawrencejones/pgsink/internal/middleware"
+	"github.com/lawrencejones/pgsink/web"
 	goahttp "goa.design/goa/v3/http"
 	httpmw "goa.design/goa/v3/http/middleware"
 )
@@ -71,9 +71,16 @@ func buildHTTPServer(logger kitlog.Logger, addr string,
 		healthserver.Mount(mux, healthServer)
 	}
 
-	// Small exception, which is our web file server. This doesn't need endpoint
-	// configuration, as it's just a dumb webserver.
-	webserver.Mount(mux)
+	// This configures the webserver, which just serves files. Avoid wrapping this endpoint
+	// in our transport middleware.
+	{
+		// Strip /web/ and prepend build, so that a file `a/b.js` would be found in
+		// web/build/a/b.js, but served from localhost:8080/web/a/b.js.
+		handler := web.AssetHandler("/web/", "build")
+
+		mux.Handle("GET", "/web/", handler.ServeHTTP)
+		mux.Handle("GET", "/web/*filepath", handler.ServeHTTP)
+	}
 
 	// Wrap the multiplexer with additional middlewares. Middlewares mounted
 	// here apply to all the service endpoints, and run in reverse order.

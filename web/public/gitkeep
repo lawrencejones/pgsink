@@ -1,0 +1,7 @@
+# This file ensures we always create a .gitkeep in the build directory, allowing
+# us to include just the .gitkeep file into git. We do this so the build.go can
+# embed the build directory even when we haven't yet compiled the production
+# assets, aiding local development.
+#
+# There is a pre-flight check in build.go that breaks the build if the assets
+# aren't valid when releasing.
