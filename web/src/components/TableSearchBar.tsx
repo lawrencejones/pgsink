@@ -1,11 +1,10 @@
 import React from 'react';
-import _ from "lodash"
 
 type TableSearchBarProps = {
-  onSearchChange: (event: React.ChangeEvent<HTMLInputElement>) => void
-}
+  onSearchChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+};
 
-function TableSearchBar(props: TableSearchBarProps) {
+function TableSearchBar(props: TableSearchBarProps): JSX.Element {
   return (
     <div className="input-group flex-nowrap">
       <span className="input-group-text" id="addon-wrapping">
@@ -17,8 +16,8 @@ function TableSearchBar(props: TableSearchBarProps) {
         className="form-control"
         placeholder="Table name"
         aria-label="Table"
-        aria-describedby="addon-wrapping">
-      </input>
+        aria-describedby="addon-wrapping"
+      ></input>
     </div>
   );
 }
