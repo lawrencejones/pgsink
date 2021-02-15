@@ -2,12 +2,16 @@
 version: 2
 
 references:
+  # Consistent Golang build and test environment
   docker_golang: &docker_golang
     image: golang:1.16rc1
     environment:
       PGHOST: "127.0.0.1"
       PGUSER: "pgsink_test"
       PGDATABASE: "pgsink_test"
+
+  # Postgres docker image to run integration tests against. Enable replication
+  # and turn off fsync for speed- authentication is trust by default.
   docker_postgres: &docker_postgres
     image: postgres:13.1
     command: |
@@ -16,6 +20,31 @@ references:
       POSTGRES_USER: "postgres"
       POSTGRES_PASSWORD: ""
       POSTGRES_HOST_AUTH_METHOD: "trust"
+
+  # Consistent Javascript build and test environment
+  docker_javascript: &docker_javascript
+    image: node:14.15
+
+  # Javascript dependency steps, to speed JS builds.
+  #
+  # steps:
+  #   - restore_cache: *docker_javascript_dep_restore
+  #   - run: *docker_javascript_dep_install
+  #   - save_cache: *docker_javascript_dep_save
+  docker_javascript_dep_steps: &docker_javascript_dep_steps
+    - restore_cache: &docker_javascript_dep_restore
+        name: Restore Yarn Package Cache
+        keys:
+          - yarn-packages-{{ checksum "web/yarn.lock" }}
+    - run: &docker_javascript_dep_install
+        name: Install Dependencies
+        command: yarn install --immutable
+        working_directory: web
+    - save_cache: &docker_javascript_dep_save
+        name: Save Yarn Package Cache
+        key: yarn-packages-{{ checksum "web/yarn.lock" }}
+        paths:
+          - ~/.cache/yarn
 
 jobs:
   unit-integration:
@@ -40,6 +69,18 @@ jobs:
       - run:
           name: Run tests
           command: make test
+
+  web-lint:
+    docker:
+      - *docker_javascript
+    working_directory: /app
+    steps:
+      - checkout
+      - restore_cache: *docker_javascript_dep_restore
+      - run: *docker_javascript_dep_install
+      - save_cache: *docker_javascript_dep_save
+      - run: 'cd web && yarn lint'
+      - run: 'cd web && yarn pretty'
 
   check-deps-updated:
     docker:
@@ -115,6 +156,7 @@ workflows:
   build-integration:
     jobs:
       - unit-integration
+      - web-lint
       - check-deps-updated
       - check-deps-tidy
       - check-generated-code
