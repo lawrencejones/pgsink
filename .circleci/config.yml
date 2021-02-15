@@ -82,6 +82,24 @@ jobs:
       - run: 'cd web && yarn lint'
       - run: 'cd web && yarn pretty'
 
+  web-build:
+    docker:
+      - *docker_javascript
+    working_directory: /app
+    steps:
+      - checkout
+      - restore_cache: *docker_javascript_dep_restore
+      - run: *docker_javascript_dep_install
+      - save_cache: *docker_javascript_dep_save
+      - run: 'cd web && yarn build'
+      - store_artifacts:
+          path: web/build
+      # Provide the build assets for later pipeline steps
+      - persist_to_workspace:
+          root: web
+          paths:
+            - build
+
   check-deps-updated:
     docker:
       - *docker_golang
@@ -157,6 +175,7 @@ workflows:
     jobs:
       - unit-integration
       - web-lint
+      - web-build
       - check-deps-updated
       - check-deps-tidy
       - check-generated-code
@@ -164,5 +183,6 @@ workflows:
       - release:
           requires:
             - unit-integration
+            - web-build
           filters:
             branches: {only: master}
