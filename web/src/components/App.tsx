@@ -31,11 +31,12 @@ function App(): JSX.Element {
         </nav>
 
         <Switch>
-          <Route exact path="/">
-            <Redirect to="/tables" />
-          </Route>
           <Route path="/tables">
             <Tables schema="public"></Tables>
+          </Route>
+          // Catch-all route, bring us to tables if we don't recognise the path
+          <Route>
+            <Redirect to="/tables" />
           </Route>
         </Switch>
       </div>
