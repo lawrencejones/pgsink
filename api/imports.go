@@ -41,16 +41,17 @@ func (s *importsService) List(ctx context.Context) (imports []*apiimports.Import
 
 func (s *importsService) serialize(job model.ImportJobs) *apiimports.Import {
 	return &apiimports.Import{
-		ID:             int(job.ID),
-		SubscriptionID: job.SubscriptionID,
-		Schema:         job.Schema,
-		TableName:      job.TableName,
-		CompletedAt:    FormatDateTimePointer(job.CompletedAt),
-		CreatedAt:      FormatDateTime(job.CreatedAt),
-		UpdatedAt:      FormatDateTime(job.UpdatedAt),
-		ExpiredAt:      FormatDateTimePointer(job.ExpiredAt),
-		Error:          job.Error,
-		ErrorCount:     int(job.ErrorCount),
-		LastErrorAt:    FormatDateTimePointer(job.LastErrorAt),
+		ID:                 int(job.ID),
+		SubscriptionID:     job.SubscriptionID,
+		Schema:             job.Schema,
+		TableName:          job.TableName,
+		CompletedAt:        FormatDateTimePointer(job.CompletedAt),
+		CreatedAt:          FormatDateTime(job.CreatedAt),
+		UpdatedAt:          FormatDateTime(job.UpdatedAt),
+		ExpiredAt:          FormatDateTimePointer(job.ExpiredAt),
+		Error:              job.Error,
+		ErrorCount:         int(job.ErrorCount),
+		LastErrorAt:        FormatDateTimePointer(job.LastErrorAt),
+		RowsProcessedTotal: job.RowsProcessedTotal,
 	}
 }

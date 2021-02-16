@@ -22,10 +22,14 @@ type TableResponse struct {
 	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
 	// Postgres table name
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Table row estimate, using pg_stats
+	ApproximateRowCount *int64 `form:"approximate_row_count,omitempty" json:"approximate_row_count,omitempty" xml:"approximate_row_count,omitempty"`
 	// Status of the publication, set to active when table is streaming
 	PublicationStatus *string `form:"publication_status,omitempty" json:"publication_status,omitempty" xml:"publication_status,omitempty"`
 	// Status of table imports
 	ImportStatus *string `form:"import_status,omitempty" json:"import_status,omitempty" xml:"import_status,omitempty"`
+	// Last active import rows processed total
+	ImportRowsProcessedTotal *int64 `form:"import_rows_processed_total,omitempty" json:"import_rows_processed_total,omitempty" xml:"import_rows_processed_total,omitempty"`
 }
 
 // NewListTableOK builds a "Tables" service "List" endpoint result from a HTTP
@@ -46,11 +50,17 @@ func ValidateTableResponse(body *TableResponse) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.ApproximateRowCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("approximate_row_count", "body"))
+	}
 	if body.PublicationStatus == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("publication_status", "body"))
 	}
 	if body.ImportStatus == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("import_status", "body"))
+	}
+	if body.ImportRowsProcessedTotal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("import_rows_processed_total", "body"))
 	}
 	if body.PublicationStatus != nil {
 		if !(*body.PublicationStatus == "inactive" || *body.PublicationStatus == "active") {

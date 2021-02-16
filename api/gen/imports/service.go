@@ -51,4 +51,6 @@ type Import struct {
 	ErrorCount int
 	// Timestamp of last error, only reset on error
 	LastErrorAt *string
+	// Count of rows processed
+	RowsProcessedTotal int64
 }

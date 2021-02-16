@@ -99,10 +99,12 @@ func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 // from a value of type *TableResponse.
 func unmarshalTableResponseToTablesTable(v *TableResponse) *tables.Table {
 	res := &tables.Table{
-		Schema:            *v.Schema,
-		Name:              *v.Name,
-		PublicationStatus: *v.PublicationStatus,
-		ImportStatus:      *v.ImportStatus,
+		Schema:                   *v.Schema,
+		Name:                     *v.Name,
+		ApproximateRowCount:      *v.ApproximateRowCount,
+		PublicationStatus:        *v.PublicationStatus,
+		ImportStatus:             *v.ImportStatus,
+		ImportRowsProcessedTotal: *v.ImportRowsProcessedTotal,
 	}
 
 	return res

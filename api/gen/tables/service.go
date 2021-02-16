@@ -39,8 +39,12 @@ type Table struct {
 	Schema string
 	// Postgres table name
 	Name string
+	// Table row estimate, using pg_stats
+	ApproximateRowCount int64
 	// Status of the publication, set to active when table is streaming
 	PublicationStatus string
 	// Status of table imports
 	ImportStatus string
+	// Last active import rows processed total
+	ImportRowsProcessedTotal int64
 }
