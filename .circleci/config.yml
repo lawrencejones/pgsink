@@ -160,7 +160,9 @@ jobs:
     working_directory: /app
     steps:
       - checkout
-      - attach_workspace
+      # Attach web assets back into web/build
+      - attach_workspace:
+          at: .
       - run:
           name: Release
           command: |
