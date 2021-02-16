@@ -25,6 +25,8 @@ references:
   docker_javascript: &docker_javascript
     image: node:14.15
     environment:
+      # This doesn't seem that reliably, so also cache the version-distro
+      # specific cache dir.
       YARN_CACHE_FOLDER: ~/.cache/yarn
 
   # Javascript dependency steps, to speed JS builds.
@@ -37,16 +39,17 @@ references:
     - restore_cache: &docker_javascript_dep_restore
         name: Restore Yarn Package Cache
         keys:
-          - yarn-packages-{{ checksum "web/yarn.lock" }}
+          - yarn-packages-{{ checksum "web/yarn.lock" }}-v2
     - run: &docker_javascript_dep_install
         name: Install Dependencies
         command: yarn install --immutable
         working_directory: web
     - save_cache: &docker_javascript_dep_save
         name: Save Yarn Package Cache
-        key: yarn-packages-{{ checksum "web/yarn.lock" }}
+        key: yarn-packages-{{ checksum "web/yarn.lock" }}-v2
         paths:
           - ~/.cache/yarn
+          - /usr/local/share/.cache/yarn/v6
 
 jobs:
   unit-integration:
