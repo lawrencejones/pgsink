@@ -101,9 +101,9 @@ jobs:
           path: web/build
       # Provide the build assets for later pipeline steps
       - persist_to_workspace:
-          root: web
+          root: .
           paths:
-            - build
+            - web/build
 
   check-deps-updated:
     docker:
@@ -160,6 +160,7 @@ jobs:
     working_directory: /app
     steps:
       - checkout
+      - attach_workspace
       - run:
           name: Release
           command: |

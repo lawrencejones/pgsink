@@ -19,7 +19,11 @@ builds:
       -a
       -installsuffix cgo
     env:
+      # Ensure what we link is available even without libc.
       - CGO_ENABLED=0
+      # Set this so we can run specific pre-flights for whenever goreleaser is
+      # active.
+      - GORELEASER=true
 
 nfpms:
   - vendor: lawrencejones.dev
