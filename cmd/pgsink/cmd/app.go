@@ -18,6 +18,7 @@ import (
 	apisubscriptions "github.com/lawrencejones/pgsink/api/gen/subscriptions"
 	"github.com/lawrencejones/pgsink/api/gen/tables"
 	middleware "github.com/lawrencejones/pgsink/internal/middleware"
+	"github.com/lawrencejones/pgsink/internal/migration"
 	"github.com/lawrencejones/pgsink/internal/telem"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
 	"github.com/lawrencejones/pgsink/pkg/decode"
@@ -40,6 +41,7 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/stdlib"
 	"github.com/oklog/run"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opencensus.io/trace"
 	goa "goa.design/goa/v3/pkg"
@@ -140,6 +142,12 @@ func Run() (err error) {
 		"user", cfg.User,
 		"schema", *schemaName,
 	)
+
+	// Auto-migrate. We might want to prevent automatic install before GA, but it's much
+	// smoother to automatically handle this for now.
+	if err := migration.Migrate(ctx, logger, db, *schemaName); err != nil {
+		return errors.Wrap(err, "failed to run migrations")
+	}
 
 	var g run.Group
 
