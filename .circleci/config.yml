@@ -24,6 +24,8 @@ references:
   # Consistent Javascript build and test environment
   docker_javascript: &docker_javascript
     image: node:14.15
+    environment:
+      YARN_CACHE_FOLDER: ~/.cache/yarn
 
   # Javascript dependency steps, to speed JS builds.
   #
