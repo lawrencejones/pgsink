@@ -84,17 +84,18 @@ func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 // *imports.Import from a value of type *ImportResponse.
 func unmarshalImportResponseToImportsImport(v *ImportResponse) *imports.Import {
 	res := &imports.Import{
-		ID:             *v.ID,
-		SubscriptionID: *v.SubscriptionID,
-		Schema:         *v.Schema,
-		TableName:      *v.TableName,
-		CompletedAt:    v.CompletedAt,
-		CreatedAt:      *v.CreatedAt,
-		UpdatedAt:      *v.UpdatedAt,
-		ExpiredAt:      v.ExpiredAt,
-		Error:          v.Error,
-		ErrorCount:     *v.ErrorCount,
-		LastErrorAt:    v.LastErrorAt,
+		ID:                 *v.ID,
+		SubscriptionID:     *v.SubscriptionID,
+		Schema:             *v.Schema,
+		TableName:          *v.TableName,
+		CompletedAt:        v.CompletedAt,
+		CreatedAt:          *v.CreatedAt,
+		UpdatedAt:          *v.UpdatedAt,
+		ExpiredAt:          v.ExpiredAt,
+		Error:              v.Error,
+		ErrorCount:         *v.ErrorCount,
+		LastErrorAt:        v.LastErrorAt,
+		RowsProcessedTotal: *v.RowsProcessedTotal,
 	}
 
 	return res

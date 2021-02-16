@@ -39,6 +39,8 @@ type ImportResponse struct {
 	ErrorCount int `form:"error_count" json:"error_count" xml:"error_count"`
 	// Timestamp of last error, only reset on error
 	LastErrorAt *string `form:"last_error_at,omitempty" json:"last_error_at,omitempty" xml:"last_error_at,omitempty"`
+	// Count of rows processed
+	RowsProcessedTotal int64 `form:"rows_processed_total" json:"rows_processed_total" xml:"rows_processed_total"`
 }
 
 // NewListResponseBody builds the HTTP response body from the result of the

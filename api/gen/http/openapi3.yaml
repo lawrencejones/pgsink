@@ -45,6 +45,7 @@ paths:
                   expired_at: "1998-12-14T22:10:24Z"
                   id: 3
                   last_error_at: "1978-02-15T19:04:44Z"
+                  rows_processed_total: 5
                   schema: public
                   subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
                   table_name: payments
@@ -56,6 +57,7 @@ paths:
                   expired_at: "1998-12-14T22:10:24Z"
                   id: 3
                   last_error_at: "1978-02-15T19:04:44Z"
+                  rows_processed_total: 5
                   schema: public
                   subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
                   table_name: payments
@@ -67,6 +69,7 @@ paths:
                   expired_at: "1998-12-14T22:10:24Z"
                   id: 3
                   last_error_at: "1978-02-15T19:04:44Z"
+                  rows_processed_total: 5
                   schema: public
                   subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
                   table_name: payments
@@ -79,6 +82,7 @@ paths:
                 expired_at: "1998-12-14T22:10:24Z"
                 id: 3
                 last_error_at: "1978-02-15T19:04:44Z"
+                rows_processed_total: 5
                 schema: public
                 subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
                 table_name: payments
@@ -90,6 +94,7 @@ paths:
                 expired_at: "1998-12-14T22:10:24Z"
                 id: 3
                 last_error_at: "1978-02-15T19:04:44Z"
+                rows_processed_total: 5
                 schema: public
                 subscription_id: 74C53540-E974-ABFF-2565-6BF99F9017B2
                 table_name: payments
@@ -211,28 +216,40 @@ paths:
                 items:
                   $ref: '#/components/schemas/Table'
                 example:
-                - import_status: unknown
+                - approximate_row_count: 100
+                  import_rows_processed_total: 5
+                  import_status: unknown
                   name: payments
                   publication_status: active
                   schema: public
-                - import_status: unknown
+                - approximate_row_count: 100
+                  import_rows_processed_total: 5
+                  import_status: unknown
                   name: payments
                   publication_status: active
                   schema: public
-                - import_status: unknown
+                - approximate_row_count: 100
+                  import_rows_processed_total: 5
+                  import_status: unknown
                   name: payments
                   publication_status: active
                   schema: public
               example:
-              - import_status: unknown
+              - approximate_row_count: 100
+                import_rows_processed_total: 5
+                import_status: unknown
                 name: payments
                 publication_status: active
                 schema: public
-              - import_status: unknown
+              - approximate_row_count: 100
+                import_rows_processed_total: 5
+                import_status: unknown
                 name: payments
                 publication_status: active
                 schema: public
-              - import_status: unknown
+              - approximate_row_count: 100
+                import_rows_processed_total: 5
+                import_status: unknown
                 name: payments
                 publication_status: active
                 schema: public
@@ -304,6 +321,11 @@ components:
           description: Timestamp of last error, only reset on error
           example: "2007-07-18T23:53:30Z"
           format: date-time
+        rows_processed_total:
+          type: integer
+          description: Count of rows processed
+          example: 5
+          format: int64
         schema:
           type: string
           description: Postgres table schema
@@ -331,6 +353,7 @@ components:
         expired_at: "1971-11-03T17:08:24Z"
         id: 3
         last_error_at: "1996-01-03T12:06:35Z"
+        rows_processed_total: 5
         schema: public
         subscription_id: CEF3CAF7-AB82-083A-2F08-9497BE6B7488
         table_name: payments
@@ -343,6 +366,7 @@ components:
       - created_at
       - updated_at
       - error_count
+      - rows_processed_total
     Subscription:
       type: object
       properties:
@@ -392,11 +416,23 @@ components:
       required:
       - schema
       - name
+      - approximate_row_count
       - publication_status
       - import_status
+      - import_rows_processed_total
     Table:
       type: object
       properties:
+        approximate_row_count:
+          type: integer
+          description: Table row estimate, using pg_stats
+          example: 100
+          format: int64
+        import_rows_processed_total:
+          type: integer
+          description: Last active import rows processed total
+          example: 5
+          format: int64
         import_status:
           type: string
           description: Status of table imports
@@ -426,6 +462,8 @@ components:
           example: public
       description: Postgres table, with sync and import status
       example:
+        approximate_row_count: 100
+        import_rows_processed_total: 5
         import_status: unknown
         name: payments
         publication_status: active
@@ -433,5 +471,7 @@ components:
       required:
       - schema
       - name
+      - approximate_row_count
       - publication_status
       - import_status
+      - import_rows_processed_total

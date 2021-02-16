@@ -96,6 +96,9 @@ var Table = Type("Table", func() {
 	Attribute("name", String, "Postgres table name", func() {
 		Example("payments")
 	})
+	Attribute("approximate_row_count", Int64, "Table row estimate, using pg_stats", func() {
+		Example("There are approximately 100 rows in this table", 100)
+	})
 	Attribute("publication_status", String, "Status of the publication, set to active when table is streaming", func() {
 		Enum("inactive", "active")
 		Example("Table is not in publication", "inactive")
@@ -111,12 +114,17 @@ var Table = Type("Table", func() {
 		Example("Import has been expired", "expired")
 		Example("Import is in an unexpected and unknown state", "unknown")
 	})
+	Attribute("import_rows_processed_total", Int64, "Last active import rows processed total", func() {
+		Example("Processed 5 rows", 5)
+	})
 
 	Required(
 		"schema",
 		"name",
+		"approximate_row_count",
 		"publication_status",
 		"import_status",
+		"import_rows_processed_total",
 	)
 })
 
@@ -244,6 +252,9 @@ var Import = Type("Import", func() {
 	Attribute("last_error_at", String, "Timestamp of last error, only reset on error", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("rows_processed_total", Int64, "Count of rows processed", func() {
+		Example("Processed 5 rows", 5)
+	})
 
 	Required(
 		"id",
@@ -253,5 +264,6 @@ var Import = Type("Import", func() {
 		"created_at",
 		"updated_at",
 		"error_count",
+		"rows_processed_total",
 	)
 })

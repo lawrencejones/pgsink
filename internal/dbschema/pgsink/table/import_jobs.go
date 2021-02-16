@@ -17,18 +17,19 @@ type importJobsTable struct {
 	postgres.Table
 
 	//Columns
-	ID             postgres.ColumnInteger
-	SubscriptionID postgres.ColumnString
-	TableName      postgres.ColumnString
-	Cursor         postgres.ColumnString
-	CompletedAt    postgres.ColumnTimestampz
-	ExpiredAt      postgres.ColumnTimestampz
-	UpdatedAt      postgres.ColumnTimestampz
-	CreatedAt      postgres.ColumnTimestampz
-	Error          postgres.ColumnString
-	Schema         postgres.ColumnString
-	ErrorCount     postgres.ColumnInteger
-	LastErrorAt    postgres.ColumnTimestampz
+	ID                 postgres.ColumnInteger
+	SubscriptionID     postgres.ColumnString
+	TableName          postgres.ColumnString
+	Cursor             postgres.ColumnString
+	CompletedAt        postgres.ColumnTimestampz
+	ExpiredAt          postgres.ColumnTimestampz
+	UpdatedAt          postgres.ColumnTimestampz
+	CreatedAt          postgres.ColumnTimestampz
+	Error              postgres.ColumnString
+	Schema             postgres.ColumnString
+	ErrorCount         postgres.ColumnInteger
+	LastErrorAt        postgres.ColumnTimestampz
+	RowsProcessedTotal postgres.ColumnInteger
 
 	AllColumns     postgres.ColumnList
 	MutableColumns postgres.ColumnList
@@ -56,38 +57,40 @@ func newImportJobsTable() *ImportJobsTable {
 
 func newImportJobsTableImpl(schemaName, tableName string) importJobsTable {
 	var (
-		IDColumn             = postgres.IntegerColumn("id")
-		SubscriptionIDColumn = postgres.StringColumn("subscription_id")
-		TableNameColumn      = postgres.StringColumn("table_name")
-		CursorColumn         = postgres.StringColumn("cursor")
-		CompletedAtColumn    = postgres.TimestampzColumn("completed_at")
-		ExpiredAtColumn      = postgres.TimestampzColumn("expired_at")
-		UpdatedAtColumn      = postgres.TimestampzColumn("updated_at")
-		CreatedAtColumn      = postgres.TimestampzColumn("created_at")
-		ErrorColumn          = postgres.StringColumn("error")
-		SchemaColumn         = postgres.StringColumn("schema")
-		ErrorCountColumn     = postgres.IntegerColumn("error_count")
-		LastErrorAtColumn    = postgres.TimestampzColumn("last_error_at")
-		allColumns           = postgres.ColumnList{IDColumn, SubscriptionIDColumn, TableNameColumn, CursorColumn, CompletedAtColumn, ExpiredAtColumn, UpdatedAtColumn, CreatedAtColumn, ErrorColumn, SchemaColumn, ErrorCountColumn, LastErrorAtColumn}
-		mutableColumns       = postgres.ColumnList{SubscriptionIDColumn, TableNameColumn, CursorColumn, CompletedAtColumn, ExpiredAtColumn, UpdatedAtColumn, CreatedAtColumn, ErrorColumn, SchemaColumn, ErrorCountColumn, LastErrorAtColumn}
+		IDColumn                 = postgres.IntegerColumn("id")
+		SubscriptionIDColumn     = postgres.StringColumn("subscription_id")
+		TableNameColumn          = postgres.StringColumn("table_name")
+		CursorColumn             = postgres.StringColumn("cursor")
+		CompletedAtColumn        = postgres.TimestampzColumn("completed_at")
+		ExpiredAtColumn          = postgres.TimestampzColumn("expired_at")
+		UpdatedAtColumn          = postgres.TimestampzColumn("updated_at")
+		CreatedAtColumn          = postgres.TimestampzColumn("created_at")
+		ErrorColumn              = postgres.StringColumn("error")
+		SchemaColumn             = postgres.StringColumn("schema")
+		ErrorCountColumn         = postgres.IntegerColumn("error_count")
+		LastErrorAtColumn        = postgres.TimestampzColumn("last_error_at")
+		RowsProcessedTotalColumn = postgres.IntegerColumn("rows_processed_total")
+		allColumns               = postgres.ColumnList{IDColumn, SubscriptionIDColumn, TableNameColumn, CursorColumn, CompletedAtColumn, ExpiredAtColumn, UpdatedAtColumn, CreatedAtColumn, ErrorColumn, SchemaColumn, ErrorCountColumn, LastErrorAtColumn, RowsProcessedTotalColumn}
+		mutableColumns           = postgres.ColumnList{SubscriptionIDColumn, TableNameColumn, CursorColumn, CompletedAtColumn, ExpiredAtColumn, UpdatedAtColumn, CreatedAtColumn, ErrorColumn, SchemaColumn, ErrorCountColumn, LastErrorAtColumn, RowsProcessedTotalColumn}
 	)
 
 	return importJobsTable{
 		Table: postgres.NewTable(schemaName, tableName, allColumns...),
 
 		//Columns
-		ID:             IDColumn,
-		SubscriptionID: SubscriptionIDColumn,
-		TableName:      TableNameColumn,
-		Cursor:         CursorColumn,
-		CompletedAt:    CompletedAtColumn,
-		ExpiredAt:      ExpiredAtColumn,
-		UpdatedAt:      UpdatedAtColumn,
-		CreatedAt:      CreatedAtColumn,
-		Error:          ErrorColumn,
-		Schema:         SchemaColumn,
-		ErrorCount:     ErrorCountColumn,
-		LastErrorAt:    LastErrorAtColumn,
+		ID:                 IDColumn,
+		SubscriptionID:     SubscriptionIDColumn,
+		TableName:          TableNameColumn,
+		Cursor:             CursorColumn,
+		CompletedAt:        CompletedAtColumn,
+		ExpiredAt:          ExpiredAtColumn,
+		UpdatedAt:          UpdatedAtColumn,
+		CreatedAt:          CreatedAtColumn,
+		Error:              ErrorColumn,
+		Schema:             SchemaColumn,
+		ErrorCount:         ErrorCountColumn,
+		LastErrorAt:        LastErrorAtColumn,
+		RowsProcessedTotal: RowsProcessedTotalColumn,
 
 		AllColumns:     allColumns,
 		MutableColumns: mutableColumns,

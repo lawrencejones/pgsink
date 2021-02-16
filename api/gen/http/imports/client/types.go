@@ -40,6 +40,8 @@ type ImportResponse struct {
 	ErrorCount *int `form:"error_count,omitempty" json:"error_count,omitempty" xml:"error_count,omitempty"`
 	// Timestamp of last error, only reset on error
 	LastErrorAt *string `form:"last_error_at,omitempty" json:"last_error_at,omitempty" xml:"last_error_at,omitempty"`
+	// Count of rows processed
+	RowsProcessedTotal *int64 `form:"rows_processed_total,omitempty" json:"rows_processed_total,omitempty" xml:"rows_processed_total,omitempty"`
 }
 
 // NewListImportOK builds a "Imports" service "List" endpoint result from a
@@ -74,6 +76,9 @@ func ValidateImportResponse(body *ImportResponse) (err error) {
 	}
 	if body.ErrorCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("error_count", "body"))
+	}
+	if body.RowsProcessedTotal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rows_processed_total", "body"))
 	}
 	if body.SubscriptionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.subscription_id", *body.SubscriptionID, goa.FormatUUID))

@@ -147,6 +147,9 @@ func (i importer) Do(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, job m
 			ImportJobs.UpdatedAt.SET(TimestampzExp(Raw("now()"))),
 			ImportJobs.Error.SET(CAST(NULL).AS_TEXT()),
 			ImportJobs.ErrorCount.SET(Int(0)),
+			ImportJobs.RowsProcessedTotal.SET(
+				Int(int64(batchSize)).ADD(ImportJobs.RowsProcessedTotal),
+			),
 		).
 		WHERE(
 			ImportJobs.ID.EQ(Int(job.ID)),

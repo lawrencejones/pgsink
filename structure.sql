@@ -45,7 +45,8 @@ CREATE TABLE pgsink.import_jobs (
     error text,
     schema text NOT NULL,
     error_count bigint DEFAULT 0 NOT NULL,
-    last_error_at timestamp with time zone
+    last_error_at timestamp with time zone,
+    rows_processed_total bigint DEFAULT 0 NOT NULL
 );
 
 

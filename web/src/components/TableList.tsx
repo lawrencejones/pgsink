@@ -16,7 +16,7 @@ type TableListProps = {
 class TableList extends React.Component<TableListProps> {
   render(): JSX.Element {
     return (
-      <table className="table table-hover">
+      <table className="table align-middle">
         <thead>
           <tr>
             <th scope="col">Table</th>

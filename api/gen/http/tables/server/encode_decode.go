@@ -50,10 +50,12 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 // a value of type *tables.Table.
 func marshalTablesTableToTableResponse(v *tables.Table) *TableResponse {
 	res := &TableResponse{
-		Schema:            v.Schema,
-		Name:              v.Name,
-		PublicationStatus: v.PublicationStatus,
-		ImportStatus:      v.ImportStatus,
+		Schema:                   v.Schema,
+		Name:                     v.Name,
+		ApproximateRowCount:      v.ApproximateRowCount,
+		PublicationStatus:        v.PublicationStatus,
+		ImportStatus:             v.ImportStatus,
+		ImportRowsProcessedTotal: v.ImportRowsProcessedTotal,
 	}
 
 	return res

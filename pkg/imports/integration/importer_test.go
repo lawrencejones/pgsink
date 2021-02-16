@@ -156,9 +156,13 @@ var _ = Describe("Importer", func() {
 			tx.Commit(ctx)
 		})
 
-		itSuccessfullyImports := func() {
+		itSuccessfullyImports := func(rowCount int64) {
 			It("does not error", func() {
 				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("increments the import jobs rows_processed_total", func() {
+				Expect(get(job.ID).RowsProcessedTotal).To(Equal(rowCount))
 			})
 
 			It("does not mark the import with an error", func() {
@@ -175,7 +179,7 @@ var _ = Describe("Importer", func() {
 		}
 
 		Context("when table is empty", func() {
-			itSuccessfullyImports()
+			itSuccessfullyImports(0)
 
 			It("marks the import as complete", func() {
 				Expect(get(job.ID).CompletedAt).NotTo(BeNil())
@@ -194,7 +198,7 @@ var _ = Describe("Importer", func() {
 				db.MustExec(ctx, fmt.Sprintf(`insert into %s (id, msg) values (2, 'woof');`, tableOne))
 			})
 
-			itSuccessfullyImports()
+			itSuccessfullyImports(2)
 
 			It("marks the import as complete", func() {
 				Expect(get(job.ID).CompletedAt).NotTo(BeNil())
@@ -264,7 +268,8 @@ var _ = Describe("Importer", func() {
 				db.MustExec(ctx, fmt.Sprintf(`insert into %s (id, msg) values (3, 'roar');`, tableOneName))
 			})
 
-			itSuccessfullyImports()
+			// Our batch limit is 2, so we should only process 2 rows of the 3 available
+			itSuccessfullyImports(2)
 
 			It("does not publish rows that had already been imported", func() {
 				Expect(store.modifications).NotTo(ContainElement(

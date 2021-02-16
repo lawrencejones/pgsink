@@ -12,16 +12,17 @@ import (
 )
 
 type ImportJobs struct {
-	ID             int64 `sql:"primary_key"`
-	SubscriptionID string
-	TableName      string
-	Cursor         *string
-	CompletedAt    *time.Time
-	ExpiredAt      *time.Time
-	UpdatedAt      time.Time
-	CreatedAt      time.Time
-	Error          *string
-	Schema         string
-	ErrorCount     int64
-	LastErrorAt    *time.Time
+	ID                 int64 `sql:"primary_key"`
+	SubscriptionID     string
+	TableName          string
+	Cursor             *string
+	CompletedAt        *time.Time
+	ExpiredAt          *time.Time
+	UpdatedAt          time.Time
+	CreatedAt          time.Time
+	Error              *string
+	Schema             string
+	ErrorCount         int64
+	LastErrorAt        *time.Time
+	RowsProcessedTotal int64
 }

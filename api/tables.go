@@ -10,6 +10,7 @@ import (
 	"github.com/lawrencejones/pgsink/api/gen/tables"
 	isvmodel "github.com/lawrencejones/pgsink/internal/dbschema/information_schema/model"
 	isv "github.com/lawrencejones/pgsink/internal/dbschema/information_schema/view"
+	pgctable "github.com/lawrencejones/pgsink/internal/dbschema/pg_catalog/table"
 	"github.com/lawrencejones/pgsink/internal/dbschema/pgsink/model"
 	. "github.com/lawrencejones/pgsink/internal/dbschema/pgsink/table"
 	"github.com/lawrencejones/pgsink/pkg/subscription"
@@ -44,6 +45,10 @@ func (s *tablesService) List(ctx context.Context, payload *tables.ListPayload) (
 			Name:              *row.Table.TableName,
 			PublicationStatus: "inactive",
 			ImportStatus:      "inactive",
+
+			// Used to calculate import progress
+			ApproximateRowCount:      row.ApproximateRowCount,
+			ImportRowsProcessedTotal: 0,
 		}
 
 		// Publication is active if we can find it in our published tables
@@ -78,6 +83,13 @@ func (s *tablesService) List(ctx context.Context, payload *tables.ListPayload) (
 			} else {
 				table.ImportStatus = "unknown" // we shouldn't get here
 			}
+
+			switch table.ImportStatus {
+			case "expired", "unknown":
+				// We shouldn't use the last import progress if we're expired or confused
+			default:
+				table.ImportRowsProcessedTotal = lastImportJob.RowsProcessedTotal
+			}
 		}
 
 		results = append(results, table)
@@ -87,19 +99,23 @@ func (s *tablesService) List(ctx context.Context, payload *tables.ListPayload) (
 }
 
 type tableWithImports struct {
-	Table   *isvmodel.Tables
-	Imports []*model.ImportJobs
+	Table               *isvmodel.Tables
+	ApproximateRowCount int64
+	Imports             []*model.ImportJobs
 }
 
 func (s *tablesService) getTablesWithImports(ctx context.Context, schemas []string) (tablesWithImports []*tableWithImports, err error) {
 	// Join information_schema.tables onto imports, so we can compute the import_status.
 	// LEFT JOIN because we want all tables, even if we haven't imported them.
 	stmt := isv.Tables.
+		INNER_JOIN(pgctable.PgClass, isv.Tables.TableName.EQ(pgctable.PgClass.Relname)).
+		INNER_JOIN(pgctable.PgNamespace, pgctable.PgClass.Relnamespace.EQ(pgctable.PgNamespace.Oid)).
 		LEFT_JOIN(ImportJobs, isv.Tables.TableSchema.EQ(ImportJobs.Schema).
 			AND(isv.Tables.TableName.EQ(ImportJobs.TableName))).
 		SELECT(
 			isv.Tables.TableSchema,
 			isv.Tables.TableName,
+			pgctable.PgClass.Reltuples.AS("approximate_row_count"),
 			ImportJobs.AllColumns,
 		).
 		WHERE(
@@ -119,7 +135,8 @@ func (s *tablesService) getTablesWithImports(ctx context.Context, schemas []stri
 	// ourselves.
 	var rows []struct {
 		*isvmodel.Tables
-		ImportJobs []struct {
+		ApproximateRowCount int64 `sql:"approximate_row_count"`
+		ImportJobs          []struct {
 			*model.ImportJobs
 		}
 	}
@@ -134,8 +151,9 @@ func (s *tablesService) getTablesWithImports(ctx context.Context, schemas []stri
 		result, ok := aggregate[key]
 		if !ok {
 			result = &tableWithImports{
-				Table:   row.Tables,
-				Imports: []*model.ImportJobs{},
+				Table:               row.Tables,
+				ApproximateRowCount: row.ApproximateRowCount,
+				Imports:             []*model.ImportJobs{},
 			}
 		}
 

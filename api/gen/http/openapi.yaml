@@ -78,8 +78,10 @@ paths:
           required:
           - schema
           - name
+          - approximate_row_count
           - publication_status
           - import_status
+          - import_rows_processed_total
       responses:
         "201":
           description: Created response.
@@ -107,8 +109,10 @@ paths:
           required:
           - schema
           - name
+          - approximate_row_count
           - publication_status
           - import_status
+          - import_rows_processed_total
       responses:
         "202":
           description: Accepted response.
@@ -263,6 +267,11 @@ definitions:
         description: Timestamp of last error, only reset on error
         example: "1986-01-07T17:11:48Z"
         format: date-time
+      rows_processed_total:
+        type: integer
+        description: Count of rows processed
+        example: 5
+        format: int64
       schema:
         type: string
         description: Postgres table schema
@@ -290,6 +299,7 @@ definitions:
       expired_at: "1973-08-27T10:41:02Z"
       id: 3
       last_error_at: "2014-11-19T10:28:07Z"
+      rows_processed_total: 5
       schema: public
       subscription_id: 4CCDE767-7648-444F-D09F-4B4FFE4EB36B
       table_name: payments
@@ -302,6 +312,7 @@ definitions:
     - created_at
     - updated_at
     - error_count
+    - rows_processed_total
   SubscriptionPublishedTableResponseBody:
     title: SubscriptionPublishedTableResponseBody
     type: object
@@ -321,8 +332,10 @@ definitions:
     required:
     - schema
     - name
+    - approximate_row_count
     - publication_status
     - import_status
+    - import_rows_processed_total
   SubscriptionsAddTableRequestBody:
     title: SubscriptionsAddTableRequestBody
     type: object
@@ -341,8 +354,10 @@ definitions:
     required:
     - schema
     - name
+    - approximate_row_count
     - publication_status
     - import_status
+    - import_rows_processed_total
   SubscriptionsAddTableResponseBody:
     title: SubscriptionsAddTableResponseBody
     type: object
@@ -427,8 +442,10 @@ definitions:
     required:
     - schema
     - name
+    - approximate_row_count
     - publication_status
     - import_status
+    - import_rows_processed_total
   SubscriptionsStopTableResponseBody:
     title: SubscriptionsStopTableResponseBody
     type: object
@@ -465,6 +482,16 @@ definitions:
     title: TableResponse
     type: object
     properties:
+      approximate_row_count:
+        type: integer
+        description: Table row estimate, using pg_stats
+        example: 100
+        format: int64
+      import_rows_processed_total:
+        type: integer
+        description: Last active import rows processed total
+        example: 5
+        format: int64
       import_status:
         type: string
         description: Status of table imports
@@ -494,6 +521,8 @@ definitions:
         example: public
     description: Postgres table, with sync and import status
     example:
+      approximate_row_count: 100
+      import_rows_processed_total: 5
       import_status: unknown
       name: payments
       publication_status: active
@@ -501,5 +530,7 @@ definitions:
     required:
     - schema
     - name
+    - approximate_row_count
     - publication_status
     - import_status
+    - import_rows_processed_total
