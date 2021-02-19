@@ -2,7 +2,6 @@ package bigquery
 
 import (
 	"fmt"
-	"reflect"
 
 	"github.com/lawrencejones/pgsink/pkg/decode"
 	"github.com/lawrencejones/pgsink/pkg/decode/gen/mappings"
@@ -18,7 +17,7 @@ import (
 var _ = Describe("fieldTypeFor", func() {
 	mappings.Each(func(name string, mapping decode.TypeMapping) {
 		It(fmt.Sprintf("OID %s (%v) is supported", name, mapping.OID), func() {
-			_, _, err := fieldTypeFor(reflect.ValueOf(mapping.NewEmpty()).Elem().Interface())
+			_, _, err := fieldTypeFor(mapping.NewEmpty())
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})

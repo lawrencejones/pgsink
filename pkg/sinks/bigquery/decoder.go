@@ -2,6 +2,7 @@ package bigquery
 
 import (
 	"fmt"
+	"reflect"
 	"time"
 
 	bq "cloud.google.com/go/bigquery"
@@ -9,7 +10,12 @@ import (
 
 // fieldTypeFor maps Postgres OID types to BigQuery types, allowing us to build BigQuery
 // schemas from Postgres type information.
-func fieldTypeFor(val interface{}) (fieldType bq.FieldType, repeated bool, err error) {
+func fieldTypeFor(empty interface{}) (fieldType bq.FieldType, repeated bool, err error) {
+	// We receive an empty paramter, generated from a mapping.NewEmpty, or the destination
+	// of a scanner. We want to unpack that to get the typed pointer, as the empty value
+	// will be double pointed.
+	val := reflect.ValueOf(empty).Elem().Interface()
+
 	switch val.(type) {
 	case *bool:
 		return bq.BooleanFieldType, repeated, nil
