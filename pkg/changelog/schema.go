@@ -43,6 +43,17 @@ func SchemaFromRelation(timestamp time.Time, lsn *uint64, relation *logical.Rela
 	}
 }
 
+// GetPrimaryKey generates a tuple of keys included in the primary key of the table.
+func (s Schema) GetPrimaryKey() (keys []string) {
+	for _, column := range s.Spec.Columns {
+		if column.Key {
+			keys = append(keys, column.Name)
+		}
+	}
+
+	return
+}
+
 // GetFingerprint returns a unique idenfier for the schema.
 //
 // The only important thing is that any given schema returns the same fingerprint for the

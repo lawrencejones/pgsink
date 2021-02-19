@@ -7,7 +7,10 @@ import (
 
 	"github.com/jackc/pgtype"
 	"github.com/lawrencejones/pgsink/pkg/changelog"
+	"github.com/lawrencejones/pgsink/pkg/decode"
+	"github.com/lawrencejones/pgsink/pkg/decode/gen/mappings"
 	"github.com/lawrencejones/pgsink/pkg/logical"
+
 	. "github.com/onsi/ginkgo"
 	_ "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -61,6 +64,30 @@ var (
 		},
 	}
 )
+
+var _ = Describe("buildRaw", func() {
+	var (
+		md            *bq.TableMetadata
+		err           error
+		schemaFixture *changelog.Schema
+	)
+
+	JustBeforeEach(func() {
+		md, err = buildRaw("example", schemaFixture, decode.NewDecoder(mappings.Mappings))
+	})
+
+	BeforeEach(func() {
+		schemaFixture = &dogsSchemaFixture
+	})
+
+	It("does not error", func() {
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("clusters the table by primary key", func() {
+		Expect(md.Clustering.Fields).To(Equal([]string{"tag"}))
+	})
+})
 
 var _ = Describe("buildView", func() {
 	var (

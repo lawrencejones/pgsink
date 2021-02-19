@@ -32,6 +32,7 @@ func buildRaw(tableName string, schema *changelog.Schema, decoder decode.Decoder
 		if err != nil {
 			return nil, err
 		}
+
 		externalType, repeated, err := fieldTypeFor(dest)
 		if err != nil {
 			return nil, err
@@ -79,9 +80,27 @@ func buildRaw(tableName string, schema *changelog.Schema, decoder decode.Decoder
 		},
 	}
 
+	keys := schema.GetPrimaryKey()
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("table %s has no detected primary key columns", tableName)
+	}
+
 	md := &bq.TableMetadata{
 		Name:   tableName,
 		Schema: bqSchema,
+		// Mark the origin as pgsink so users know where the table originates from.
+		Labels: map[string]string{
+			"origin": "pgsink",
+		},
+		// Clustering the table by the primary key makes it much more efficient to fetch just
+		// a single row from the table. It helps support the use case where BigQuery is
+		// replacing your legacy 'databox', a Postgres clone that people might use for ad-hoc
+		// analytic queries.
+		Clustering: &bq.Clustering{
+			Fields: keys,
+		},
+		// Time partitioning enables us to drop old data, and to efficiently compute views
+		// from a given time period (time-travelling, how awesome!).
 		TimePartitioning: &bq.TimePartitioning{
 			Field: "timestamp",
 		},
@@ -94,13 +113,7 @@ func buildRaw(tableName string, schema *changelog.Schema, decoder decode.Decoder
 // raw table to the user. We expect the rawTableName to be in projectID:datasetID.tableID
 // form.
 func buildView(tableName, rawTableName string, schema *changelog.Schema) (*bq.TableMetadata, error) {
-	keys := []string{}
-	for _, column := range schema.Spec.Columns {
-		if column.Key {
-			keys = append(keys, column.Name)
-		}
-	}
-
+	keys := schema.GetPrimaryKey()
 	if len(keys) == 0 {
 		return nil, fmt.Errorf("table %s has no detected primary key columns", tableName)
 	}
