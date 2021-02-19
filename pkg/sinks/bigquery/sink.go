@@ -15,17 +15,20 @@ import (
 )
 
 type Options struct {
-	ProjectID     string
-	Dataset       string
-	Location      string
-	BufferSize    int
-	Instrument    bool
-	FlushInterval time.Duration
+	ProjectID                     string
+	Dataset                       string
+	DatasetDefaultTableExpiration time.Duration
+	Location                      string
+	BufferSize                    int
+	Instrument                    bool
+	FlushInterval                 time.Duration
 }
 
 func (opt *Options) Bind(cmd *kingpin.CmdClause, prefix string) *Options {
 	cmd.Flag(fmt.Sprintf("%sproject-id", prefix), "Google Project ID").StringVar(&opt.ProjectID)
 	cmd.Flag(fmt.Sprintf("%sdataset", prefix), "BigQuery dataset name").StringVar(&opt.Dataset)
+	cmd.Flag(fmt.Sprintf("%sdataset-default-table-expiration", prefix), "BigQuery dataset default table expiration, applied only if creating the dataset").
+		DurationVar(&opt.DatasetDefaultTableExpiration)
 	cmd.Flag(fmt.Sprintf("%slocation", prefix), "BigQuery dataset location").Default("EU").StringVar(&opt.Location)
 	cmd.Flag(fmt.Sprintf("%sbuffer-size", prefix), "Number of modification to buffer before flushing").Default("250").IntVar(&opt.BufferSize)
 	cmd.Flag(fmt.Sprintf("%sinstrument", prefix), "Enable instrumentation").Default("true").BoolVar(&opt.Instrument)
@@ -50,9 +53,10 @@ func New(ctx context.Context, decoder decode.Decoder, opts Options) (generic.Sin
 	if md == nil {
 		logger.Log("event", "dataset.create", "msg", "dataset does not exist, creating")
 		md = &bq.DatasetMetadata{
-			Name:        opts.Dataset,
-			Location:    opts.Location,
-			Description: "Dataset created by pgsink",
+			Name:                   opts.Dataset,
+			Location:               opts.Location,
+			Description:            "Dataset created by pgsink",
+			DefaultTableExpiration: opts.DatasetDefaultTableExpiration,
 		}
 
 		if err := dataset.Create(ctx, md); err != nil {
