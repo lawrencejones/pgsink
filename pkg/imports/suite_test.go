@@ -1,12 +1,24 @@
-package integration
+package imports_test
 
 import (
 	"context"
+	"testing"
+
+	"github.com/lawrencejones/pgsink/internal/dbschema/pgsink/model"
 
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/jackc/pgx/v4"
-	"github.com/lawrencejones/pgsink/internal/dbschema/pgsink/model"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
+
+var logger = kitlog.NewLogfmtLogger(GinkgoWriter)
+
+func TestSuite(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "pkg/imports")
+}
 
 type importerFunc func(ctx context.Context, logger kitlog.Logger, tx pgx.Tx, job model.ImportJobs) error
 
