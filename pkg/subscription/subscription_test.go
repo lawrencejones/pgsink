@@ -1,4 +1,4 @@
-package integration
+package subscription_test
 
 import (
 	"context"

@@ -1,4 +1,4 @@
-package integration
+package subscription_test
 
 import (
 	"testing"
@@ -13,5 +13,5 @@ var logger = kitlog.NewLogfmtLogger(GinkgoWriter)
 
 func TestSuite(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "pkg/subscription/integration")
+	RunSpecs(t, "pkg/subscription")
 }
