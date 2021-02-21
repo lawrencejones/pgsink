@@ -271,7 +271,7 @@ func Run() (err error) {
 
 	switch command {
 	case serveCmd.FullCommand():
-		if err := addAPIServer(ctx, logger, g, db, *serveAddress, *subscriptionName); err != nil {
+		if err := addAPIServer(ctx, logger, &g, db, *serveAddress, *subscriptionName); err != nil {
 			return err
 		}
 
@@ -314,7 +314,7 @@ func Run() (err error) {
 		}
 
 		if *streamServe {
-			if err := addAPIServer(ctx, logger, g, db, *streamServeAddress, *subscriptionName); err != nil {
+			if err := addAPIServer(ctx, logger, &g, db, *streamServeAddress, *subscriptionName); err != nil {
 				return err
 			}
 		}
@@ -406,7 +406,7 @@ func Run() (err error) {
 
 // addAPIServer registers an API server onto the run.Group, allowing us to register it
 // for multiple commands.
-func addAPIServer(ctx context.Context, logger kitlog.Logger, g run.Group, db *sql.DB, serveAddress, subscriptionName string) error {
+func addAPIServer(ctx context.Context, logger kitlog.Logger, g *run.Group, db *sql.DB, serveAddress, subscriptionName string) error {
 	pub, err := subscription.FindPublication(ctx, db, subscriptionName)
 	if err != nil {
 		return fmt.Errorf(

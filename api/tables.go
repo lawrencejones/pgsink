@@ -13,6 +13,7 @@ import (
 	pgctable "github.com/lawrencejones/pgsink/internal/dbschema/pg_catalog/table"
 	"github.com/lawrencejones/pgsink/internal/dbschema/pgsink/model"
 	. "github.com/lawrencejones/pgsink/internal/dbschema/pgsink/table"
+	"github.com/lawrencejones/pgsink/internal/middleware"
 	"github.com/lawrencejones/pgsink/pkg/subscription"
 )
 
@@ -26,6 +27,9 @@ func NewTables(db *sql.DB, pub *subscription.Publication) tables.Service {
 }
 
 func (s *tablesService) List(ctx context.Context, payload *tables.ListPayload) ([]*tables.Table, error) {
+	logger := middleware.LoggerFrom(ctx)
+	logger.Log("schema", payload.Schema)
+
 	tablesWithImports, err := s.getTablesWithImports(ctx, strings.Split(payload.Schema, ","))
 	if err != nil {
 		return nil, err
