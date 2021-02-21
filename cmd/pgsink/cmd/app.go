@@ -63,7 +63,10 @@ var (
 	subscriptionName = app.Flag("subscription-name", "Subscription name, matches Postgres publication").Default("pgsink").String()
 	schemaName       = app.Flag("schema", "Postgres schema name, in which we store pgsink resources").Default("pgsink").String()
 
-	serveCmd     = app.Command("serve", "Serve HTTP controls")
+	// Control-plane APIs are best served independently from the workload they measure, so
+	// provide a separate serve command for those who want to boot it separately. The same
+	// API is served in stream, if --serve=true is provided.
+	serveCmd     = app.Command("serve", "Serve the API control-server")
 	serveAddress = app.Flag("address", "Listen on this address").Default("localhost:8080").String()
 
 	stream           = app.Command("stream", "Stream changes into sink")
@@ -71,6 +74,9 @@ var (
 	streamDecodeOnly = stream.Flag("decode-only", "Print messages only, ignoring sink").Default("false").Bool()
 
 	streamOptions = new(subscription.StreamOptions).Bind(stream, "")
+
+	streamServe = stream.Flag("serve", "Enable the API control-server").Default("true").Bool()
+	streamServeAddress = stream.Flag("serve.address", "Listen on this address").Default("localhost:8080").String()
 
 	streamSubscriptionManager        = stream.Flag("subscription-manager", "Auto-manage tables into the subscription, modifying the PG publication").Default("false").Bool()
 	streamSubscriptionManagerOptions = new(subscription.ManagerOptions).Bind(stream, "subscription-manager.")
@@ -265,71 +271,8 @@ func Run() (err error) {
 
 	switch command {
 	case serveCmd.FullCommand():
-		pub, err := subscription.FindPublication(ctx, db, *subscriptionName)
-		if err != nil {
-			return fmt.Errorf(
-				"failed to find publication for subscription name '%s': %w", *subscriptionName, err)
-		}
-		if pub == nil {
-			return fmt.Errorf(
-				"no publication for subscription name '%s', have you started a stream against this database?", *subscriptionName)
-		}
-
-		// Initialise services
-		var (
-			tablesService        = api.NewTables(db, pub)
-			importsService       = api.NewImports(db, pub)
-			subscriptionsService = api.NewSubscriptions(db, pub)
-			healthService        = api.NewHealth()
-		)
-
-		// Wrap services in endpoints, a calling abstraction that is transport independent
-		var (
-			tablesEndpoints        = tables.NewEndpoints(tablesService)
-			importsEndpoints       = apiimports.NewEndpoints(importsService)
-			subscriptionsEndpoints = apisubscriptions.NewEndpoints(subscriptionsService)
-			healthEndpoints        = health.NewEndpoints(healthService)
-		)
-
-		// Apply application middlewares to all the endpoint groups
-		{
-			for _, endpoints := range []interface {
-				Use(m func(goa.Endpoint) goa.Endpoint)
-			}{
-				tablesEndpoints,
-				importsEndpoints,
-				subscriptionsEndpoints,
-				healthEndpoints,
-			} {
-				endpoints.Use(middleware.Observe())
-			}
-		}
-
-		{
-			logger := kitlog.With(logger, "component", "http")
-			srv := buildHTTPServer(logger, *serveAddress,
-				tablesEndpoints,
-				importsEndpoints,
-				subscriptionsEndpoints,
-				healthEndpoints,
-				*debug)
-
-			g.Add(
-				reportCompletion(logger, func() error {
-					logger.Log("event", "listen", "address", *serveAddress)
-					if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-						return err
-					}
-
-					return nil
-				}),
-				func(error) {
-					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-					defer cancel()
-
-					srv.Shutdown(ctx)
-				},
-			)
+		if err := addAPIServer(ctx, logger, g, db, *serveAddress, *subscriptionName); err != nil {
+			return err
 		}
 
 		return g.Run()
@@ -368,6 +311,12 @@ func Run() (err error) {
 			})
 		if err != nil {
 			return fmt.Errorf("failed to create subscription: %w", err)
+		}
+
+		if *streamServe {
+			if err := addAPIServer(ctx, logger, g, db, *streamServeAddress, *subscriptionName); err != nil {
+				return err
+			}
 		}
 
 		if *streamConsume {
@@ -453,6 +402,79 @@ func Run() (err error) {
 
 	app.FatalUsage(fmt.Sprintf("unsupported command: %s", command))
 	panic("unreachable")
+}
+
+// addAPIServer registers an API server onto the run.Group, allowing us to register it
+// for multiple commands.
+func addAPIServer(ctx context.Context, logger kitlog.Logger, g run.Group, db *sql.DB, serveAddress, subscriptionName string) error {
+	pub, err := subscription.FindPublication(ctx, db, subscriptionName)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to find publication for subscription name '%s': %w", subscriptionName, err)
+	}
+	if pub == nil {
+		return fmt.Errorf(
+			"no publication for subscription name '%s', have you started a stream against this database?", subscriptionName)
+	}
+
+	// Initialise services
+	var (
+		tablesService        = api.NewTables(db, pub)
+		importsService       = api.NewImports(db, pub)
+		subscriptionsService = api.NewSubscriptions(db, pub)
+		healthService        = api.NewHealth()
+	)
+
+	// Wrap services in endpoints, a calling abstraction that is transport independent
+	var (
+		tablesEndpoints        = tables.NewEndpoints(tablesService)
+		importsEndpoints       = apiimports.NewEndpoints(importsService)
+		subscriptionsEndpoints = apisubscriptions.NewEndpoints(subscriptionsService)
+		healthEndpoints        = health.NewEndpoints(healthService)
+	)
+
+	// Apply application middlewares to all the endpoint groups
+	{
+		for _, endpoints := range []interface {
+			Use(m func(goa.Endpoint) goa.Endpoint)
+		}{
+			tablesEndpoints,
+			importsEndpoints,
+			subscriptionsEndpoints,
+			healthEndpoints,
+		} {
+			endpoints.Use(middleware.Observe())
+		}
+	}
+
+	{
+		logger := kitlog.With(logger, "component", "http")
+		srv := buildHTTPServer(logger, serveAddress,
+			tablesEndpoints,
+			importsEndpoints,
+			subscriptionsEndpoints,
+			healthEndpoints,
+			*debug)
+
+		g.Add(
+			reportCompletion(logger, func() error {
+				logger.Log("event", "listen", "address", serveAddress)
+				if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					return err
+				}
+
+				return nil
+			}),
+			func(error) {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+
+				srv.Shutdown(ctx)
+			},
+		)
+	}
+
+	return nil
 }
 
 // reportCompletion wraps a standard action function with a log message that triggers on
