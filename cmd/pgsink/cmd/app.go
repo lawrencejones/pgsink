@@ -56,6 +56,7 @@ var (
 	debug               = app.Flag("debug", "Enable debug logging").Default("false").Bool()
 	metricsAddress      = app.Flag("metrics-address", "Address to bind HTTP metrics listener").Default("127.0.0.1").String()
 	metricsPort         = app.Flag("metrics-port", "Port to bind HTTP metrics listener").Default("9525").Uint16()
+	jaegerEnabled = app.Flag("jaeger-enabled", "Whether we should export spans to Jaeger").Default("false").Bool()
 	jaegerAgentEndpoint = app.Flag("jaeger-agent-endpoint", "Endpoint for Jaeger agent").Default("localhost:6831").String()
 	sentryDSN           = app.Flag("sentry-dsn", "DSN key for the Sentry exceptions project").Envar("PGSINK_SENTRY_DSN").String()
 
@@ -238,7 +239,7 @@ func Run() (err error) {
 		)
 	}
 
-	{
+	if *jaegerEnabled {
 		// Tracing with jaeger
 		jexporter, err := jaeger.NewExporter(jaeger.Options{
 			AgentEndpoint: *jaegerAgentEndpoint,
@@ -246,7 +247,6 @@ func Run() (err error) {
 				ServiceName: "pgsink",
 			},
 		})
-
 		if err != nil {
 			return err
 		}
