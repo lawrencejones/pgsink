@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	cloud.google.com/go v0.76.0 // indirect
-	cloud.google.com/go/bigquery v1.15.0
+	cloud.google.com/go/bigquery v1.16.0
 	contrib.go.opencensus.io/exporter/jaeger v0.2.0
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.5
 	contrib.go.opencensus.io/integrations/ocsql v0.1.7
@@ -35,9 +35,7 @@ require (
 	go.opencensus.io v0.22.6
 	goa.design/goa/v3 v3.2.6
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
-	golang.org/x/oauth2 v0.0.0-20210210192628-66670185b0cd // indirect
 	golang.org/x/tools v0.1.0
 	google.golang.org/api v0.40.0
-	google.golang.org/genproto v0.0.0-20210212180131-e7f2df4ecc2d // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
