@@ -12,6 +12,8 @@ stress-free, quick-to-setup and easy-to-operate tool to replicate your data to
 other stores such as BigQuery or Elasticsearch, which works with any size
 Postgres database.
 
+![image](https://user-images.githubusercontent.com/3518874/109983844-212a7c00-7cfb-11eb-8a4e-d2ed429726c5.png)
+
 ## Similar projects
 
 [debezium]: https://github.com/debezium/debezium
