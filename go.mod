@@ -3,7 +3,6 @@ module github.com/lawrencejones/pgsink
 go 1.16
 
 require (
-	cloud.google.com/go v0.76.0 // indirect
 	cloud.google.com/go/bigquery v1.16.0
 	contrib.go.opencensus.io/exporter/jaeger v0.2.0
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.5
@@ -32,10 +31,10 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pressly/goose v2.7.0+incompatible
 	github.com/prometheus/client_golang v1.10.0
-	go.opencensus.io v0.22.6
+	go.opencensus.io v0.23.0
 	goa.design/goa/v3 v3.2.6
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
 	golang.org/x/tools v0.1.0
-	google.golang.org/api v0.40.0
+	google.golang.org/api v0.43.0
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
