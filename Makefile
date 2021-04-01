@@ -7,13 +7,13 @@ PSQL=$(DOCKER_COMPOSE) exec -T postgres psql
 PGDUMP=$(DOCKER_COMPOSE) exec -T postgres pg_dump
 
 # Override these for different configurations
-PGSUPERUSER ?= postgres
-PGHOST ?= localhost
-PGDATABASE ?= pgsink
-PGUSER ?= pgsink
+export PGSUPERUSER ?= postgres
+export PGHOST ?= localhost
+export PGDATABASE ?= pgsink
+export PGUSER ?= pgsink
 
 .PHONY: prog darwin linux generate clean
-.PHONY: migrate migrate-run structure.sql createdb dropdb recreatedb test docs
+.PHONY: psql migrate migrate-run structure.sql createdb dropdb recreatedb test docs
 .PHONY: api/gen internal/dbschema openapi-generator.jar clients/typescript
 
 ################################################################################
@@ -42,6 +42,9 @@ clean:
 ################################################################################
 # Development
 ################################################################################
+
+psql:
+	psql
 
 # Runs migrations against the ambient Postgres credentials
 migrate: migrate-run structure.sql
