@@ -1,0 +1,42 @@
+version: 2
+updates:
+- package-ecosystem: gomod
+  directory: "/"
+  schedule:
+    interval: weekly
+  open-pull-requests-limit: 10
+  ignore:
+  - dependency-name: google.golang.org/api
+    versions:
+    - 0.38.0
+    - 0.39.0
+    - 0.40.0
+    - 0.41.0
+    - 0.42.0
+    - 0.43.0
+    - 0.44.0
+  - dependency-name: go.opencensus.io
+    versions:
+    - 0.22.6
+    - 0.23.0
+  - dependency-name: contrib.go.opencensus.io/exporter/stackdriver
+    versions:
+    - 0.13.5
+  - dependency-name: github.com/onsi/gomega
+    versions:
+    - 1.10.5
+  - dependency-name: github.com/pressly/goose
+    versions:
+    - 2.7.0+incompatible
+- package-ecosystem: docker
+  directory: "/"
+  schedule:
+    interval: daily
+  open-pull-requests-limit: 10
+  ignore:
+  - dependency-name: golang
+    versions:
+    - 1.15.8
+    - 1.16.0
+    - 1.16.1
+    - 1.16.2
