@@ -19,9 +19,9 @@ require (
 	github.com/google/uuid v1.2.0
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/imdario/mergo v0.3.11 // indirect
-	github.com/jackc/pgconn v1.8.0
+	github.com/jackc/pgconn v1.9.0
 	github.com/jackc/pglogrepl v0.0.0-20200309144228-32ec418076b3
-	github.com/jackc/pgproto3/v2 v2.0.6
+	github.com/jackc/pgproto3/v2 v2.1.1
 	github.com/jackc/pgtype v1.6.2
 	github.com/jackc/pgx/v4 v4.10.1
 	github.com/mitchellh/copystructure v1.0.0 // indirect
@@ -33,7 +33,6 @@ require (
 	github.com/prometheus/client_golang v1.10.0
 	go.opencensus.io v0.23.0
 	goa.design/goa/v3 v3.2.6
-	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
 	golang.org/x/tools v0.1.0
 	google.golang.org/api v0.46.0
 	gopkg.in/yaml.v2 v2.4.0 // indirect
