@@ -25,6 +25,7 @@ func Start(ctx context.Context, binaryArgs []string) *Harness {
 	{
 		listener, err := net.Listen("tcp", ":0")
 		Expect(err).NotTo(HaveOccurred())
+		listener.Close()
 		serveAddress = fmt.Sprintf(
 			"127.0.0.1:%d", listener.Addr().(*net.TCPAddr).Port)
 	}
