@@ -25,7 +25,7 @@ commands:
 references:
   # Consistent Golang build and test environment
   docker_golang: &docker_golang
-    image: golang:1.17.6
+    image: cimg/go:1.17.6
     environment:
       PGHOST: "127.0.0.1"
       PGUSER: "pgsink_test"
@@ -77,17 +77,19 @@ jobs:
     docker:
       - *docker_golang
       - *docker_postgres
-    working_directory: /app
+    working_directory: ~/app
     steps:
       - checkout
-      - go/load-cache
+      - go/load-cache:
+          key: &golangCacheKey v3
       - go/mod-download
-      - go/save-cache
+      - go/save-cache:
+          key: *golangCacheKey
       - go-install-tools:
           tool: "ginkgo"
       - run:
           name: Install Postgres
-          command: apt-get update && apt-get install -y postgresql-client libpq-dev
+          command: sudo apt-get update && sudo apt-get install -y postgresql-client libpq-dev
       - run:
           name: Create test database
           command: make recreatedb migrate-run PSQL=$(which psql)
@@ -101,7 +103,7 @@ jobs:
   web-lint:
     docker:
       - *docker_javascript
-    working_directory: /app
+    working_directory: ~/app
     steps:
       - checkout
       - restore_cache: *docker_javascript_dep_restore
@@ -113,7 +115,7 @@ jobs:
   web-build:
     docker:
       - *docker_javascript
-    working_directory: /app
+    working_directory: ~/app
     steps:
       - checkout
       - restore_cache: *docker_javascript_dep_restore
@@ -131,16 +133,18 @@ jobs:
   check-deps-updated:
     docker:
       - *docker_golang
-    working_directory: /app
+    working_directory: ~/app
     steps:
       - checkout
-      - run: go mod download
+      - go/load-cache:
+          key: *golangCacheKey
+      - go/mod-download
       - run: env GOPROXY=off go build -mod=readonly ./...
 
   check-deps-tidy:
     docker:
       - *docker_golang
-    working_directory: /app
+    working_directory: ~/app
     steps:
       - checkout
       - run: go mod tidy
@@ -152,7 +156,7 @@ jobs:
   check-generated-code:
     docker:
       - *docker_golang
-    working_directory: /app
+    working_directory: ~/app
     steps:
       - checkout
       - go-install-tools:
@@ -167,7 +171,7 @@ jobs:
   check-api-gen:
     docker:
       - *docker_golang
-    working_directory: /app
+    working_directory: ~/app
     steps:
       - checkout
       - go-install-tools:
@@ -182,7 +186,7 @@ jobs:
   release:
     docker:
       - *docker_golang
-    working_directory: /app
+    working_directory: ~/app
     steps:
       - checkout
       # Attach web assets back into web/build
