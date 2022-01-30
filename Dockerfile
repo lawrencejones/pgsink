@@ -2,7 +2,7 @@
 # build
 ################################################################################
 
-FROM golang:1.16rc1 AS build
+FROM golang:1.17.6 AS build
 COPY . /project
 WORKDIR /project
 
@@ -20,6 +20,6 @@ RUN set -x \
 # release
 ################################################################################
 
-FROM ubuntu:bionic-20210118 AS release
+FROM ubuntu:bionic-20220105 AS release
 COPY --from=build /project/bin/* /usr/local/bin/
 CMD ["/bin/bash"]

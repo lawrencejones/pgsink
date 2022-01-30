@@ -4,7 +4,7 @@ version: 2
 references:
   # Consistent Golang build and test environment
   docker_golang: &docker_golang
-    image: golang:1.16rc1
+    image: golang:1.17.6
     environment:
       PGHOST: "127.0.0.1"
       PGUSER: "pgsink_test"
