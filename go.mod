@@ -13,7 +13,7 @@ require (
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/davecgh/go-spew v1.1.1
-	github.com/getsentry/sentry-go v0.9.0
+	github.com/getsentry/sentry-go v0.12.0
 	github.com/go-jet/jet/v2 v2.4.0
 	github.com/go-kit/kit v0.10.0
 	github.com/google/uuid v1.2.0
@@ -33,8 +33,6 @@ require (
 	github.com/prometheus/client_golang v1.10.0
 	go.opencensus.io v0.23.0
 	goa.design/goa/v3 v3.2.6
-	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
 	golang.org/x/tools v0.1.5
 	google.golang.org/api v0.52.0
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
