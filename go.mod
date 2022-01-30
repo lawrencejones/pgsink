@@ -16,7 +16,6 @@ require (
 	github.com/getsentry/sentry-go v0.9.0
 	github.com/go-jet/jet/v2 v2.4.0
 	github.com/go-kit/kit v0.10.0
-	github.com/go-openapi/loads v0.19.7 // indirect
 	github.com/google/uuid v1.3.0
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/imdario/mergo v0.3.11 // indirect
@@ -37,5 +36,4 @@ require (
 	golang.org/x/crypto v0.0.0-20220128200615-198e4374d7ed // indirect
 	golang.org/x/tools v0.1.9
 	google.golang.org/api v0.52.0
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
