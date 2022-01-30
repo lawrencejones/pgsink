@@ -85,8 +85,11 @@ dropdb:
 recreatedb: dropdb createdb
 
 # go get -u github.com/onsi/ginkgo/ginkgo
-test:
-	PGUSER=pgsink_test PGDATABASE=pgsink_test ginkgo -r pkg
+test-unit:
+	ginkgo -r pkg
+
+test-integration:
+	ginkgo -v integration
 
 docs:
 	swagger serve --port=4000 api/gen/http/openapi.json

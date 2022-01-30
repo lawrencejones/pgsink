@@ -72,8 +72,11 @@ jobs:
           name: Create test database
           command: make recreatedb migrate-run PSQL=$(which psql)
       - run:
-          name: Run tests
-          command: make test
+          name: Run unit tests
+          command: make test-unit
+      - run:
+          name: Run integration tests
+          command: make test-integration
 
   web-lint:
     docker:
