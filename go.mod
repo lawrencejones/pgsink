@@ -21,7 +21,7 @@ require (
 	github.com/imdario/mergo v0.3.11 // indirect
 	github.com/jackc/pgconn v1.8.0
 	github.com/jackc/pglogrepl v0.0.0-20200309144228-32ec418076b3
-	github.com/jackc/pgproto3/v2 v2.0.6
+	github.com/jackc/pgproto3/v2 v2.2.0
 	github.com/jackc/pgtype v1.6.2
 	github.com/jackc/pgx/v4 v4.10.1
 	github.com/mitchellh/copystructure v1.0.0 // indirect
@@ -36,5 +36,4 @@ require (
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
 	golang.org/x/tools v0.1.5
 	google.golang.org/api v0.52.0
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
