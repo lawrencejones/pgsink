@@ -16,7 +16,8 @@ require (
 	github.com/getsentry/sentry-go v0.9.0
 	github.com/go-jet/jet/v2 v2.4.0
 	github.com/go-kit/kit v0.10.0
-	github.com/google/uuid v1.2.0
+	github.com/go-openapi/loads v0.19.7 // indirect
+	github.com/google/uuid v1.3.0
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/imdario/mergo v0.3.11 // indirect
 	github.com/jackc/pgconn v1.8.0
@@ -32,9 +33,9 @@ require (
 	github.com/pressly/goose v2.7.0+incompatible
 	github.com/prometheus/client_golang v1.10.0
 	go.opencensus.io v0.23.0
-	goa.design/goa/v3 v3.2.6
+	goa.design/goa/v3 v3.5.4
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
-	golang.org/x/tools v0.1.5
+	golang.org/x/tools v0.1.8
 	google.golang.org/api v0.52.0
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
