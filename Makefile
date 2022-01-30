@@ -51,11 +51,19 @@ tools:
 psql:
 	psql
 
+psql-test: PGUSER=pgsink_test
+psql-test: PGDATABASE=pgsink_test
+psql-test: psql
+
 # Runs migrations against the ambient Postgres credentials
 migrate: migrate-run structure.sql
 
 migrate-run:
 	go run internal/migration/cmd/goose.go --install up
+
+migrate-run-test: PGUSER=pgsink_test
+migrate-run-test: PGDATABASE=pgsink_test
+migrate-run-test: migrate-run
 
 # Generates a structure.sql from the docker-compose database, having run migrate
 structure.sql:
@@ -65,6 +73,10 @@ createdb:
 	$(PSQL) postgres -U postgres -c "CREATE ROLE $(PGUSER) WITH LOGIN CREATEDB REPLICATION;"
 	$(PSQL) postgres -U $(PGUSER) -c "CREATE DATABASE $(PGDATABASE);"
 	$(PSQL) $(PGDATABASE) -U postgres -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";'
+
+createdb-test: PGUSER=pgsink_test
+createdb-test: PGDATABASE=pgsink_test
+createdb-test: createdb
 
 dropdb:
 	$(PSQL) -U postgres postgres -c "DROP DATABASE IF EXISTS $(PGDATABASE);"
