@@ -30,7 +30,7 @@ require (
 	github.com/onsi/gomega v1.13.0
 	github.com/pkg/errors v0.9.1
 	github.com/pressly/goose v2.7.0+incompatible
-	github.com/prometheus/client_golang v1.10.0
+	github.com/prometheus/client_golang v1.12.1
 	go.opencensus.io v0.23.0
 	goa.design/goa/v3 v3.5.4
 	golang.org/x/crypto v0.0.0-20220128200615-198e4374d7ed // indirect
