@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
 	"time"
 
@@ -40,6 +41,20 @@ func Start(ctx context.Context, binaryArgs []string) *Harness {
 		"--import-manager.poll-interval", "3s",
 	}
 	command := exec.Command(binary, append(args, binaryArgs...)...)
+
+	// When testing, we should never connect to anything other than pgsink_test under the
+	// pgsink_test user. The host can be set to whatever the developer preference might be.
+	{
+		host, ok := os.LookupEnv("PGHOST")
+		if !ok {
+			host = "localhost"
+		}
+		command.Env = append(command.Env,
+			fmt.Sprintf("PGHOST=%s", host),
+			fmt.Sprintf("PGUSER=%s", "pgsink_test"),
+			fmt.Sprintf("PGDATABASE=%s", "pgsink_test"),
+		)
+	}
 
 	By("starting pgsink")
 	session, err := gexec.Start(command, GinkgoWriter, GinkgoWriter)
