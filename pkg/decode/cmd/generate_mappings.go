@@ -80,10 +80,13 @@ var cfg = Config{
 		"int4range",
 		"numrange",
 		"tsrange",
+		"_tsrange",
 		"tstzrange",
+		"_tstzrange",
 		"daterange",
 		"int8range",
 		"unknown",
+		"_jsonb",
 	},
 	Templates: map[string]TemplatedTypeMapping{
 		"bool": {
