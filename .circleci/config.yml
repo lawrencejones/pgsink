@@ -1,5 +1,26 @@
 ---
-version: 2
+version: 2.1
+
+orbs:
+  go: circleci/go@1.7.0
+
+commands:
+  go-install-tools:
+    description: Install a specific Golang dev tool
+    parameters:
+      tool:
+        type: string
+        default: '"'  # matches everything by default
+      args:
+        type: string
+        default: ''
+    steps:
+      - run: |
+          cat tools.go \
+            | grep "<< parameters.tool >>" \
+            | grep _ \
+            | awk -F'"' '{print $2}' \
+            | xargs -tI % go install << parameters.args >> %
 
 references:
   # Consistent Golang build and test environment
@@ -59,12 +80,11 @@ jobs:
     working_directory: /app
     steps:
       - checkout
-      - run:
-          name: Install dependencies
-          command: go get ./...
-      - run:
-          name: Install ginkgo test runner (using go.mod)
-          command: go install github.com/onsi/ginkgo/ginkgo
+      - go/load-cache
+      - go/mod-download
+      - go/save-cache
+      - go-install-tools:
+          tool: "ginkgo"
       - run:
           name: Install Postgres
           command: apt-get update && apt-get install -y postgresql-client libpq-dev
@@ -135,7 +155,8 @@ jobs:
     working_directory: /app
     steps:
       - checkout
-      - run: go install golang.org/x/tools/cmd/goimports
+      - go-install-tools:
+          tool: goimports
       - run: make generate
       - run: |
           if ! git diff --exit-code --name-only; then
@@ -149,7 +170,8 @@ jobs:
     working_directory: /app
     steps:
       - checkout
-      - run: go install goa.design/goa/v3/cmd/goa
+      - go-install-tools:
+          tool: goa
       - run: make api/gen
       - run: |
           if ! git diff --exit-code --name-only; then
