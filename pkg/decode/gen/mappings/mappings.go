@@ -307,6 +307,10 @@ var Unsupported = []decode.TypeMapping{
 		OID:  2951,
 	},
 	{
+		Name: "_jsonb",
+		OID:  3807,
+	},
+	{
 		Name: "int4range",
 		OID:  3904,
 	},
@@ -319,8 +323,16 @@ var Unsupported = []decode.TypeMapping{
 		OID:  3908,
 	},
 	{
+		Name: "_tsrange",
+		OID:  3909,
+	},
+	{
 		Name: "tstzrange",
 		OID:  3910,
+	},
+	{
+		Name: "_tstzrange",
+		OID:  3911,
 	},
 	{
 		Name: "daterange",
