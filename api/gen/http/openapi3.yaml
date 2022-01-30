@@ -475,3 +475,14 @@ components:
       - publication_status
       - import_status
       - import_rows_processed_total
+tags:
+- name: Web
+  description: Web static web content for the UI
+- name: Health
+  description: Provide service health information
+- name: Tables
+  description: Expose Postgres tables, and their import/sync status
+- name: Subscriptions
+  description: Manage a pgsink subscription
+- name: Imports
+  description: Manage table imports, scoped to the server subscription ID
