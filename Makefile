@@ -43,6 +43,11 @@ clean:
 # Development
 ################################################################################
 
+# Installs development tools from tools.go
+tools:
+	go mod download \
+		&& cat tools.go | grep _ | awk -F'"' '{print $$2}' | xargs -tI % go install %
+
 psql:
 	psql
 
