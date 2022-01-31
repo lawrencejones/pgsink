@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	cloud.google.com/go/bigquery v1.18.0
-	contrib.go.opencensus.io/exporter/jaeger v0.2.0
+	contrib.go.opencensus.io/exporter/jaeger v0.2.1
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.5
 	contrib.go.opencensus.io/integrations/ocsql v0.1.7
 	github.com/Masterminds/goutils v1.1.0 // indirect
