@@ -15,7 +15,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/getsentry/sentry-go v0.9.0
 	github.com/go-jet/jet/v2 v2.4.0
-	github.com/go-kit/kit v0.10.0
+	github.com/go-kit/kit v0.12.0
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/go-cleanhttp v0.5.2
 	github.com/huandu/xstrings v1.3.2 // indirect
