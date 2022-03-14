@@ -13,7 +13,7 @@ require (
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/davecgh/go-spew v1.1.1
-	github.com/getsentry/sentry-go v0.9.0
+	github.com/getsentry/sentry-go v0.13.0
 	github.com/go-jet/jet/v2 v2.4.0
 	github.com/go-kit/kit v0.10.0
 	github.com/google/uuid v1.3.0
