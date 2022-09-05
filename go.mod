@@ -20,11 +20,11 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.2
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/imdario/mergo v0.3.11 // indirect
-	github.com/jackc/pgconn v1.10.1
+	github.com/jackc/pgconn v1.13.0
 	github.com/jackc/pglogrepl v0.0.0-20200309144228-32ec418076b3
-	github.com/jackc/pgproto3/v2 v2.2.0
-	github.com/jackc/pgtype v1.9.1
-	github.com/jackc/pgx/v4 v4.14.1
+	github.com/jackc/pgproto3/v2 v2.3.1
+	github.com/jackc/pgtype v1.12.0
+	github.com/jackc/pgx/v4 v4.17.2
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/oklog/run v1.1.0
 	github.com/onsi/ginkgo v1.16.2
@@ -34,7 +34,6 @@ require (
 	github.com/prometheus/client_golang v1.12.1
 	go.opencensus.io v0.23.0
 	goa.design/goa/v3 v3.5.4
-	golang.org/x/crypto v0.0.0-20220128200615-198e4374d7ed // indirect
 	golang.org/x/tools v0.1.9
 	google.golang.org/api v0.52.0
 )
