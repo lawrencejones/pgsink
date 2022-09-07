@@ -2,7 +2,7 @@
 # build
 ################################################################################
 
-FROM golang:1.17.6 AS build
+FROM golang:1.19.1 AS build
 COPY . /project
 WORKDIR /project
 
