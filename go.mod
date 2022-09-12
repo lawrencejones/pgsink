@@ -33,8 +33,8 @@ require (
 	github.com/pressly/goose v2.7.0+incompatible
 	github.com/prometheus/client_golang v1.12.1
 	go.opencensus.io v0.23.0
-	goa.design/goa/v3 v3.5.4
+	goa.design/goa/v3 v3.8.5
 	golang.org/x/crypto v0.0.0-20220128200615-198e4374d7ed // indirect
-	golang.org/x/tools v0.1.9
+	golang.org/x/tools v0.1.12
 	google.golang.org/api v0.52.0
 )
