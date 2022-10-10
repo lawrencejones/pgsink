@@ -14,17 +14,17 @@ require (
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/davecgh/go-spew v1.1.1
 	github.com/getsentry/sentry-go v0.9.0
-	github.com/go-jet/jet/v2 v2.4.0
+	github.com/go-jet/jet/v2 v2.9.0
 	github.com/go-kit/kit v0.10.0
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/go-cleanhttp v0.5.2
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/imdario/mergo v0.3.11 // indirect
-	github.com/jackc/pgconn v1.10.1
+	github.com/jackc/pgconn v1.12.0
 	github.com/jackc/pglogrepl v0.0.0-20200309144228-32ec418076b3
-	github.com/jackc/pgproto3/v2 v2.2.0
-	github.com/jackc/pgtype v1.9.1
-	github.com/jackc/pgx/v4 v4.14.1
+	github.com/jackc/pgproto3/v2 v2.3.0
+	github.com/jackc/pgtype v1.11.0
+	github.com/jackc/pgx/v4 v4.16.0
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/oklog/run v1.1.0
 	github.com/onsi/ginkgo v1.16.2
