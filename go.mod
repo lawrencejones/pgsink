@@ -13,7 +13,7 @@ require (
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/davecgh/go-spew v1.1.1
-	github.com/getsentry/sentry-go v0.9.0
+	github.com/getsentry/sentry-go v0.16.0
 	github.com/go-jet/jet/v2 v2.4.0
 	github.com/go-kit/kit v0.10.0
 	github.com/google/uuid v1.3.0
@@ -27,14 +27,13 @@ require (
 	github.com/jackc/pgx/v4 v4.14.1
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/oklog/run v1.1.0
-	github.com/onsi/ginkgo v1.16.2
-	github.com/onsi/gomega v1.13.0
+	github.com/onsi/ginkgo v1.16.5
+	github.com/onsi/gomega v1.18.1
 	github.com/pkg/errors v0.9.1
 	github.com/pressly/goose v2.7.0+incompatible
 	github.com/prometheus/client_golang v1.12.1
 	go.opencensus.io v0.23.0
 	goa.design/goa/v3 v3.5.4
-	golang.org/x/crypto v0.0.0-20220128200615-198e4374d7ed // indirect
 	golang.org/x/tools v0.1.9
 	google.golang.org/api v0.52.0
 )
